@@ -12,6 +12,7 @@ import {
   CHALLENGE_TTL_MS,
   COPY,
   createChallengeMessage,
+  KASPA_TESTNET_ADDRESS_PATTERN,
   mediaHintError,
   NETWORK,
   normalizePostText,
@@ -39,7 +40,7 @@ import {
 } from "./observability.js";
 
 const sessionCookie = "onlykas_session";
-const addressPattern = /^kaspatest:[a-z0-9]{40,80}$/;
+const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
 
 export interface AppDependencies {
   store: Store;

@@ -4,6 +4,7 @@ import { COPY } from "@onlykas/shared";
 import { authenticate, kasware, WalletError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
+import { FindCreatorPage } from "./FindCreatorPage.js";
 
 export function App() {
   const [address, setAddress] = useState<string | null>(null);
@@ -70,17 +71,25 @@ export function App() {
           <Link to="/" className="brand">
             ONLY<span>KAS</span>
           </Link>
-          {address && (
-            <details className="account">
-              <summary>Connected</summary>
-              <div className="account-menu">
-                <span>{shorten(address)}</span>
-                <button className="menu-button" onClick={() => void signOut()}>
-                  Sign out
-                </button>
-              </div>
-            </details>
-          )}
+          <div className="nav-group">
+            <Link to="/find" className="nav-action">
+              Find
+            </Link>
+            {address && (
+              <details className="account">
+                <summary>Connected</summary>
+                <div className="account-menu">
+                  <span>{shorten(address)}</span>
+                  <button
+                    className="menu-button"
+                    onClick={() => void signOut()}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              </details>
+            )}
+          </div>
         </nav>
         {walletError && (
           <div className="global-error" role="alert">
@@ -109,6 +118,7 @@ export function App() {
                 />
               }
             />
+            <Route path="/find" element={<FindCreatorPage />} />
             <Route path="/creator/:address" element={<CreatorPage />} />
             <Route
               path="/post/:id"

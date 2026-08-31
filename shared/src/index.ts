@@ -5,6 +5,7 @@ export const UPLOAD_TTL_MS = 24 * 60 * 60 * 1_000;
 export const MAX_IMAGE_BYTES = 25_000_000;
 export const MAX_VIDEO_BYTES = 500_000_000;
 export const MIN_MULTIPART_PART_BYTES = 5 * 1024 * 1024;
+export const KASPA_TESTNET_ADDRESS_PATTERN = /^kaspatest:[a-z0-9]{40,80}$/;
 
 export const COPY = {
   authPrompt:
@@ -42,6 +43,7 @@ export const COPY = {
   purchasePending: "Purchase pending. Do not pay again.",
   accessVerificationFailed: "OnlyKas can't verify access right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
+  invalidCreatorAddress: "Enter a complete Kaspa testnet address.",
 } as const;
 
 export const MEDIA_TYPES = [
@@ -114,6 +116,10 @@ export function createChallengeMessage(
 
 export function normalizePostText(value: string): string {
   return value.trim();
+}
+
+export function isKaspaTestnetAddress(value: string): boolean {
+  return KASPA_TESTNET_ADDRESS_PATTERN.test(value);
 }
 
 export function parseKasToSompi(value: string): bigint | null {

@@ -1,6 +1,7 @@
 import {
   COPY,
   MAX_IMAGE_BYTES,
+  isKaspaTestnetAddress,
   mediaHintError,
   parseKasToSompi,
   validatePost,
@@ -26,6 +27,16 @@ describe("post validation", () => {
       "Description must be between 1 and 280 characters.",
       COPY.invalidPrice,
     ]);
+  });
+});
+
+describe("Kaspa testnet address validation", () => {
+  it("accepts only complete lowercase testnet addresses", () => {
+    expect(isKaspaTestnetAddress(`kaspatest:${"q".repeat(40)}`)).toBe(true);
+    expect(isKaspaTestnetAddress(`kaspatest:${"q".repeat(80)}`)).toBe(true);
+    expect(isKaspaTestnetAddress(`kaspatest:${"Q".repeat(60)}`)).toBe(false);
+    expect(isKaspaTestnetAddress(`kaspatest:${"q".repeat(39)}`)).toBe(false);
+    expect(isKaspaTestnetAddress(`kaspatest:${"q".repeat(81)}`)).toBe(false);
   });
 });
 

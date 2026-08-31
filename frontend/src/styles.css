@@ -60,6 +60,12 @@ footer {
 nav a {
   text-decoration: none;
 }
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: clamp(1rem, 3vw, 2.5rem);
+  margin-left: auto;
+}
 .brand {
   font: 800 1.1rem Manrope;
   letter-spacing: -0.04em;
@@ -115,6 +121,20 @@ main {
   grid-template-columns: 1fr;
   max-width: 54rem;
   text-align: left;
+}
+.find-page {
+  width: min(100%, 42rem);
+}
+.find-page h1 {
+  max-width: 8ch;
+}
+.find-intro {
+  color: var(--muted);
+  font-size: 1.15rem;
+  line-height: 1.6;
+}
+.find-page form {
+  margin-top: 3rem;
 }
 h1 {
   margin: 0.2rem 0 1rem;
@@ -415,6 +435,9 @@ footer {
     grid-template-columns: 1fr;
   }
   nav {
+    gap: 1rem;
+  }
+  .nav-group {
     gap: 1rem;
   }
   .account {
