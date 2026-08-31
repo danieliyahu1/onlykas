@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.playwright/
+playwright-report/
+test-results/
+coverage/
+dist/
+node_modules/
+*.tsbuildinfo
+console-full.log
+wallet-testnet.json
+*.db
+*.db-shm
+*.db-wal

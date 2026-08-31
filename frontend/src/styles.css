@@ -1,0 +1,341 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;600;800&display=swap");
+:root {
+  font-family: Manrope, sans-serif;
+  color: #f4f0e8;
+  background: #191714;
+  font-synthesis: none;
+  --ink: #191714;
+  --paper: #f4f0e8;
+  --acid: #ff6846;
+  --line: #4b4740;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 80% 5%, #3b2820 0, transparent 32rem), var(--ink);
+}
+button,
+input,
+textarea {
+  font: inherit;
+}
+a {
+  color: inherit;
+}
+.shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+nav,
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem clamp(1rem, 4vw, 4rem);
+  border-bottom: 1px solid var(--line);
+  font-family: "DM Mono", monospace;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+}
+nav a {
+  text-decoration: none;
+}
+.brand {
+  font: 800 1.1rem Manrope;
+  letter-spacing: -0.04em;
+}
+.brand span {
+  color: var(--acid);
+}
+.identity {
+  color: #a9a39a;
+}
+main {
+  display: grid;
+  place-items: center;
+  padding: clamp(1.5rem, 5vw, 5rem) 1rem;
+}
+.publish-card {
+  width: min(100%, 68rem);
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.8fr) minmax(18rem, 1.2fr);
+  gap: clamp(2rem, 8vw, 8rem);
+  align-items: start;
+}
+.signed-out {
+  grid-template-columns: 1fr;
+  max-width: 54rem;
+  text-align: left;
+}
+h1 {
+  margin: 0.2rem 0 1rem;
+  font-size: clamp(3.2rem, 9vw, 8rem);
+  line-height: 0.84;
+  letter-spacing: -0.075em;
+}
+h2 {
+  letter-spacing: -0.04em;
+}
+.eyebrow {
+  color: var(--acid);
+  font:
+    500 0.75rem "DM Mono",
+    monospace;
+  letter-spacing: 0.16em;
+}
+.wallet {
+  color: #aaa39a;
+  font:
+    0.75rem "DM Mono",
+    monospace;
+  overflow-wrap: anywhere;
+}
+form {
+  display: grid;
+  gap: 1.25rem;
+}
+label {
+  position: relative;
+  display: grid;
+  gap: 0.5rem;
+  font:
+    0.72rem "DM Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+input,
+textarea {
+  width: 100%;
+  padding: 1rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--paper);
+  background: transparent;
+  outline: none;
+  text-transform: none;
+  letter-spacing: 0;
+  border-radius: 0;
+}
+input:focus,
+textarea:focus {
+  border-color: var(--acid);
+}
+textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+.unit {
+  position: absolute;
+  right: 0;
+  bottom: 1rem;
+  color: var(--acid);
+}
+.upload-well {
+  position: relative;
+  border: 1px dashed #787067;
+  min-height: 11rem;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+.upload-well input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.upload-well .pick {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 11rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 2rem;
+  cursor: pointer;
+}
+.upload-well input:disabled + .pick {
+  cursor: default;
+}
+.upload-well strong {
+  font: 600 1.2rem Manrope;
+  text-transform: none;
+  letter-spacing: -0.02em;
+}
+.upload-well span {
+  color: #a9a39a;
+  line-height: 1.6;
+}
+progress {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 4px;
+  border: 0;
+  accent-color: var(--acid);
+}
+button {
+  border: 0;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.primary {
+  min-height: 3.7rem;
+  padding: 1rem 1.5rem;
+  background: var(--acid);
+  color: var(--ink);
+  font-weight: 800;
+}
+.primary:hover:not(:disabled),
+.primary:focus-visible {
+  background: #ff8a70;
+}
+.secondary {
+  padding: 1rem 1.5rem;
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--line);
+}
+.feedback {
+  min-height: 1.5rem;
+  color: #b8b0a5;
+  font-size: 0.88rem;
+}
+.feedback.error,
+.global-error {
+  color: #ff9d86;
+}
+.global-error {
+  padding: 0.8rem 1rem;
+  text-align: center;
+  border-bottom: 1px solid #743d32;
+  background: #2c1c18;
+}
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: #080706d9;
+}
+.dialog {
+  width: min(100%, 34rem);
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 1rem 1rem 0 var(--acid);
+}
+.dialog h2 {
+  font-size: clamp(2rem, 7vw, 4rem);
+  line-height: 0.95;
+  margin: 0.5rem 0 1.5rem;
+}
+.dialog-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+.dialog .secondary {
+  color: var(--ink);
+  border-color: #aaa39a;
+}
+.profile,
+.single-post,
+.message {
+  width: min(100%, 68rem);
+}
+.profile h1 {
+  overflow-wrap: anywhere;
+}
+.post-grid {
+  margin-top: 4rem;
+  border-top: 1px solid var(--line);
+}
+.post-card {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: 1rem;
+  padding: 2rem 0;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+}
+.post-card:hover h2 {
+  color: var(--acid);
+}
+.post-card p,
+.index {
+  color: #9e978e;
+  font:
+    0.7rem "DM Mono",
+    monospace;
+}
+.post-card h2 {
+  font-size: clamp(1.8rem, 4vw, 3.5rem);
+  margin: 0.3rem 0 1rem;
+}
+.single-post {
+  max-width: 56rem;
+}
+.single-post .description {
+  max-width: 38rem;
+  font-size: 1.15rem;
+  color: #bbb4aa;
+}
+.price {
+  font-size: 2rem;
+  font-weight: 800;
+}
+.price small {
+  color: var(--acid);
+  font-size: 0.8rem;
+}
+.single-post img,
+.single-post video {
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  margin: 2rem 0;
+  background: #080706;
+}
+.creator-link {
+  display: block;
+  margin-top: 2rem;
+  color: #aaa39a;
+  font-family: "DM Mono", monospace;
+}
+footer {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  color: #777168;
+}
+@media (max-width: 720px) {
+  .publish-card {
+    grid-template-columns: 1fr;
+  }
+  nav {
+    gap: 1rem;
+  }
+  .identity {
+    display: none;
+  }
+  .dialog-actions {
+    flex-direction: column;
+  }
+  h1 {
+    font-size: clamp(3rem, 17vw, 5.5rem);
+  }
+}

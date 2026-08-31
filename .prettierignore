@@ -1,0 +1,6 @@
+.opencode
+coverage
+dist
+node_modules
+opencode.json
+pnpm-lock.yaml

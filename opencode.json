@@ -1,0 +1,62 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "read": { "*": "allow", "opencode.json": "ask", "**/.env*": "deny" },
+    "edit": { "*": "allow", "opencode.json": "ask" },
+	"write": "allow",
+    "glob": "allow",
+    "grep": { "*": "allow", "**/.env*": "deny" },
+    "task": "allow",
+    "skill":"allow",
+    "question": "allow",
+    "bash": "allow",
+    "websearch": "allow",
+    "lsp": "allow",
+    "todowrite": "allow",
+    "webfetch": "allow",
+    "external_directory": "ask",
+	"plane_*": "allow",
+	"playwright_*": "allow",
+	"turso_*": "allow",
+  },
+  "mcp": {
+	  "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--user-data-dir",
+        ".playwright/profile",
+        "--output-dir",
+        ".playwright/output"
+      ],
+      "enabled": false
+    },
+	"playwright-extension": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp@latest",
+        "--extension",
+        "--output-dir",
+        ".playwright/output"
+      ],
+      "enabled": false
+    },
+	"plane": {
+      "type": "remote",
+	  "enabled": false,
+      "url": "https://mcp.plane.so/http/mcp"
+    },
+	"turso": {
+      "type": "remote",
+      "url": "https://mcp.turso.ai/mcp",
+      "enabled": false
+    }
+  }
+}
