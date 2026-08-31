@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { COPY } from "@onlykas/shared";
-import { PostPage } from "./PublicPages.js";
+import { CreatorPage, PostPage } from "./PublicPages.js";
 import { api, signPreparedPayment } from "./kasware.js";
 
 vi.mock("./kasware.js", () => ({
@@ -33,6 +33,16 @@ function renderPost() {
             <PostPage address={address} signIn={vi.fn()} signingIn={false} />
           }
         />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function renderCreator(address = post.creator) {
+  return render(
+    <MemoryRouter initialEntries={[`/creator/${address}`]}>
+      <Routes>
+        <Route path="/creator/:address" element={<CreatorPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -141,5 +151,30 @@ describe("supporter payment branches", () => {
     const image = await screen.findByRole("img", { name: post.title });
     fireEvent.error(image);
     expect(screen.getByRole("alert")).toHaveTextContent(COPY.mediaUnavailable);
+  });
+});
+
+describe("public creator profiles", () => {
+  it("renders an empty profile as a status for visitors without a wallet", async () => {
+    vi.mocked(api).mockResolvedValue({
+      address: post.creator,
+      displayAddress: "kaspatest:cccc...cccc",
+      posts: [],
+    });
+    renderCreator();
+
+    expect(await screen.findByText("Nothing published yet.")).toHaveAttribute(
+      "role",
+      "status",
+    );
+  });
+
+  it("renders a failed profile load as an alert", async () => {
+    vi.mocked(api).mockRejectedValue(new Error("not found"));
+    renderCreator();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Creator not found.",
+    );
   });
 });

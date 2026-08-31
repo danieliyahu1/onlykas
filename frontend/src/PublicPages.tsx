@@ -26,18 +26,28 @@ export function CreatorPage() {
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
   const [error, setError] = useState(false);
   useEffect(() => {
+    let active = true;
+    setCreator(null);
+    setError(false);
     void api<CreatorResponse>(`/api/creators/${encodeURIComponent(address)}`)
-      .then(setCreator)
-      .catch(() => setError(true));
+      .then((value) => {
+        if (active) setCreator(value);
+      })
+      .catch(() => {
+        if (active) setError(true);
+      });
+    return () => {
+      active = false;
+    };
   }, [address]);
-  if (error) return <Message title="Creator not found." />;
-  if (!creator) return <Message title="Opening profile..." />;
+  if (error) return <Message title="Creator not found." role="alert" />;
+  if (!creator) return <Message title="Opening profile..." role="status" />;
   return (
     <section className="profile">
       <p className="eyebrow">CREATOR</p>
       <h1>{creator.displayAddress}</h1>
       {creator.posts.length === 0 ? (
-        <p>Nothing published yet.</p>
+        <p role="status">Nothing published yet.</p>
       ) : (
         <div className="post-grid">
           {creator.posts.map((post, index) => (
@@ -66,9 +76,19 @@ export function PostPage({
   const [mediaError, setMediaError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
+    let active = true;
+    setPost(null);
+    setError(false);
     void api<PostResponse>(`/api/posts/${id}`)
-      .then(setPost)
-      .catch(() => setError(true));
+      .then((value) => {
+        if (active) setPost(value);
+      })
+      .catch(() => {
+        if (active) setError(true);
+      });
+    return () => {
+      active = false;
+    };
   }, [id]);
   useEffect(() => {
     setPayment(null);
@@ -155,8 +175,8 @@ export function PostPage({
       wallet.removeListener("networkChanged", reset);
     };
   }, [address, post]);
-  if (error) return <Message title="Post not found." />;
-  if (!post) return <Message title="Opening post..." />;
+  if (error) return <Message title="Post not found." role="alert" />;
+  if (!post) return <Message title="Opening post..." role="status" />;
   const currentPost = post;
   async function prepare() {
     if (!address) return signIn();
@@ -362,9 +382,9 @@ function PostCard({ post, index }: { post: PostResponse; index: number }) {
     </Link>
   );
 }
-function Message({ title }: { title: string }) {
+function Message({ title, role }: { title: string; role: "alert" | "status" }) {
   return (
-    <section className="message">
+    <section className="message" role={role}>
       <p className="eyebrow">ONLYKAS</p>
       <h1>{title}</h1>
     </section>
