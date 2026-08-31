@@ -40,9 +40,9 @@ docker run --env-file .env -p 3000:3000 onlykas
 
 ## Kubernetes deployment
 
-The manifests in `deploy/` target the `onlykas` namespace and an nginx Ingress. Replace the example hostname in `deploy/configmap.yaml` and `deploy/ingress.yaml` with the real public origin before deploying.
+Argo CD watches `deploy/` and applies the manifests to the `onlykas` namespace. Public traffic is provided by the VM's Cloudflare Tunnel.
 
-Create the runtime Secret outside Git:
+Create the runtime Secret outside Git before Argo CD syncs:
 
 ```bash
 kubectl apply -f deploy/namespace.yaml
@@ -58,4 +58,4 @@ kubectl -n onlykas create secret generic onlykas-secrets \
   --from-literal=R2_SECRET_ACCESS_KEY='...'
 ```
 
-The GitHub Actions workflow verifies the repository, publishes `linux/arm64` images tagged with the commit SHA to GHCR, and deploys them on pushes to `main`. Configure the repository `KUBE_CONFIG` secret for the target cluster.
+The GitHub Actions workflow verifies the repository and publishes `linux/arm64` images tagged with the commit SHA to GHCR. Update the immutable image tag in `deploy/deployment.yaml` when promoting a new image.
