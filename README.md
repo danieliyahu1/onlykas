@@ -52,6 +52,6 @@ kubectl -n onlykas create secret docker-registry ghcr-pull \
   --docker-password='<github-token-with-read-packages>'
 ```
 
-Populate the vault keys referenced by `deploy/externalsecret.yaml`: `onlykas/DATABASE_URL`, `onlykas/DATABASE_AUTH_TOKEN`, `onlykas/R2_ENDPOINT`, `onlykas/R2_ACCESS_KEY_ID`, and `onlykas/R2_SECRET_ACCESS_KEY`. The External Secrets Operator creates `onlykas-secrets` from those values.
+Populate the vault keys referenced by `deploy/externalsecret.yaml`: `onlykas-DATABASE_URL`, `onlykas-DATABASE_AUTH_TOKEN`, `onlykas-R2_ENDPOINT`, `onlykas-R2_ACCESS_KEY_ID`, and `onlykas-R2_SECRET_ACCESS_KEY`. The External Secrets Operator creates `onlykas-secrets` from those values.
 
 The GitHub Actions workflow verifies the repository, publishes a `linux/arm64` image tagged with the commit SHA to GHCR, and updates `deploy/deployment.yaml` automatically. Argo CD then detects the manifest commit and syncs the new image.
