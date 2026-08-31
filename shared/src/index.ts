@@ -7,9 +7,12 @@ export const MAX_VIDEO_BYTES = 500_000_000;
 export const MIN_MULTIPART_PART_BYTES = 5 * 1024 * 1024;
 
 export const COPY = {
-  authPrompt: "Sign in to OnlyKas. This does not send KAS.",
-  kaswareMissing: "Install or open Kasware to continue.",
-  wrongNetwork: "Switch to Kaspa testnet-10.",
+  authPrompt:
+    "Connect to OnlyKas. This only identifies your wallet. No KAS will be sent.",
+  kaswareMissing:
+    "Open Kasware to connect. Your wallet is used to identify you and approve payments.",
+  wrongNetwork:
+    "Your wallet is on the wrong network. Switch networks in Kasware and try again.",
   walletCancelled: "Wallet connection cancelled.",
   signInCancelled: "Sign-in cancelled.",
   verificationFailed: "OnlyKas could not verify this wallet. Try again.",
@@ -29,7 +32,7 @@ export const COPY = {
   mediaUnavailable:
     "This media is temporarily unavailable. Your purchase is unchanged.",
   unlockPrompt:
-    "Unlock this post? The creator receives {price} KAS. Your wallet will also show the network fee. This payment cannot be reversed.",
+    "You are supporting this creator with {price} KAS. Kasware will show the network fee before you approve. This payment cannot be reversed.",
   paymentCancelled: "Payment cancelled.",
   confirmingPayment: "Confirming payment...",
   unlocked: "Unlocked.",

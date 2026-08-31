@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import { COPY } from "@onlykas/shared";
 import { authenticate, kasware, WalletError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
@@ -57,6 +57,12 @@ export function App() {
     }
   }
 
+  async function signOut() {
+    setAddress(null);
+    setWalletError(null);
+    await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+  }
+
   return (
     <BrowserRouter>
       <div className="shell">
@@ -64,9 +70,16 @@ export function App() {
           <Link to="/" className="brand">
             ONLY<span>KAS</span>
           </Link>
-          <Link to="/publish">Publish</Link>
           {address && (
-            <span className="identity">{address.slice(0, 10)}...</span>
+            <details className="account">
+              <summary>Connected</summary>
+              <div className="account-menu">
+                <span>{shorten(address)}</span>
+                <button className="menu-button" onClick={() => void signOut()}>
+                  Sign out
+                </button>
+              </div>
+            </details>
           )}
         </nav>
         {walletError && (
@@ -86,7 +99,16 @@ export function App() {
                 />
               }
             />
-            <Route path="/publish" element={<Navigate to="/" replace />} />
+            <Route
+              path="/publish"
+              element={
+                <PublishPage
+                  address={address}
+                  signIn={signIn}
+                  signingIn={signingIn}
+                />
+              }
+            />
             <Route path="/creator/:address" element={<CreatorPage />} />
             <Route
               path="/post/:id"
@@ -98,6 +120,7 @@ export function App() {
                 />
               }
             />
+            <Route path="*" element={<MessageNotFound />} />
           </Routes>
         </main>
         <footer>
@@ -106,5 +129,21 @@ export function App() {
         </footer>
       </div>
     </BrowserRouter>
+  );
+}
+
+function shorten(address: string) {
+  return `${address.slice(0, 10)}...${address.slice(-6)}`;
+}
+
+function MessageNotFound() {
+  return (
+    <section className="message">
+      <p className="eyebrow">ONLYKAS</p>
+      <h1>That link is gone.</h1>
+      <Link className="secondary" to="/">
+        Back home
+      </Link>
+    </section>
   );
 }

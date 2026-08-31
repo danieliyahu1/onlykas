@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { COPY, type CreatorResponse, type PostResponse } from "@onlykas/shared";
 import { api, signPreparedPayment, WalletError } from "./kasware.js";
+import { KaspaMark } from "./KaspaMark.js";
 
 type PaymentState =
   | "preparing"
@@ -75,6 +76,7 @@ export function PostPage({
   const [paymentState, setPaymentState] = useState<PaymentState | null>(null);
   const [mediaError, setMediaError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [unlockAfterSignIn, setUnlockAfterSignIn] = useState(false);
   useEffect(() => {
     let active = true;
     setPost(null);
@@ -96,6 +98,11 @@ export function PostPage({
     setMediaError(false);
     setMessage(null);
   }, [address, id]);
+  useEffect(() => {
+    if (!address || !post || !unlockAfterSignIn) return;
+    setUnlockAfterSignIn(false);
+    void prepare();
+  }, [address, post, unlockAfterSignIn]);
   useEffect(() => {
     if (!address || !post) return;
     const key = paymentStorageKey(post.id, address);
@@ -179,7 +186,10 @@ export function PostPage({
   if (!post) return <Message title="Opening post..." role="status" />;
   const currentPost = post;
   async function prepare() {
-    if (!address) return signIn();
+    if (!address) {
+      setUnlockAfterSignIn(true);
+      return signIn();
+    }
     setMessage(null);
     setPaymentState("preparing");
     try {
@@ -251,7 +261,7 @@ export function PostPage({
       <h1>{post.title}</h1>
       <p className="description">{post.description}</p>
       <p className="price">
-        {formatKas(post.priceSompi)} <small>KAS</small>
+        <CurrencyAmount sompi={post.priceSompi} />
       </p>
       {post.canView && paymentState !== "confirmed" && !mediaError ? (
         post.mediaType.startsWith("video/") ? (
@@ -273,9 +283,20 @@ export function PostPage({
           {COPY.mediaUnavailable}
         </p>
       ) : post.canView && paymentState === "confirmed" ? (
-        <button className="primary" onClick={() => setPaymentState(null)}>
-          View
-        </button>
+        post.mediaType.startsWith("video/") ? (
+          <video
+            src={`/api/posts/${post.id}/media`}
+            controls
+            aria-label={`Video: ${post.title}`}
+            onError={() => setMediaError(true)}
+          />
+        ) : (
+          <img
+            src={`/api/posts/${post.id}/media`}
+            alt={post.title}
+            onError={() => setMediaError(true)}
+          />
+        )
       ) : (
         <button
           className="primary"
@@ -287,7 +308,7 @@ export function PostPage({
             paymentState === "pending"
           }
         >
-          Unlock for {formatKas(post.priceSompi)} KAS
+          Unlock for <CurrencyAmount sompi={post.priceSompi} />
         </button>
       )}
       {message && (
@@ -326,7 +347,13 @@ export function PostPage({
                       ? "Approve in Kasware"
                       : paymentState === "confirming"
                         ? COPY.confirmingPayment
-                        : `Pay ${formatKas(payment.amountSompi)} KAS`}
+                        : `Pay ${formatKas(payment.amountSompi)}`}
+                {paymentState === "ready" && (
+                  <>
+                    <KaspaMark />
+                    <span className="sr-only"> KAS</span>
+                  </>
+                )}
               </button>
               {paymentState === "rejected" && (
                 <button className="secondary" onClick={() => void prepare()}>
@@ -357,7 +384,7 @@ export function PostPage({
         </div>
       )}
       <Link className="creator-link" to={`/creator/${post.creator}`}>
-        By {shorten(post.creator)}
+        Created by {shorten(post.creator)}
       </Link>
     </article>
   );
@@ -374,9 +401,13 @@ function PostCard({ post, index }: { post: PostResponse; index: number }) {
         </p>
         <h2>{post.title}</h2>
         <span>
-          {post.canView
-            ? "View"
-            : `Unlock for ${formatKas(post.priceSompi)} KAS`}
+          {post.canView ? (
+            "View"
+          ) : (
+            <>
+              Unlock for <CurrencyAmount sompi={post.priceSompi} />
+            </>
+          )}
         </span>
       </div>
     </Link>
@@ -393,6 +424,14 @@ function Message({ title, role }: { title: string; role: "alert" | "status" }) {
 function formatKas(sompi: string) {
   const padded = BigInt(sompi).toString().padStart(9, "0");
   return `${padded.slice(0, -8)}.${padded.slice(-8)}`.replace(/\.?0+$/, "");
+}
+function CurrencyAmount({ sompi }: { sompi: string }) {
+  return (
+    <>
+      <span>{formatKas(sompi)}</span> <KaspaMark />
+      <span className="sr-only">KAS</span>
+    </>
+  );
 }
 function shorten(address: string) {
   return `${address.slice(0, 16)}...${address.slice(-8)}`;

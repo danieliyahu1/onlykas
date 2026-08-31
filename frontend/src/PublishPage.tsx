@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   COPY,
@@ -8,6 +8,7 @@ import {
 } from "@onlykas/shared";
 import { api } from "./kasware.js";
 import { uploadMedia, waitForVerification } from "./upload.js";
+import { KaspaMark } from "./KaspaMark.js";
 
 interface Props {
   address: string | null;
@@ -37,6 +38,14 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     description: "",
     priceKas: "",
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [pendingPublish, setPendingPublish] = useState(false);
+
+  useEffect(() => {
+    if (!address || !pendingPublish || !selectedFile || uploading) return;
+    setPendingPublish(false);
+    void uploadThenConfirm(selectedFile);
+  }, [address, pendingPublish, selectedFile, uploading]);
 
   async function selectFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -61,6 +70,10 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     }
     setError(null);
     setStatus(null);
+    setSelectedFile(file);
+  }
+
+  async function uploadFile(file: File): Promise<string | null> {
     setUploading(true);
     setProgress(0);
     try {
@@ -80,6 +93,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
         );
       setUploadId(id);
       setStatus("Media ready.");
+      return id;
     } catch (caught) {
       console.error("[OnlyKas upload] failed", caught);
       setError(caught instanceof Error ? caught.message : COPY.uploadFailed);
@@ -87,18 +101,34 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     } finally {
       setUploading(false);
     }
+    return null;
+  }
+
+  async function uploadThenConfirm(file: File) {
+    const id = await uploadFile(file);
+    if (id) setConfirming(true);
   }
 
   function requestConfirmation(event: FormEvent) {
     event.preventDefault();
     const errors = validatePost(form.title, form.description, form.priceKas);
-    if (!uploadId) errors.unshift("Choose and upload one file.");
+    if (!selectedFile) errors.unshift("Choose one photo or video.");
     if (errors.length) {
       setError(errors.join(" "));
       return;
     }
+    const chosenFile = selectedFile;
+    if (!chosenFile) return;
     setError(null);
-    setConfirming(true);
+    if (!address) {
+      setPendingPublish(true);
+      setStatus("Connect your wallet to continue. No payment is made.");
+      void signIn();
+    } else if (uploadId) {
+      setConfirming(true);
+    } else {
+      void uploadThenConfirm(chosenFile);
+    }
   }
 
   async function publish() {
@@ -122,39 +152,16 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     }
   }
 
-  if (!address)
-    return (
-      <section className="publish-card signed-out">
-        <p className="eyebrow">CREATOR STUDIO</p>
-        <h1>
-          Make one thing
-          <br />
-          worth opening.
-        </h1>
-        <p>
-          Publish private images and videos. Set the price. Share one clean
-          link.
-        </p>
-        <button
-          className="primary"
-          disabled={signingIn}
-          onClick={() => void signIn()}
-        >
-          {signingIn ? "Signing in..." : "Continue with Kasware"}
-        </button>
-      </section>
-    );
-
   return (
     <section className="publish-card">
       <header>
-        <p className="eyebrow">NEW RELEASE</p>
-        <h1>
-          Publish
-          <br />
-          something rare.
-        </h1>
-        <p className="wallet">Creating as {shorten(address)}</p>
+        <p className="eyebrow">CREATE A POST</p>
+        <h1>Share something special.</h1>
+        <p className="wallet">
+          {address
+            ? `Creating as ${shorten(address)}`
+            : "Start below. Your wallet is only needed when you are ready."}
+        </p>
       </header>
       <form onSubmit={requestConfirmation}>
         <div className="upload-well">
@@ -177,10 +184,12 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
           >
             <strong>
               {uploadId
-                ? "Media secured"
-                : uploading
-                  ? `Uploading ${progress}%`
-                  : "Choose image or video"}
+                ? (selectedFile?.name ?? "Media ready")
+                : selectedFile
+                  ? selectedFile.name
+                  : uploading
+                    ? `Uploading ${progress}%`
+                    : "Add a photo or video"}
             </strong>
             <span>
               JPEG, PNG, WebP up to 25 MB
@@ -217,7 +226,11 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
           />
         </label>
         <label>
-          Price <span className="unit">KAS</span>
+          Price{" "}
+          <span className="unit">
+            <KaspaMark />
+            <span className="sr-only">KAS</span>
+          </span>
           <input
             inputMode="decimal"
             value={form.priceKas}
@@ -235,10 +248,16 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
         </div>
         <button
           className="primary"
-          disabled={!uploadId || uploading || publishing}
+          disabled={!selectedFile || uploading || publishing || signingIn}
         >
-          Review publication
+          Continue
         </button>
+        {!address && (
+          <p className="wallet-note">
+            Your wallet is only needed when you press Continue. Connecting is
+            free, and no payment happens without your approval.
+          </p>
+        )}
       </form>
       {confirming && (
         <div className="dialog-backdrop" role="presentation">
@@ -249,8 +268,8 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
             aria-labelledby="confirm-title"
           >
             <p className="eyebrow">LAST CHECK</p>
-            <h2 id="confirm-title">No edits. No takebacks.</h2>
-            <p>{COPY.permanence}</p>
+            <h2 id="confirm-title">Ready to share?</h2>
+            <p>{COPY.permanence} Take a moment to check the details.</p>
             <div className="dialog-actions">
               <button
                 className="primary"

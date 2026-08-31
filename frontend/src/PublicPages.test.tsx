@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("supporter payment branches", () => {
-  it("confirms payment and requires an explicit View action", async () => {
+  it("confirms payment and reveals the media immediately", async () => {
     vi.mocked(api)
       .mockResolvedValueOnce(post)
       .mockResolvedValueOnce(prepareResponse())
@@ -80,9 +80,6 @@ describe("supporter payment branches", () => {
     );
     await user.click(await screen.findByRole("button", { name: /pay/i }));
     expect(await screen.findByText(COPY.unlocked)).toBeVisible();
-    expect(screen.getByRole("button", { name: "View" })).toBeVisible();
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "View" }));
     expect(screen.getByRole("img", { name: post.title })).toBeVisible();
   });
 

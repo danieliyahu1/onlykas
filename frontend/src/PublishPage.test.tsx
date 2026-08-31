@@ -13,7 +13,7 @@ vi.mock("./upload.js", () => ({
 const address = `kaspatest:${"q".repeat(60)}`;
 
 describe("creator publish experience", () => {
-  it("shows the exact disconnected action and prevents silent sign-in", async () => {
+  it("lets creators start before connecting a wallet", async () => {
     const signIn = vi.fn(async () => undefined);
     const user = userEvent.setup();
     render(
@@ -22,11 +22,16 @@ describe("creator publish experience", () => {
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole("heading", { name: /make one thing worth opening/i }),
+      screen.getByRole("heading", { name: /share something special/i }),
     ).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: "Continue with Kasware" }),
+    await user.upload(
+      screen.getByLabelText(/choose image or video/i),
+      new File(["image"], "release.png", { type: "image/png" }),
     );
+    await user.type(screen.getByLabelText("Title"), "First light");
+    await user.type(screen.getByLabelText("Description"), "A private image");
+    await user.type(screen.getByLabelText(/Price/), "1.25");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(signIn).toHaveBeenCalledOnce();
   });
 
@@ -52,14 +57,12 @@ describe("creator publish experience", () => {
       screen.getByLabelText(/choose image or video/i),
       new File(["image"], "release.png", { type: "image/png" }),
     );
-    expect(await screen.findByText("Media ready.")).toBeVisible();
     await user.type(screen.getByLabelText("Title"), "First light");
     await user.type(screen.getByLabelText("Description"), "A private image");
     await user.type(screen.getByLabelText(/Price/), "1.25");
-    await user.click(
-      screen.getByRole("button", { name: "Review publication" }),
-    );
-    expect(screen.getByText(COPY.permanence)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Media ready.")).toBeVisible();
+    expect(screen.getByRole("dialog")).toHaveTextContent(COPY.permanence);
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByText(COPY.publishingCancelled)).toBeVisible();
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -80,8 +83,6 @@ describe("creator publish experience", () => {
       oversized,
     );
     expect(screen.getByText(COPY.imageTooLarge)).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Review publication" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
   });
 });

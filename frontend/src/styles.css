@@ -1,23 +1,36 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;600;800&display=swap");
 :root {
   font-family: Manrope, sans-serif;
-  color: #f4f0e8;
-  background: #191714;
+  color: #f4f7f6;
+  background: #0b1110;
   font-synthesis: none;
-  --ink: #191714;
-  --paper: #f4f0e8;
-  --acid: #ff6846;
-  --line: #4b4740;
+  --ink: #0b1110;
+  --paper: #f4f7f6;
+  --acid: #49eacb;
+  --line: #293431;
+  --surface: #111917;
+  --muted: #a7b2af;
 }
 * {
   box-sizing: border-box;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 80% 5%, #3b2820 0, transparent 32rem), var(--ink);
+    radial-gradient(circle at 80% 5%, #12332e 0, transparent 32rem), var(--ink);
 }
 button,
 input,
@@ -55,7 +68,36 @@ nav a {
   color: var(--acid);
 }
 .identity {
-  color: #a9a39a;
+  color: var(--muted);
+}
+.account {
+  position: relative;
+  color: var(--muted);
+}
+.account summary {
+  cursor: pointer;
+  color: var(--acid);
+}
+.account-menu {
+  position: absolute;
+  right: 0;
+  top: 2rem;
+  z-index: 3;
+  display: grid;
+  gap: 0.8rem;
+  min-width: 12rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.menu-button {
+  padding: 0.6rem 0;
+  background: transparent;
+  color: var(--paper);
+  text-align: left;
 }
 main {
   display: grid;
@@ -91,7 +133,7 @@ h2 {
   letter-spacing: 0.16em;
 }
 .wallet {
-  color: #aaa39a;
+  color: var(--muted);
   font:
     0.75rem "DM Mono",
     monospace;
@@ -138,6 +180,29 @@ textarea {
   bottom: 1rem;
   color: var(--acid);
 }
+.kaspa-mark {
+  display: inline-flex;
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.18em;
+  color: var(--acid);
+}
+.kaspa-mark svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+.price .kaspa-mark {
+  width: 0.9em;
+  height: 0.9em;
+}
+.dialog .kaspa-mark {
+  color: var(--ink);
+}
 .upload-well {
   position: relative;
   border: 1px dashed #787067;
@@ -172,7 +237,7 @@ textarea {
   letter-spacing: -0.02em;
 }
 .upload-well span {
-  color: #a9a39a;
+  color: var(--muted);
   line-height: 1.6;
 }
 progress {
@@ -186,6 +251,26 @@ progress {
 button {
   border: 0;
   cursor: pointer;
+}
+button,
+a,
+summary,
+input,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--acid);
+  outline-offset: 4px;
+}
+button,
+.primary,
+.secondary {
+  min-height: 44px;
 }
 button:disabled {
   cursor: not-allowed;
@@ -210,18 +295,18 @@ button:disabled {
 }
 .feedback {
   min-height: 1.5rem;
-  color: #b8b0a5;
+  color: var(--muted);
   font-size: 0.88rem;
 }
 .feedback.error,
 .global-error {
-  color: #ff9d86;
+  color: #ff826f;
 }
 .global-error {
   padding: 0.8rem 1rem;
   text-align: center;
-  border-bottom: 1px solid #743d32;
-  background: #2c1c18;
+  border-bottom: 1px solid #613c36;
+  background: #211614;
 }
 .dialog-backdrop {
   position: fixed;
@@ -293,7 +378,7 @@ button:disabled {
 .single-post .description {
   max-width: 38rem;
   font-size: 1.15rem;
-  color: #bbb4aa;
+  color: var(--muted);
 }
 .price {
   font-size: 2rem;
@@ -311,16 +396,19 @@ button:disabled {
   margin: 2rem 0;
   background: #080706;
 }
+.single-post > .primary {
+  width: min(100%, 22rem);
+}
 .creator-link {
   display: block;
   margin-top: 2rem;
-  color: #aaa39a;
+  color: var(--muted);
   font-family: "DM Mono", monospace;
 }
 footer {
   border-top: 1px solid var(--line);
   border-bottom: 0;
-  color: #777168;
+  color: #73827e;
 }
 @media (max-width: 720px) {
   .publish-card {
@@ -329,13 +417,22 @@ footer {
   nav {
     gap: 1rem;
   }
-  .identity {
-    display: none;
+  .account {
+    margin-left: auto;
   }
   .dialog-actions {
     flex-direction: column;
   }
   h1 {
     font-size: clamp(3rem, 17vw, 5.5rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
