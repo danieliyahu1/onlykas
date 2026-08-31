@@ -9,7 +9,7 @@ RUN pnpm install --frozen-lockfile
 COPY shared/src ./shared/src
 COPY backend/src ./backend/src
 COPY frontend/src ./frontend/src
-RUN pnpm build && pnpm deploy --filter @onlykas/backend --prod /prod/backend
+RUN pnpm build && pnpm deploy --legacy --filter @onlykas/backend --prod /prod/backend
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
