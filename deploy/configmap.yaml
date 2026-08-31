@@ -6,7 +6,7 @@ metadata:
 data:
   NODE_ENV: production
   PORT: "3000"
-  PUBLIC_ORIGIN: https://onlykas.example.com
+  PUBLIC_ORIGIN: https://onlykas.danieliyahu.com
   R2_REGION: auto
   R2_BUCKET: onlykas-production
   KASPA_NODE_URL: https://api-tn10.kaspa.org
