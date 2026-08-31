@@ -58,4 +58,4 @@ kubectl -n onlykas create secret generic onlykas-secrets \
   --from-literal=R2_SECRET_ACCESS_KEY='...'
 ```
 
-The GitHub Actions workflow verifies the repository and publishes `linux/arm64` images tagged with the commit SHA to GHCR. Update the immutable image tag in `deploy/deployment.yaml` when promoting a new image.
+The GitHub Actions workflow verifies the repository, publishes a `linux/arm64` image tagged with the commit SHA to GHCR, and updates `deploy/deployment.yaml` automatically. Argo CD then detects the manifest commit and syncs the new image.

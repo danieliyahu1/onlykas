@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -32,7 +36,7 @@ jobs:
       - run: pnpm build
 
   image:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.actor != 'github-actions[bot]'
     needs: verify
     runs-on: ubuntu-latest
     permissions:
@@ -55,3 +59,23 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  update-manifest:
+    if: github.event_name != 'pull_request' && github.actor != 'github-actions[bot]'
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - name: Pin manifest to published image
+        run: |
+          sed -i "s#^\([[:space:]]*image: ghcr.io/.*/onlykas:\).*#\1${GITHUB_SHA}#" deploy/deployment.yaml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/deployment.yaml
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: pin image to ${GITHUB_SHA}"
+          git push origin HEAD:master
