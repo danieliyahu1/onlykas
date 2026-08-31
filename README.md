@@ -37,3 +37,25 @@ The production image builds all workspaces and runs one Express process. Express
 docker build -t onlykas .
 docker run --env-file .env -p 3000:3000 onlykas
 ```
+
+## Kubernetes deployment
+
+The manifests in `deploy/` target the `onlykas` namespace and an nginx Ingress. Replace the example hostname in `deploy/configmap.yaml` and `deploy/ingress.yaml` with the real public origin before deploying.
+
+Create the runtime Secret outside Git:
+
+```bash
+kubectl apply -f deploy/namespace.yaml
+kubectl -n onlykas create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io \
+  --docker-username='<github-user>' \
+  --docker-password='<github-token-with-read-packages>'
+kubectl -n onlykas create secret generic onlykas-secrets \
+  --from-literal=DATABASE_URL='libsql://...' \
+  --from-literal=DATABASE_AUTH_TOKEN='...' \
+  --from-literal=R2_ENDPOINT='https://...r2.cloudflarestorage.com' \
+  --from-literal=R2_ACCESS_KEY_ID='...' \
+  --from-literal=R2_SECRET_ACCESS_KEY='...'
+```
+
+The GitHub Actions workflow verifies the repository, publishes `linux/arm64` images tagged with the commit SHA to GHCR, and deploys them on pushes to `main`. Configure the repository `KUBE_CONFIG` secret for the target cluster.

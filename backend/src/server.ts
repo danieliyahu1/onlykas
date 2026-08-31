@@ -32,7 +32,7 @@ const app = createApp({
   publicOrigin: environment.PUBLIC_ORIGIN,
   production: environment.NODE_ENV === "production",
 });
-app.listen(environment.PORT, () =>
+app.listen(environment.PORT, "0.0.0.0", () =>
   console.log(
     JSON.stringify({ event: "server_started", port: environment.PORT }),
   ),

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: onlykas-config
+  namespace: onlykas
+data:
+  NODE_ENV: production
+  PORT: "3000"
+  PUBLIC_ORIGIN: https://onlykas.example.com
+  R2_REGION: auto
+  R2_BUCKET: onlykas-production
+  KASPA_NODE_URL: https://api-tn10.kaspa.org
+  MEDIA_JOB_INTERVAL_MS: "5000"
+  MEDIA_JOB_STALE_MS: "300000"
