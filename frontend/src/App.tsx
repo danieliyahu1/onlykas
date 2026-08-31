@@ -75,11 +75,12 @@ export function App() {
             <Link to="/find" className="nav-action">
               Find
             </Link>
-            {address && (
+            {address ? (
               <details className="account">
-                <summary>Connected</summary>
+                <summary aria-label={`Connected wallet ${shorten(address)}`}>
+                  {shorten(address)}
+                </summary>
                 <div className="account-menu">
-                  <span>{shorten(address)}</span>
                   <button
                     className="menu-button"
                     onClick={() => void signOut()}
@@ -88,6 +89,14 @@ export function App() {
                   </button>
                 </div>
               </details>
+            ) : (
+              <button
+                className="connect-button"
+                disabled={signingIn}
+                onClick={() => void signIn()}
+              >
+                {signingIn ? "Connecting..." : "Connect"}
+              </button>
             )}
           </div>
         </nav>

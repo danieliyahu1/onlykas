@@ -84,6 +84,19 @@ nav a {
   cursor: pointer;
   color: var(--acid);
 }
+.connect-button {
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
+  background: var(--acid);
+  color: var(--ink);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.connect-button:hover:not(:disabled),
+.connect-button:focus-visible {
+  background: #ff8a70;
+}
 .account-menu {
   position: absolute;
   right: 0;
@@ -200,10 +213,17 @@ textarea {
   bottom: 1rem;
   color: var(--acid);
 }
+.price-field .unit {
+  right: auto;
+  left: 0;
+}
+.price-field input {
+  padding-left: 2rem;
+}
 .kaspa-mark {
   display: inline-flex;
-  width: 1.15em;
-  height: 1.15em;
+  width: 1.3em;
+  height: 1.3em;
   vertical-align: -0.18em;
   color: var(--acid);
 }
@@ -217,11 +237,12 @@ textarea {
   stroke-width: 2;
 }
 .price .kaspa-mark {
-  width: 0.9em;
-  height: 0.9em;
+  width: 1.1em;
+  height: 1.1em;
 }
 .dialog .kaspa-mark {
   color: var(--ink);
+  --kaspa-mark-cutout: var(--paper);
 }
 .upload-well {
   position: relative;

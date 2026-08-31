@@ -225,7 +225,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
             placeholder="Tell supporters what awaits"
           />
         </label>
-        <label>
+        <label className="price-field">
           Price{" "}
           <span className="unit">
             <KaspaMark />
