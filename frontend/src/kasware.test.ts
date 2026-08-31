@@ -12,6 +12,7 @@ describe("Kasware authentication", () => {
       switchNetwork: vi.fn(),
       getPublicKey: vi.fn(async () => "public-key"),
       signMessage: vi.fn(async () => "signature"),
+      signPskt: vi.fn(),
       on: vi.fn(),
       removeListener: vi.fn(),
     };
@@ -55,6 +56,7 @@ describe("Kasware authentication", () => {
       switchNetwork: vi.fn(),
       getPublicKey: vi.fn(),
       signMessage: vi.fn(),
+      signPskt: vi.fn(),
       on: vi.fn(),
       removeListener: vi.fn(),
     };

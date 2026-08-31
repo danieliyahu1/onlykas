@@ -2,8 +2,14 @@ import { createApp } from "./app.js";
 import { parseEnvironment } from "./config.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { R2Storage } from "./r2-storage.js";
-import { cleanupExpiredUploads, processNextUpload } from "./worker.js";
+import {
+  cleanupExpiredUploads,
+  processNextUpload,
+  reconcilePendingPayments,
+} from "./worker.js";
 import { KaspaWalletVerifier } from "./wallet-verifier.js";
+import { KaspaPaymentGateway } from "./payment-gateway.js";
+import { logEvent, safeError } from "./observability.js";
 
 const environment = parseEnvironment(process.env);
 const store = new LibsqlStore(
@@ -22,6 +28,7 @@ const app = createApp({
   store,
   storage,
   walletVerifier: new KaspaWalletVerifier(),
+  paymentGateway: new KaspaPaymentGateway(environment.KASPA_NODE_URL),
   publicOrigin: environment.PUBLIC_ORIGIN,
   production: environment.NODE_ENV === "production",
 });
@@ -37,6 +44,16 @@ setInterval(() => {
     storage,
     Date.now(),
     environment.MEDIA_JOB_STALE_MS,
+  ).catch((error) =>
+    logEvent("media_worker_unhandled_error", safeError(error)),
   );
-  void cleanupExpiredUploads(store, storage);
+  void cleanupExpiredUploads(store, storage).catch((error) =>
+    logEvent("media_cleanup_unhandled_error", safeError(error)),
+  );
+  void reconcilePendingPayments(
+    store,
+    new KaspaPaymentGateway(environment.KASPA_NODE_URL),
+  ).catch((error) =>
+    logEvent("payment_reconciliation_unhandled_error", safeError(error)),
+  );
 }, environment.MEDIA_JOB_INTERVAL_MS).unref();

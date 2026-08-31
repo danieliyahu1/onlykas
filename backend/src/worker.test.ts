@@ -9,7 +9,11 @@ import { promisify } from "node:util";
 import { UPLOAD_TTL_MS, type MediaType } from "@onlykas/shared";
 import { MemoryStore } from "./memory-store.js";
 import { TestStorage } from "./test-storage.js";
-import { cleanupExpiredUploads, processNextUpload } from "./worker.js";
+import {
+  cleanupExpiredUploads,
+  processNextUpload,
+  reconcilePendingPayments,
+} from "./worker.js";
 
 const ffmpegPath = createRequire(import.meta.url)("ffmpeg-static") as
   string | null;
@@ -103,6 +107,50 @@ describe("media jobs", () => {
     );
     expect(store.uploads.get("expired")?.state).toBe("EXPIRED");
     expect(store.uploads.get("valid")?.state).toBe("VERIFIED");
+  });
+
+  it("reconciles a submitted payment by status without submitting again", async () => {
+    const store = new MemoryStore();
+    await store.createPaymentAttempt({
+      id: "attempt",
+      postId: "post",
+      buyer: "buyer",
+      amountSompi: "100",
+      creator: "creator",
+      preparedTransaction: "prepared",
+      fingerprint: "fingerprint",
+      signedTransactionId: "a".repeat(64),
+      state: "PENDING",
+      rejection: null,
+      submittedAt: 10,
+      lastCheckedAt: null,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 10,
+    });
+    let submitCount = 0;
+    const gateway = {
+      prepare: async () => ({
+        transaction: "prepared",
+        fingerprint: "fingerprint",
+        amountSompi: "100",
+        creator: "creator",
+      }),
+      submit: async () => {
+        submitCount += 1;
+        throw new Error("must not submit");
+      },
+      status: async (transactionId: string) => ({
+        isAccepted: true,
+        transactionId,
+        rejection: null,
+      }),
+    };
+
+    expect(await reconcilePendingPayments(store, gateway, 20)).toBe(1);
+    expect(submitCount).toBe(0);
+    expect(await store.hasPurchase("post", "buyer")).toBe(true);
+    expect((await store.getPaymentAttempt("attempt"))?.state).toBe("CONFIRMED");
   });
 });
 

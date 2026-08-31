@@ -28,6 +28,17 @@ export const COPY = {
   publishFailed: "Post was not published. Try again.",
   mediaUnavailable:
     "This media is temporarily unavailable. Your purchase is unchanged.",
+  unlockPrompt:
+    "Unlock this post? The creator receives {price} KAS. Your wallet will also show the network fee. This payment cannot be reversed.",
+  paymentCancelled: "Payment cancelled.",
+  confirmingPayment: "Confirming payment...",
+  unlocked: "Unlocked.",
+  insufficientFunds: "You need enough KAS for the post and the network fee.",
+  transactionRejected:
+    "Transaction rejected. No access was granted. Try again.",
+  purchasePending: "Purchase pending. Do not pay again.",
+  accessVerificationFailed: "OnlyKas can't verify access right now. Try again.",
+  unlockRequired: "Unlock this post to view it.",
 } as const;
 
 export const MEDIA_TYPES = [

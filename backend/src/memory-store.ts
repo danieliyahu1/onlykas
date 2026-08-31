@@ -1,10 +1,22 @@
-import type { Challenge, Post, Session, Store, Upload } from "./domain.js";
+import type {
+  Challenge,
+  PaymentAttempt,
+  PaymentAttemptState,
+  PaymentAttemptUpdate,
+  Post,
+  Purchase,
+  Session,
+  Store,
+  Upload,
+} from "./domain.js";
 
 export class MemoryStore implements Store {
   readonly challenges = new Map<string, Challenge>();
   readonly sessions = new Map<string, Session>();
   readonly uploads = new Map<string, Upload>();
   readonly posts = new Map<string, Post>();
+  readonly paymentAttempts = new Map<string, PaymentAttempt>();
+  readonly purchases = new Map<string, Purchase>();
 
   async initialize(): Promise<void> {}
   async createChallenge(challenge: Challenge): Promise<void> {
@@ -90,5 +102,90 @@ export class MemoryStore implements Store {
       .filter((post) => post.creator === address)
       .sort((a, b) => b.publishedAt - a.publishedAt)
       .map((post) => structuredClone(post));
+  }
+  async createPaymentAttempt(attempt: PaymentAttempt): Promise<void> {
+    this.paymentAttempts.set(attempt.id, structuredClone(attempt));
+  }
+  async getPaymentAttempt(id: string): Promise<PaymentAttempt | null> {
+    const value = this.paymentAttempts.get(id);
+    return value ? structuredClone(value) : null;
+  }
+  async unresolvedPaymentAttempt(
+    postId: string,
+    buyer: string,
+  ): Promise<PaymentAttempt | null> {
+    const value = [...this.paymentAttempts.values()].find(
+      (attempt) =>
+        attempt.postId === postId &&
+        attempt.buyer === buyer &&
+        (attempt.state === "PREPARED" || attempt.state === "PENDING"),
+    );
+    return value ? structuredClone(value) : null;
+  }
+  async pendingPaymentAttempts(): Promise<PaymentAttempt[]> {
+    return [...this.paymentAttempts.values()]
+      .filter((attempt) => attempt.state === "PENDING")
+      .map((attempt) => structuredClone(attempt));
+  }
+  async compareAndSetPaymentAttempt(
+    id: string,
+    expectedState: PaymentAttemptState,
+    update: PaymentAttemptUpdate,
+  ): Promise<PaymentAttempt | null> {
+    const current = this.paymentAttempts.get(id);
+    if (!current || current.state !== expectedState) return null;
+    const updated = { ...current, ...update };
+    this.paymentAttempts.set(id, structuredClone(updated));
+    return structuredClone(updated);
+  }
+  async confirmPaymentAttempt(
+    id: string,
+    expectedState: PaymentAttemptState,
+    purchase: Purchase,
+  ): Promise<PaymentAttempt | null> {
+    const attempt = this.paymentAttempts.get(id);
+    if (!attempt || attempt.state !== expectedState) return null;
+    if (attempt.postId !== purchase.postId || attempt.buyer !== purchase.buyer)
+      return null;
+    if (
+      this.purchases.has(`${purchase.postId}:${purchase.buyer}`) ||
+      [...this.purchases.values()].some(
+        (item) => item.transactionId === purchase.transactionId,
+      )
+    )
+      return null;
+    this.purchases.set(
+      `${purchase.postId}:${purchase.buyer}`,
+      structuredClone(purchase),
+    );
+    const confirmed = {
+      ...attempt,
+      signedTransactionId: purchase.transactionId,
+      submittedAt: attempt.submittedAt ?? purchase.confirmedAt,
+      lastCheckedAt:
+        expectedState === "PENDING"
+          ? purchase.confirmedAt
+          : attempt.lastCheckedAt,
+      reconciliationAttempts:
+        attempt.reconciliationAttempts + (expectedState === "PENDING" ? 1 : 0),
+      state: "CONFIRMED" as const,
+    };
+    this.paymentAttempts.set(id, structuredClone(confirmed));
+    return structuredClone(confirmed);
+  }
+  async createPurchase(purchase: Purchase): Promise<boolean> {
+    const key = `${purchase.postId}:${purchase.buyer}`;
+    if (
+      [...this.purchases.values()].some(
+        (item) => item.transactionId === purchase.transactionId,
+      ) ||
+      this.purchases.has(key)
+    )
+      return false;
+    this.purchases.set(key, structuredClone(purchase));
+    return true;
+  }
+  async hasPurchase(postId: string, buyer: string): Promise<boolean> {
+    return this.purchases.has(`${postId}:${buyer}`);
   }
 }

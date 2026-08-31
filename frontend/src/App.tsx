@@ -17,6 +17,18 @@ export function App() {
     } catch {
       return;
     }
+    void (async () => {
+      try {
+        const [accounts, session] = await Promise.all([
+          wallet.getAccounts(),
+          api<{ address: string }>("/api/auth/session"),
+        ]);
+        if (accounts[0] && accounts[0] === session.address)
+          setAddress(session.address);
+      } catch {
+        // A missing or expired server session simply requires sign-in.
+      }
+    })();
     const changed = () => {
       setAddress(null);
       setWalletError(null);
@@ -76,7 +88,16 @@ export function App() {
             />
             <Route path="/publish" element={<Navigate to="/" replace />} />
             <Route path="/creator/:address" element={<CreatorPage />} />
-            <Route path="/post/:id" element={<PostPage />} />
+            <Route
+              path="/post/:id"
+              element={
+                <PostPage
+                  address={address}
+                  signIn={signIn}
+                  signingIn={signingIn}
+                />
+              }
+            />
           </Routes>
         </main>
         <footer>

@@ -13,6 +13,7 @@ const environmentSchema = z.object({
   R2_BUCKET: z.string().min(1),
   R2_ACCESS_KEY_ID: z.string().min(1),
   R2_SECRET_ACCESS_KEY: z.string().min(1),
+  KASPA_NODE_URL: z.string().url().default("https://api-tn10.kaspa.org"),
   MEDIA_JOB_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
   MEDIA_JOB_STALE_MS: z.coerce.number().int().positive().default(300_000),
 });

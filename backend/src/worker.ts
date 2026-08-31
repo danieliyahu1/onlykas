@@ -1,18 +1,36 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ObjectStorage, Store } from "./domain.js";
+import type { ObjectStorage, PaymentGateway, Store } from "./domain.js";
 import { MediaValidationError, verifyMediaFile } from "./media.js";
+import { logEvent, safeError, type EventLogger } from "./observability.js";
 
 export async function processNextUpload(
   store: Store,
   storage: ObjectStorage,
-  now = Date.now(),
+  now: number = Date.now(),
   staleMs = 300_000,
+  logger: EventLogger = logEvent,
 ): Promise<boolean> {
-  const upload = await store.claimUpload(now, now - staleMs);
+  let upload;
+  try {
+    upload = await store.claimUpload(now, now - staleMs);
+  } catch (error) {
+    logger("media_worker_claim_failed", safeError(error));
+    return false;
+  }
   if (!upload) return false;
-  const directory = await mkdtemp(join(tmpdir(), "onlykas-"));
+  logger("media_worker_started", { uploadId: upload.id });
+  let directory: string;
+  try {
+    directory = await mkdtemp(join(tmpdir(), "onlykas-"));
+  } catch (error) {
+    logger("media_worker_setup_failed", {
+      uploadId: upload.id,
+      ...safeError(error),
+    });
+    return false;
+  }
   const mediaPath = join(directory, "media");
   try {
     await storage.download(upload.stagingKey, mediaPath);
@@ -29,19 +47,43 @@ export async function processNextUpload(
       finalKey,
       error: null,
     });
+    logger("media_worker_succeeded", {
+      uploadId: upload.id,
+      mediaType: media.mediaType,
+      mediaSize: media.size,
+    });
   } catch (error) {
     const category =
       error instanceof MediaValidationError
         ? error.category
         : "STORAGE_FAILURE";
-    await store.updateUpload({
-      ...upload,
-      state: category === "STORAGE_FAILURE" ? "UPLOADED" : "REJECTED",
-      updatedAt: now,
-      error: category,
+    try {
+      await store.updateUpload({
+        ...upload,
+        state: category === "STORAGE_FAILURE" ? "UPLOADED" : "REJECTED",
+        updatedAt: now,
+        error: category,
+      });
+    } catch (updateError) {
+      logger("media_worker_update_failed", {
+        uploadId: upload.id,
+        ...safeError(updateError),
+      });
+    }
+    logger("media_worker_failed", {
+      uploadId: upload.id,
+      category,
+      ...safeError(error),
     });
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await rm(directory, { recursive: true, force: true });
+    } catch (error) {
+      logger("media_worker_cleanup_failed", {
+        uploadId: upload.id,
+        ...safeError(error),
+      });
+    }
   }
   return true;
 }
@@ -51,12 +93,87 @@ export async function cleanupExpiredUploads(
   storage: ObjectStorage,
   now = Date.now(),
 ): Promise<number> {
-  const uploads = await store.expiredUploads(now);
+  let uploads;
+  try {
+    uploads = await store.expiredUploads(now);
+  } catch (error) {
+    logEvent("media_cleanup_load_failed", safeError(error));
+    return 0;
+  }
   for (const upload of uploads) {
-    if (upload.state === "CREATED")
-      await storage.abortMultipart(upload.stagingKey, upload.multipartId);
-    else await storage.delete(upload.stagingKey);
-    await store.updateUpload({ ...upload, state: "EXPIRED", updatedAt: now });
+    try {
+      if (upload.state === "CREATED")
+        await storage.abortMultipart(upload.stagingKey, upload.multipartId);
+      else await storage.delete(upload.stagingKey);
+      await store.updateUpload({ ...upload, state: "EXPIRED", updatedAt: now });
+      logEvent("media_cleanup_succeeded", { uploadId: upload.id });
+    } catch (error) {
+      logEvent("media_cleanup_failed", {
+        uploadId: upload.id,
+        ...safeError(error),
+      });
+    }
   }
   return uploads.length;
+}
+
+export async function reconcilePendingPayments(
+  store: Store,
+  gateway: PaymentGateway,
+  now = Date.now(),
+): Promise<number> {
+  let attempts;
+  try {
+    attempts = await store.pendingPaymentAttempts();
+  } catch (error) {
+    logEvent("payment_reconciliation_load_failed", safeError(error));
+    return 0;
+  }
+  for (const attempt of attempts) {
+    if (!attempt.signedTransactionId) continue;
+    try {
+      const submission = await gateway.status(attempt.signedTransactionId);
+      const checkedAt = now;
+      if (submission.isAccepted === true) {
+        await store.confirmPaymentAttempt(attempt.id, "PENDING", {
+          postId: attempt.postId,
+          buyer: attempt.buyer,
+          transactionId: attempt.signedTransactionId,
+          confirmedAt: checkedAt,
+        });
+      } else if (submission.isAccepted === false) {
+        await store.compareAndSetPaymentAttempt(attempt.id, "PENDING", {
+          state: "REJECTED",
+          rejection: submission.rejection ?? "TRANSACTION_REJECTED",
+          lastCheckedAt: checkedAt,
+          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          updatedAt: checkedAt,
+        });
+      } else {
+        await store.compareAndSetPaymentAttempt(attempt.id, "PENDING", {
+          lastCheckedAt: checkedAt,
+          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          updatedAt: checkedAt,
+        });
+      }
+    } catch (error) {
+      logEvent("payment_reconciliation_failed", {
+        paymentId: attempt.id,
+        ...safeError(error),
+      });
+      try {
+        await store.compareAndSetPaymentAttempt(attempt.id, "PENDING", {
+          lastCheckedAt: now,
+          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          updatedAt: now,
+        });
+      } catch (updateError) {
+        logEvent("payment_reconciliation_update_failed", {
+          paymentId: attempt.id,
+          ...safeError(updateError),
+        });
+      }
+    }
+  }
+  return attempts.length;
 }

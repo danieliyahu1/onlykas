@@ -28,7 +28,15 @@ import type {
   Session,
   Store,
   WalletVerifier,
+  PaymentGateway,
+  PaymentAttempt,
 } from "./domain.js";
+import {
+  logEvent,
+  requestId,
+  safeError,
+  type EventLogger,
+} from "./observability.js";
 
 const sessionCookie = "onlykas_session";
 const addressPattern = /^kaspatest:[a-z0-9]{40,80}$/;
@@ -37,9 +45,12 @@ export interface AppDependencies {
   store: Store;
   storage: ObjectStorage;
   walletVerifier: WalletVerifier;
+  paymentGateway?: PaymentGateway;
   publicOrigin: string;
   production?: boolean;
   now?: () => number;
+  readinessCheck?: () => boolean | Promise<boolean>;
+  logger?: EventLogger;
 }
 
 declare global {
@@ -48,6 +59,7 @@ declare global {
   namespace Express {
     interface Request {
       walletSession?: Session;
+      requestId: string;
     }
   }
 }
@@ -55,10 +67,26 @@ declare global {
 export function createApp(dependencies: AppDependencies) {
   const app = express();
   const now = dependencies.now ?? Date.now;
+  const logger = dependencies.logger ?? logEvent;
   app.disable("x-powered-by");
+  app.use((request, response, next) => {
+    request.requestId = requestId(request.get("x-request-id"));
+    response.setHeader("X-Request-Id", request.requestId);
+    next();
+  });
   app.use(helmet({ contentSecurityPolicy: false }));
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
+  app.get("/healthz", (_request, response) => response.json({ status: "ok" }));
+  app.get(
+    "/readyz",
+    asyncHandler(async (_request, response) => {
+      const ready = await (dependencies.readinessCheck?.() ?? true);
+      response
+        .status(ready ? 200 : 503)
+        .json({ status: ready ? "ok" : "unready" });
+    }),
+  );
 
   async function optionalSession(
     request: Request,
@@ -168,6 +196,19 @@ export function createApp(dependencies: AppDependencies) {
       response.status(201).json({
         address: session.address,
         expiresAt: new Date(session.expiresAt).toISOString(),
+      });
+    }),
+  );
+
+  app.get(
+    "/api/auth/session",
+    optionalSession,
+    asyncHandler(async (request, response) => {
+      if (!request.walletSession)
+        return response.status(401).json({ error: "AUTH_REQUIRED" });
+      response.json({
+        address: request.walletSession.address,
+        expiresAt: new Date(request.walletSession.expiresAt).toISOString(),
       });
     }),
   );
@@ -398,12 +439,23 @@ export function createApp(dependencies: AppDependencies) {
       if (!addressPattern.test(address))
         return response.status(400).json({ error: "INVALID_ADDRESS" });
       const posts = await dependencies.store.creatorPosts(address);
+      const viewer = request.walletSession?.address;
+      const visible = await Promise.all(
+        posts.map(async (post) =>
+          postResponse(
+            post,
+            viewer === post.creator ||
+              Boolean(
+                viewer &&
+                (await dependencies.store.hasPurchase(post.id, viewer)),
+              ),
+          ),
+        ),
+      );
       response.json({
         address,
         displayAddress: shortenAddress(address),
-        posts: posts.map((post) =>
-          postResponse(post, request.walletSession?.address === post.creator),
-        ),
+        posts: visible,
       });
     }),
   );
@@ -414,9 +466,255 @@ export function createApp(dependencies: AppDependencies) {
     asyncHandler(async (request, response) => {
       const post = await dependencies.store.getPost(routeParam(request, "id"));
       if (!post) return response.status(404).json({ error: "POST_NOT_FOUND" });
+      const viewer = request.walletSession?.address;
       response.json(
-        postResponse(post, request.walletSession?.address === post.creator),
+        postResponse(
+          post,
+          viewer === post.creator ||
+            Boolean(
+              viewer && (await dependencies.store.hasPurchase(post.id, viewer)),
+            ),
+        ),
       );
+    }),
+  );
+
+  app.post(
+    "/api/posts/:id/payments/prepare",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      if (!dependencies.paymentGateway)
+        throw new HttpError(503, "PAYMENT_UNAVAILABLE");
+      const post = await dependencies.store.getPost(routeParam(request, "id"));
+      if (!post) return response.status(404).json({ error: "POST_NOT_FOUND" });
+      const buyer = request.walletSession!.address;
+      logger("payment_prepare_started", {
+        requestId: request.requestId,
+        postId: post.id,
+        buyer,
+      });
+      if (
+        post.creator === buyer ||
+        (await dependencies.store.hasPurchase(post.id, buyer))
+      )
+        return response.status(409).json({ error: "ALREADY_UNLOCKED" });
+      const existing = await dependencies.store.unresolvedPaymentAttempt(
+        post.id,
+        buyer,
+      );
+      if (existing && validPreparedPayment(existing, post.creator))
+        return response.json(paymentResponse(existing));
+      if (existing)
+        await dependencies.store.compareAndSetPaymentAttempt(
+          existing.id,
+          "PREPARED",
+          {
+            state: "REJECTED",
+            rejection: "STALE_PREPARATION",
+            updatedAt: now(),
+          },
+        );
+      let prepared: Awaited<ReturnType<PaymentGateway["prepare"]>>;
+      try {
+        prepared = await dependencies.paymentGateway.prepare(post, buyer);
+      } catch (error) {
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+          return response.status(422).json({
+            error: "INSUFFICIENT_FUNDS",
+            message: COPY.insufficientFunds,
+          });
+        throw error;
+      }
+      if (
+        prepared.amountSompi !== post.priceSompi ||
+        prepared.creator !== post.creator
+      )
+        throw new HttpError(503, "PAYMENT_UNAVAILABLE");
+      const attempt: PaymentAttempt = {
+        id: randomUUID(),
+        postId: post.id,
+        buyer,
+        amountSompi: prepared.amountSompi,
+        creator: prepared.creator,
+        preparedTransaction: prepared.transaction,
+        fingerprint: prepared.fingerprint,
+        signedTransactionId: null,
+        state: "PREPARED",
+        rejection: null,
+        submittedAt: null,
+        lastCheckedAt: null,
+        reconciliationAttempts: 0,
+        createdAt: now(),
+        updatedAt: now(),
+      };
+      await dependencies.store.createPaymentAttempt(attempt);
+      logger("payment_prepared", {
+        requestId: request.requestId,
+        paymentId: attempt.id,
+        postId: attempt.postId,
+        buyer: attempt.buyer,
+        amountSompi: attempt.amountSompi,
+      });
+      response.status(201).json(paymentResponse(attempt));
+    }),
+  );
+
+  app.post(
+    "/api/payments/:id/finalize",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      if (!dependencies.paymentGateway)
+        throw new HttpError(503, "PAYMENT_UNAVAILABLE");
+      const attempt = await dependencies.store.getPaymentAttempt(
+        routeParam(request, "id"),
+      );
+      logger("payment_finalize_started", {
+        requestId: request.requestId,
+        paymentId: routeParam(request, "id"),
+        buyer: request.walletSession!.address,
+      });
+      if (!attempt || attempt.buyer !== request.walletSession!.address)
+        return response.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+      if (attempt.state === "CONFIRMED")
+        return response.json(paymentResponse(attempt));
+      if (attempt.state === "PENDING")
+        return response
+          .status(409)
+          .json({ ...paymentResponse(attempt), message: COPY.purchasePending });
+      const body = z
+        .object({ signedTransaction: z.string().min(1) })
+        .parse(request.body);
+      let submission;
+      try {
+        submission = await dependencies.paymentGateway.submit(
+          {
+            transaction: attempt.preparedTransaction,
+            fingerprint: attempt.fingerprint,
+            amountSompi: attempt.amountSompi,
+            creator: attempt.creator,
+          },
+          body.signedTransaction,
+        );
+      } catch (error) {
+        const validationFailure =
+          error instanceof Error &&
+          ["INVALID_INPUT", "INPUT_CHANGED", "UTXO_OWNER_MISMATCH"].includes(
+            error.message,
+          );
+        const failedState = validationFailure ? "REJECTED" : "PENDING";
+        const failedMessage = validationFailure
+          ? error instanceof Error
+            ? error.message
+            : "TRANSACTION_REJECTED"
+          : null;
+        const pending: PaymentAttempt = {
+          ...attempt,
+          state: failedState,
+          rejection: failedMessage,
+          signedTransactionId: null,
+          submittedAt: validationFailure ? null : now(),
+          updatedAt: now(),
+        };
+        await dependencies.store.compareAndSetPaymentAttempt(
+          attempt.id,
+          "PREPARED",
+          {
+            state: pending.state,
+            rejection: pending.rejection,
+            signedTransactionId: pending.signedTransactionId,
+            submittedAt: pending.submittedAt,
+            updatedAt: pending.updatedAt,
+          },
+        );
+        return response.status(validationFailure ? 422 : 202).json({
+          ...paymentResponse(pending),
+          message: validationFailure
+            ? COPY.transactionRejected
+            : COPY.purchasePending,
+        });
+      }
+      if (submission.isAccepted === true && submission.transactionId) {
+        const updated = await dependencies.store.confirmPaymentAttempt(
+          attempt.id,
+          "PREPARED",
+          {
+            postId: attempt.postId,
+            buyer: attempt.buyer,
+            transactionId: submission.transactionId,
+            confirmedAt: now(),
+          },
+        );
+        if (!updated) {
+          const current = (await dependencies.store.getPaymentAttempt(
+            attempt.id,
+          ))!;
+          return response.status(409).json({
+            ...paymentResponse(current),
+            message: COPY.purchasePending,
+          });
+        }
+        logger("payment_finalized", {
+          requestId: request.requestId,
+          paymentId: updated.id,
+          state: updated.state,
+          transactionId: updated.signedTransactionId,
+        });
+        return response.json({
+          ...paymentResponse(updated),
+          message: COPY.unlocked,
+        });
+      }
+      const updated = await dependencies.store.compareAndSetPaymentAttempt(
+        attempt.id,
+        "PREPARED",
+        {
+          signedTransactionId: submission.transactionId,
+          state: submission.isAccepted === false ? "REJECTED" : "PENDING",
+          rejection: submission.rejection,
+          submittedAt: submission.transactionId ? now() : null,
+          lastCheckedAt: null,
+          reconciliationAttempts: 0,
+          updatedAt: now(),
+        },
+      );
+      if (!updated) {
+        const current = (await dependencies.store.getPaymentAttempt(
+          attempt.id,
+        ))!;
+        return response
+          .status(409)
+          .json({ ...paymentResponse(current), message: COPY.purchasePending });
+      }
+      logger("payment_finalized", {
+        requestId: request.requestId,
+        paymentId: updated.id,
+        state: updated.state,
+        transactionId: updated.signedTransactionId,
+      });
+      if (submission.isAccepted === null)
+        return response
+          .status(202)
+          .json({ ...paymentResponse(updated), message: COPY.purchasePending });
+      return response.status(422).json({
+        ...paymentResponse(updated),
+        message: COPY.transactionRejected,
+      });
+    }),
+  );
+
+  app.get(
+    "/api/payments/:id",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      const attempt = await dependencies.store.getPaymentAttempt(
+        routeParam(request, "id"),
+      );
+      if (!attempt || attempt.buyer !== request.walletSession!.address)
+        return response.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+      response.json(paymentResponse(attempt));
     }),
   );
 
@@ -429,8 +727,27 @@ export function createApp(dependencies: AppDependencies) {
         return response.status(405).end();
       const post = await dependencies.store.getPost(routeParam(request, "id"));
       if (!post) return response.status(404).json({ error: "POST_NOT_FOUND" });
-      if (request.walletSession!.address !== post.creator)
+      if (
+        request.walletSession!.address !== post.creator &&
+        !(await dependencies.store.hasPurchase(
+          post.id,
+          request.walletSession!.address,
+        ))
+      ) {
+        logger("media_access_denied", {
+          requestId: request.requestId,
+          postId: post.id,
+          viewer: request.walletSession!.address,
+          reason: "NOT_PURCHASED",
+        });
         return response.status(403).json({ error: "MEDIA_FORBIDDEN" });
+      }
+      logger("media_access_granted", {
+        requestId: request.requestId,
+        postId: post.id,
+        viewer: request.walletSession!.address,
+        method: request.method,
+      });
       const parsedRange = parseRange(request.headers.range, post.mediaSize);
       if (parsedRange === "invalid") {
         response.setHeader("Content-Range", `bytes */${post.mediaSize}`);
@@ -476,12 +793,11 @@ export function createApp(dependencies: AppDependencies) {
         return response.status(400).json({ error: "INVALID_REQUEST" });
       if (error instanceof HttpError)
         return response.status(error.status).json({ error: error.code });
-      console.error("[OnlyKas server] unhandled request error", {
+      logger("request_failed", {
+        requestId: request.requestId,
         method: request.method,
-        path: request.originalUrl,
-        name: error instanceof Error ? error.name : typeof error,
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
+        path: request.path,
+        ...safeError(error),
       });
       response.status(503).json({ error: "SERVICE_UNAVAILABLE" });
     },
@@ -543,6 +859,38 @@ function postResponse(post: Post, canView: boolean): PostResponse {
     publishedAt: new Date(post.publishedAt).toISOString(),
     canView,
   };
+}
+function paymentResponse(attempt: PaymentAttempt) {
+  return {
+    id: attempt.id,
+    state: attempt.state,
+    transaction:
+      attempt.state === "PREPARED" ? attempt.preparedTransaction : undefined,
+    fingerprint: attempt.state === "PREPARED" ? attempt.fingerprint : undefined,
+    amountSompi: attempt.amountSompi,
+    creator: attempt.creator,
+    rejection: attempt.rejection,
+    transactionId: attempt.signedTransactionId,
+    submittedAt: attempt.submittedAt,
+    lastCheckedAt: attempt.lastCheckedAt,
+    reconciliationAttempts: attempt.reconciliationAttempts,
+  };
+}
+function validPreparedPayment(
+  attempt: PaymentAttempt,
+  creator: string,
+): boolean {
+  try {
+    const transaction = JSON.parse(attempt.preparedTransaction) as {
+      outputs?: { scriptPublicKey?: string }[];
+    };
+    return (
+      transaction.outputs?.[0]?.scriptPublicKey?.startsWith("000020") ===
+        true && attempt.creator === creator
+    );
+  } catch {
+    return false;
+  }
 }
 function shortenAddress(address: string) {
   return `${address.slice(0, 16)}...${address.slice(-8)}`;

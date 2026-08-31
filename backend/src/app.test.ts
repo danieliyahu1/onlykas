@@ -2,6 +2,7 @@ import request from "supertest";
 import sharp from "sharp";
 import { COPY } from "@onlykas/shared";
 import { createApp } from "./app.js";
+import type { PaymentGateway, Post, Upload } from "./domain.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
 import { TestStorage } from "./test-storage.js";
@@ -12,6 +13,128 @@ const creator = `kaspatest:${"q".repeat(60)}`;
 const outsider = `kaspatest:${"r".repeat(60)}`;
 
 describe("creator publication API", () => {
+  it("returns health and readiness with a correlation ID", async () => {
+    const app = createApp({
+      store: new MemoryStore(),
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      readinessCheck: () => false,
+    });
+    await request(app)
+      .get("/healthz")
+      .set("X-Request-Id", "test-trace")
+      .expect(200)
+      .expect("X-Request-Id", "test-trace")
+      .expect({ status: "ok" });
+    await request(app).get("/readyz").expect(503, { status: "unready" });
+  });
+
+  it("confirms one supporter payment and grants permanent media access", async () => {
+    const store = new MemoryStore();
+    const storage = new TestStorage();
+    const post: Post = {
+      id: "paid-post",
+      creator,
+      title: "Paid release",
+      description: "Private media",
+      priceSompi: "100",
+      mediaType: "image/png",
+      mediaSize: 4,
+      mediaDigest: "digest",
+      mediaKey: "final/digest",
+      publishedAt: 1_000,
+    };
+    const upload: Upload = {
+      id: "upload",
+      creator,
+      stagingKey: "staging/upload",
+      multipartId: "multipart",
+      state: "VERIFIED",
+      hintedType: "image/png",
+      hintedSize: 4,
+      expiresAt: 2_000,
+      updatedAt: 1_000,
+      error: null,
+      digest: "digest",
+      mediaType: "image/png",
+      mediaSize: 4,
+      finalKey: "final/digest",
+      parts: [],
+    };
+    await store.createUpload(upload);
+    await store.publish(upload.id, post);
+    storage.objects.set(post.mediaKey, {
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      contentType: post.mediaType,
+    });
+    const gateway: PaymentGateway = {
+      prepare: async () => ({
+        transaction: JSON.stringify({
+          outputs: [{ scriptPublicKey: "000020" }],
+        }),
+        fingerprint: "fingerprint",
+        amountSompi: post.priceSompi,
+        creator: post.creator,
+      }),
+      submit: async () => ({
+        isAccepted: true,
+        transactionId: "a".repeat(64),
+        rejection: null,
+      }),
+      status: async (transactionId) => ({
+        isAccepted: true,
+        transactionId,
+        rejection: null,
+      }),
+    };
+    const app = createApp({
+      store,
+      storage,
+      publicOrigin: origin,
+      paymentGateway: gateway,
+      walletVerifier: { verify: async () => true },
+    });
+    const buyerAgent = request.agent(app);
+    await authenticate(buyerAgent, outsider);
+    await buyerAgent.get(`/api/posts/${post.id}`).expect(200, {
+      id: post.id,
+      creator: post.creator,
+      title: post.title,
+      description: post.description,
+      priceSompi: post.priceSompi,
+      mediaType: post.mediaType,
+      publishedAt: new Date(post.publishedAt).toISOString(),
+      canView: false,
+    });
+    const prepared = await buyerAgent
+      .post(`/api/posts/${post.id}/payments/prepare`)
+      .expect(201);
+    await buyerAgent
+      .post(`/api/payments/${prepared.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(200);
+    await buyerAgent.get(`/api/posts/${post.id}`).expect(200, {
+      id: post.id,
+      creator: post.creator,
+      title: post.title,
+      description: post.description,
+      priceSompi: post.priceSompi,
+      mediaType: post.mediaType,
+      publishedAt: new Date(post.publishedAt).toISOString(),
+      canView: true,
+    });
+    await buyerAgent
+      .get(`/api/posts/${post.id}/media`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual(Buffer.from([1, 2, 3, 4]));
+      });
+    await buyerAgent
+      .post(`/api/posts/${post.id}/payments/prepare`)
+      .expect(409, { error: "ALREADY_UNLOCKED" });
+  });
+
   it("authenticates, verifies private media, publishes immutably, and serves only its creator", async () => {
     const store = new LibsqlStore("file::memory:");
     await store.initialize();

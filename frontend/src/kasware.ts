@@ -7,11 +7,32 @@ export interface Kasware {
   switchNetwork(network: string): Promise<void>;
   getPublicKey(): Promise<string>;
   signMessage(message: string): Promise<string>;
+  signPskt(request: {
+    txJsonString: string;
+    options?: { signInputs?: { index: number; sighashType: number }[] };
+  }): Promise<string>;
   on(event: "accountsChanged" | "networkChanged", handler: () => void): void;
   removeListener(
     event: "accountsChanged" | "networkChanged",
     handler: () => void,
   ): void;
+}
+
+export async function signPreparedPayment(
+  transaction: string,
+): Promise<string> {
+  try {
+    const inputs =
+      (JSON.parse(transaction) as { inputs?: unknown[] }).inputs ?? [];
+    return await kasware().signPskt({
+      txJsonString: transaction,
+      options: {
+        signInputs: inputs.map((_, index) => ({ index, sighashType: 1 })),
+      },
+    });
+  } catch {
+    throw new WalletError(COPY.transactionRejected);
+  }
 }
 
 declare global {

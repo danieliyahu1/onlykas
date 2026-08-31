@@ -48,6 +48,64 @@ export interface Post {
   publishedAt: number;
 }
 
+export type PaymentAttemptState =
+  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
+export interface PaymentAttempt {
+  id: string;
+  postId: string;
+  buyer: string;
+  amountSompi: string;
+  creator: string;
+  preparedTransaction: string;
+  fingerprint: string;
+  signedTransactionId: string | null;
+  state: PaymentAttemptState;
+  rejection: string | null;
+  submittedAt: number | null;
+  lastCheckedAt: number | null;
+  reconciliationAttempts: number;
+  createdAt: number;
+  updatedAt: number;
+}
+export interface Purchase {
+  postId: string;
+  buyer: string;
+  transactionId: string;
+  confirmedAt: number;
+}
+export interface PreparedPayment {
+  transaction: string;
+  fingerprint: string;
+  amountSompi: string;
+  creator: string;
+}
+export interface PaymentSubmission {
+  isAccepted: boolean | null;
+  transactionId: string | null;
+  rejection: string | null;
+}
+export interface PaymentGateway {
+  prepare(post: Post, buyer: string): Promise<PreparedPayment>;
+  submit(
+    prepared: PreparedPayment,
+    signedTransaction: string,
+  ): Promise<PaymentSubmission>;
+  status(transactionId: string): Promise<PaymentSubmission>;
+}
+
+export type PaymentAttemptUpdate = Partial<
+  Pick<
+    PaymentAttempt,
+    | "signedTransactionId"
+    | "state"
+    | "rejection"
+    | "submittedAt"
+    | "lastCheckedAt"
+    | "reconciliationAttempts"
+    | "updatedAt"
+  >
+>;
+
 export interface Store {
   initialize(): Promise<void>;
   createChallenge(challenge: Challenge): Promise<void>;
@@ -64,6 +122,25 @@ export interface Store {
   publish(uploadId: string, post: Post): Promise<boolean>;
   getPost(id: string): Promise<Post | null>;
   creatorPosts(address: string): Promise<Post[]>;
+  createPaymentAttempt(attempt: PaymentAttempt): Promise<void>;
+  getPaymentAttempt(id: string): Promise<PaymentAttempt | null>;
+  unresolvedPaymentAttempt(
+    postId: string,
+    buyer: string,
+  ): Promise<PaymentAttempt | null>;
+  pendingPaymentAttempts(): Promise<PaymentAttempt[]>;
+  compareAndSetPaymentAttempt(
+    id: string,
+    expectedState: PaymentAttemptState,
+    update: PaymentAttemptUpdate,
+  ): Promise<PaymentAttempt | null>;
+  confirmPaymentAttempt(
+    id: string,
+    expectedState: PaymentAttemptState,
+    purchase: Purchase,
+  ): Promise<PaymentAttempt | null>;
+  createPurchase(purchase: Purchase): Promise<boolean>;
+  hasPurchase(postId: string, buyer: string): Promise<boolean>;
 }
 
 export interface ObjectStorage {
