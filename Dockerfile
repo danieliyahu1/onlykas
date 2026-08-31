@@ -17,6 +17,6 @@ WORKDIR /app/backend
 COPY --from=build /prod/backend ./
 COPY --from=build /app/backend/dist ./dist
 COPY --from=build /app/frontend/dist /app/frontend/dist
-USER node
+USER 1000
 EXPOSE 3000
 CMD ["node", "dist/server.js"]
