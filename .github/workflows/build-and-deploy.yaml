@@ -1,17 +1,19 @@
-name: Build and deploy
+name: Build and publish
 
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - deploy/**
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
-
-permissions:
-  contents: read
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/onlykas
@@ -68,11 +70,13 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: master
       - name: Pin manifest to published image
+        env:
+          IMAGE: ${{ env.IMAGE_NAME }}:${{ github.sha }}
         run: |
-          sed -i "s#^\([[:space:]]*image: ghcr.io/.*/onlykas:\).*#\1${GITHUB_SHA}#" deploy/deployment.yaml
+          sed -i "s|^          image: .*|          image: ${IMAGE}|" deploy/deployment.yaml
+      - name: Commit manifest handoff
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add deploy/deployment.yaml
