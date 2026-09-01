@@ -6,6 +6,7 @@ import {
 } from "@onlykas/shared";
 import { api } from "./kasware.js";
 import { Icon } from "./Icons.js";
+import { useAutoDismiss } from "./useAutoDismiss.js";
 
 export function FindCreatorPage() {
   const navigate = useNavigate();
@@ -13,6 +14,8 @@ export function FindCreatorPage() {
   const [results, setResults] = useState<CreatorSearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+
+  useAutoDismiss(error, () => setError(null));
 
   function findCreator(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

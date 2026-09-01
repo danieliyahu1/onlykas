@@ -4,15 +4,10 @@ import { COPY, type CreatorResponse, type PostResponse } from "@onlykas/shared";
 import { api, signPreparedPayment, WalletError } from "./kasware.js";
 import { KaspaMark } from "./KaspaMark.js";
 import { Icon } from "./Icons.js";
+import { useAutoDismiss } from "./useAutoDismiss.js";
 
 type PaymentState =
-  | "preparing"
-  | "ready"
-  | "signing"
-  | "confirming"
-  | "pending"
-  | "rejected"
-  | "confirmed";
+  "preparing" | "signing" | "confirming" | "pending" | "rejected" | "confirmed";
 type Payment = {
   id: string;
   transaction?: string;
@@ -70,7 +65,7 @@ export function PostPage({
   signingIn,
 }: {
   address: string | null;
-  signIn: () => Promise<void>;
+  signIn: () => Promise<string | null>;
   signingIn: boolean;
 }) {
   const { id = "" } = useParams();
@@ -80,7 +75,7 @@ export function PostPage({
   const [paymentState, setPaymentState] = useState<PaymentState | null>(null);
   const [mediaError, setMediaError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [unlockAfterSignIn, setUnlockAfterSignIn] = useState(false);
+  useAutoDismiss(message, () => setMessage(null));
   useEffect(() => {
     let active = true;
     setPost(null);
@@ -103,11 +98,6 @@ export function PostPage({
     setMessage(null);
   }, [address, id]);
   useEffect(() => {
-    if (!address || !post || !unlockAfterSignIn) return;
-    setUnlockAfterSignIn(false);
-    void prepare();
-  }, [address, post, unlockAfterSignIn]);
-  useEffect(() => {
     if (!address || !post) return;
     const key = paymentStorageKey(post.id, address);
     const savedId = window.localStorage.getItem(key);
@@ -121,9 +111,7 @@ export function PostPage({
         if (recovered.state === "PENDING") {
           setPaymentState("pending");
           setMessage(COPY.purchasePending);
-        } else if (recovered.state === "PREPARED" && recovered.transaction)
-          setPaymentState("ready");
-        else if (recovered.state === "CONFIRMED") {
+        } else if (recovered.state === "CONFIRMED") {
           window.localStorage.removeItem(key);
           setPaymentState("confirmed");
           setPost((value) => (value ? { ...value, canView: true } : value));
@@ -189,11 +177,9 @@ export function PostPage({
   if (error) return <Message title="Post not found." role="alert" />;
   if (!post) return <Message title="Opening post..." role="status" />;
   const currentPost = post;
-  async function prepare() {
-    if (!address) {
-      setUnlockAfterSignIn(true);
-      return signIn();
-    }
+  async function unlock() {
+    const buyer = address ?? (await signIn());
+    if (!buyer) return;
     setMessage(null);
     setPaymentState("preparing");
     try {
@@ -203,30 +189,17 @@ export function PostPage({
         amountSompi: string;
       }>(`/api/posts/${currentPost.id}/payments/prepare`, { method: "POST" });
       setPayment(prepared);
-      setPaymentState("ready");
+      setPaymentState("signing");
+      setMessage("Confirm in Kasware.");
+      const signed = await signPreparedPayment(prepared.transaction);
       window.localStorage.setItem(
-        paymentStorageKey(currentPost.id, address),
+        paymentStorageKey(currentPost.id, buyer),
         prepared.id,
       );
-    } catch (caught) {
-      setPaymentState(null);
-      setMessage(
-        caught instanceof Error
-          ? caught.message
-          : COPY.accessVerificationFailed,
-      );
-    }
-  }
-  async function pay() {
-    if (!payment?.transaction || paymentState !== "ready") return;
-    setPaymentState("signing");
-    setMessage(null);
-    try {
-      const signed = await signPreparedPayment(payment.transaction);
       setPaymentState("confirming");
-      setMessage(COPY.confirmingPayment);
+      setMessage("Opening your post...");
       const result = await api<{ message?: string }>(
-        `/api/payments/${payment.id}/finalize`,
+        `/api/payments/${prepared.id}/finalize`,
         { method: "POST", body: JSON.stringify({ signedTransaction: signed }) },
       );
       const state = (result as { state?: string }).state;
@@ -234,11 +207,14 @@ export function PostPage({
         setPaymentState("pending");
         setMessage(COPY.purchasePending);
       } else if (state === "REJECTED") {
+        window.localStorage.removeItem(
+          paymentStorageKey(currentPost.id, buyer),
+        );
         setPaymentState("rejected");
         setMessage(COPY.transactionRejected);
       } else {
         window.localStorage.removeItem(
-          paymentStorageKey(currentPost.id, address ?? ""),
+          paymentStorageKey(currentPost.id, buyer),
         );
         setPaymentState("confirmed");
         setMessage(COPY.unlocked);
@@ -254,8 +230,10 @@ export function PostPage({
       setMessage(text);
       if (text === COPY.purchasePending) setPaymentState("pending");
       else {
+        window.localStorage.removeItem(
+          paymentStorageKey(currentPost.id, buyer),
+        );
         setPaymentState("rejected");
-        setMessage(COPY.transactionRejected);
       }
     }
   }
@@ -267,7 +245,7 @@ export function PostPage({
       <p className="price">
         <CurrencyAmount sompi={post.priceSompi} />
       </p>
-      {post.canView && paymentState !== "confirmed" && !mediaError ? (
+      {post.canView && !mediaError ? (
         post.mediaType.startsWith("video/") ? (
           <video
             src={`/api/posts/${post.id}/media`}
@@ -286,107 +264,40 @@ export function PostPage({
         <p className="feedback" role="alert">
           {COPY.mediaUnavailable}
         </p>
-      ) : post.canView && paymentState === "confirmed" ? (
-        post.mediaType.startsWith("video/") ? (
-          <video
-            src={`/api/posts/${post.id}/media`}
-            controls
-            aria-label={`Video: ${post.title}`}
-            onError={() => setMediaError(true)}
-          />
-        ) : (
-          <img
-            src={`/api/posts/${post.id}/media`}
-            alt={post.title}
-            onError={() => setMediaError(true)}
-          />
-        )
       ) : (
         <button
           className="primary"
-          onClick={() => void prepare()}
+          onClick={() => void unlock()}
           disabled={
             signingIn ||
             paymentState === "preparing" ||
+            paymentState === "signing" ||
             paymentState === "confirming" ||
             paymentState === "pending"
           }
         >
-          Unlock for <CurrencyAmount sompi={post.priceSompi} />{" "}
-          <Icon name="arrow-right" />
+          {paymentState === "preparing" ? (
+            "Preparing payment..."
+          ) : paymentState === "signing" ? (
+            "Confirm in Kasware"
+          ) : paymentState === "confirming" ? (
+            "Opening post..."
+          ) : paymentState === "pending" ? (
+            "Payment confirming..."
+          ) : paymentState === "rejected" ? (
+            "Try again"
+          ) : (
+            <>
+              View for <CurrencyAmount sompi={post.priceSompi} />{" "}
+              <Icon name="arrow-right" />
+            </>
+          )}
         </button>
       )}
       {message && (
         <p className="feedback" role="status">
           {message}
         </p>
-      )}
-      {payment && paymentState && paymentState !== "confirmed" && (
-        <div className="dialog-backdrop" role="presentation">
-          <div
-            className="dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="unlock-title"
-            aria-describedby="unlock-description"
-          >
-            <p className="eyebrow">UNLOCK</p>
-            <h2 id="unlock-title">Unlock this post?</h2>
-            <p id="unlock-description">
-              {COPY.unlockPrompt.replace(
-                "{price}",
-                formatKas(payment.amountSompi),
-              )}
-            </p>
-            <div className="dialog-actions">
-              <button
-                className="primary"
-                disabled={paymentState !== "ready"}
-                onClick={() => void pay()}
-              >
-                {paymentState === "rejected"
-                  ? "Payment rejected"
-                  : paymentState === "pending"
-                    ? "Pending"
-                    : paymentState === "signing"
-                      ? "Approve in Kasware"
-                      : paymentState === "confirming"
-                        ? COPY.confirmingPayment
-                        : `Pay ${formatKas(payment.amountSompi)}`}
-                {paymentState === "ready" && (
-                  <>
-                    <KaspaMark />
-                    <span className="sr-only"> KAS</span>
-                  </>
-                )}
-              </button>
-              {paymentState === "rejected" && (
-                <button className="secondary" onClick={() => void prepare()}>
-                  Retry payment <Icon name="arrow-right" />
-                </button>
-              )}
-              <button
-                className="secondary"
-                disabled={
-                  paymentState === "signing" ||
-                  paymentState === "confirming" ||
-                  paymentState === "pending"
-                }
-                onClick={() => {
-                  setPayment(null);
-                  setPaymentState(null);
-                  if (address)
-                    window.localStorage.removeItem(
-                      paymentStorageKey(currentPost.id, address),
-                    );
-                  setMessage(COPY.paymentCancelled);
-                }}
-              >
-                Cancel <Icon name="x" />
-              </button>
-            </div>
-          </div>
-        </div>
       )}
       <Link className="creator-link" to={`/creator/${post.creator}`}>
         Created by {shorten(post.creator)}

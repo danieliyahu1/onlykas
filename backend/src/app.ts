@@ -44,6 +44,23 @@ import {
 
 const sessionCookie = "onlykas_session";
 const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
+const apiMessages: Record<string, string> = {
+  AUTHENTICATION_REQUIRED: "Sign in to continue.",
+  AUTH_REQUIRED: "Sign in to continue.",
+  INVALID_REQUEST: "That request could not be completed.",
+  INVALID_UPLOAD_STATE:
+    "This upload is no longer available. Choose the file again.",
+  INVALID_PARTS: "The upload could not be completed. Try again.",
+  UPLOAD_NOT_VERIFIED: "Your media is still being prepared. Try again shortly.",
+  INVALID_ADDRESS: COPY.invalidCreatorAddress,
+  POST_NOT_FOUND: "This post could not be found.",
+  POST_NOT_PUBLISHED: COPY.publishFailed,
+  PAYMENT_NOT_FOUND: "This payment could not be found.",
+  ALREADY_UNLOCKED: "This post is already unlocked.",
+  MEDIA_FORBIDDEN: "You do not have access to this media.",
+  PAYMENT_UNAVAILABLE: "Payments are temporarily unavailable. Try again.",
+  SERVICE_UNAVAILABLE: "OnlyKas is temporarily unavailable. Try again.",
+};
 
 export interface AppDependencies {
   store: Store;
@@ -121,7 +138,7 @@ export function createApp(dependencies: AppDependencies) {
     next: NextFunction,
   ) {
     if (!request.walletSession)
-      return response.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
+      return apiError(response, 401, "AUTHENTICATION_REQUIRED");
     next();
   }
 
@@ -209,7 +226,7 @@ export function createApp(dependencies: AppDependencies) {
     optionalSession,
     asyncHandler(async (request, response) => {
       if (!request.walletSession)
-        return response.status(401).json({ error: "AUTH_REQUIRED" });
+        return apiError(response, 401, "AUTH_REQUIRED");
       response.json({
         address: request.walletSession.address,
         displayName:
@@ -247,10 +264,7 @@ export function createApp(dependencies: AppDependencies) {
         })
         .parse(request.body);
       const hintError = mediaHintError(body.type, body.size);
-      if (hintError)
-        return response
-          .status(422)
-          .json({ error: "INVALID_MEDIA", message: hintError });
+      if (hintError) return apiError(response, 422, "INVALID_MEDIA", hintError);
       const createdAt = now();
       const id = randomUUID();
       const stagingKey = `staging/${request.walletSession!.address}/${randomBytes(24).toString("hex")}`;
@@ -299,7 +313,7 @@ export function createApp(dependencies: AppDependencies) {
         request.walletSession!.address,
       );
       if (upload.state !== "CREATED")
-        return response.status(409).json({ error: "INVALID_UPLOAD_STATE" });
+        return apiError(response, 409, "INVALID_UPLOAD_STATE");
       console.info("[OnlyKas upload] signing part", {
         uploadId: upload.id,
         partNumber: body.partNumber,
@@ -344,7 +358,7 @@ export function createApp(dependencies: AppDependencies) {
         (a, b) => a.partNumber - b.partNumber,
       );
       if (ordered.some((part, index) => part.partNumber !== index + 1))
-        return response.status(422).json({ error: "INVALID_PARTS" });
+        return apiError(response, 422, "INVALID_PARTS");
       console.info("[OnlyKas upload] completing multipart upload", {
         uploadId: upload.id,
         partCount: ordered.length,
@@ -456,9 +470,7 @@ export function createApp(dependencies: AppDependencies) {
         .parse(request.body);
       const errors = validatePost(body.title, body.description, body.priceKas);
       if (errors.length)
-        return response
-          .status(422)
-          .json({ error: "INVALID_POST", messages: errors });
+        return apiError(response, 422, "INVALID_POST", errors.join(" "));
       const upload = await ownedUpload(
         dependencies.store,
         body.uploadId,
@@ -471,7 +483,7 @@ export function createApp(dependencies: AppDependencies) {
         !upload.digest ||
         !upload.finalKey
       )
-        return response.status(409).json({ error: "UPLOAD_NOT_VERIFIED" });
+        return apiError(response, 409, "UPLOAD_NOT_VERIFIED");
       const post: Post = {
         id: randomUUID(),
         creator: request.walletSession!.address,
@@ -484,7 +496,13 @@ export function createApp(dependencies: AppDependencies) {
         mediaKey: upload.finalKey,
         publishedAt: now(),
       };
-      if (!(await dependencies.store.publish(upload.id, post)))
+      const result = await dependencies.store.publish(upload.id, post);
+      if (result === "DUPLICATE_MEDIA")
+        return response.status(409).json({
+          error: "MEDIA_ALREADY_PUBLISHED",
+          message: COPY.mediaAlreadyPublished,
+        });
+      if (result !== "PUBLISHED")
         return response
           .status(409)
           .json({ error: "POST_NOT_PUBLISHED", message: COPY.publishFailed });
@@ -498,7 +516,7 @@ export function createApp(dependencies: AppDependencies) {
     asyncHandler(async (request, response) => {
       const address = routeParam(request, "address");
       if (!addressPattern.test(address))
-        return response.status(400).json({ error: "INVALID_ADDRESS" });
+        return apiError(response, 400, "INVALID_ADDRESS");
       const posts = await dependencies.store.creatorPosts(address);
       const viewer = request.walletSession?.address;
       const visible = await Promise.all(
@@ -528,7 +546,7 @@ export function createApp(dependencies: AppDependencies) {
     optionalSession,
     asyncHandler(async (request, response) => {
       const post = await dependencies.store.getPost(routeParam(request, "id"));
-      if (!post) return response.status(404).json({ error: "POST_NOT_FOUND" });
+      if (!post) return apiError(response, 404, "POST_NOT_FOUND");
       const viewer = request.walletSession?.address;
       response.json(
         postResponse(
@@ -550,7 +568,7 @@ export function createApp(dependencies: AppDependencies) {
       if (!dependencies.paymentGateway)
         throw new HttpError(503, "PAYMENT_UNAVAILABLE");
       const post = await dependencies.store.getPost(routeParam(request, "id"));
-      if (!post) return response.status(404).json({ error: "POST_NOT_FOUND" });
+      if (!post) return apiError(response, 404, "POST_NOT_FOUND");
       const buyer = request.walletSession!.address;
       logger("payment_prepare_started", {
         requestId: request.requestId,
@@ -561,7 +579,7 @@ export function createApp(dependencies: AppDependencies) {
         post.creator === buyer ||
         (await dependencies.store.hasPurchase(post.id, buyer))
       )
-        return response.status(409).json({ error: "ALREADY_UNLOCKED" });
+        return apiError(response, 409, "ALREADY_UNLOCKED");
       const existing = await dependencies.store.unresolvedPaymentAttempt(
         post.id,
         buyer,
@@ -639,7 +657,7 @@ export function createApp(dependencies: AppDependencies) {
         buyer: request.walletSession!.address,
       });
       if (!attempt || attempt.buyer !== request.walletSession!.address)
-        return response.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+        return apiError(response, 404, "PAYMENT_NOT_FOUND");
       if (attempt.state === "CONFIRMED")
         return response.json(paymentResponse(attempt));
       if (attempt.state === "PENDING")
@@ -776,7 +794,7 @@ export function createApp(dependencies: AppDependencies) {
         routeParam(request, "id"),
       );
       if (!attempt || attempt.buyer !== request.walletSession!.address)
-        return response.status(404).json({ error: "PAYMENT_NOT_FOUND" });
+        return apiError(response, 404, "PAYMENT_NOT_FOUND");
       response.json(paymentResponse(attempt));
     }),
   );
@@ -789,7 +807,7 @@ export function createApp(dependencies: AppDependencies) {
       if (request.method !== "GET" && request.method !== "HEAD")
         return response.status(405).end();
       const post = await dependencies.store.getPost(routeParam(request, "id"));
-      if (!post) return response.status(404).json({ error: "POST_NOT_FOUND" });
+      if (!post) return apiError(response, 404, "POST_NOT_FOUND");
       if (
         request.walletSession!.address !== post.creator &&
         !(await dependencies.store.hasPurchase(
@@ -803,7 +821,7 @@ export function createApp(dependencies: AppDependencies) {
           viewer: request.walletSession!.address,
           reason: "NOT_PURCHASED",
         });
-        return response.status(403).json({ error: "MEDIA_FORBIDDEN" });
+        return apiError(response, 403, "MEDIA_FORBIDDEN");
       }
       logger("media_access_granted", {
         requestId: request.requestId,
@@ -864,19 +882,35 @@ export function createApp(dependencies: AppDependencies) {
     ) => {
       void next;
       if (error instanceof z.ZodError)
-        return response.status(400).json({ error: "INVALID_REQUEST" });
+        return apiError(response, 400, "INVALID_REQUEST");
       if (error instanceof HttpError)
-        return response.status(error.status).json({ error: error.code });
+        return apiError(response, error.status, error.code);
       logger("request_failed", {
         requestId: request.requestId,
         method: request.method,
         path: request.path,
         ...safeError(error),
       });
-      response.status(503).json({ error: "SERVICE_UNAVAILABLE" });
+      apiError(response, 503, "SERVICE_UNAVAILABLE");
     },
   );
   return app;
+}
+
+function apiError(
+  response: Response,
+  status: number,
+  code: string,
+  message = apiMessages[code] ?? humanizeErrorCode(code),
+) {
+  return response.status(status).json({ error: code, message });
+}
+
+function humanizeErrorCode(code: string) {
+  return `${code
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace(/^./, (letter) => letter.toUpperCase())}.`;
 }
 
 class HttpError extends Error {

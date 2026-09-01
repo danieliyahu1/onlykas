@@ -132,7 +132,10 @@ describe("creator publication API", () => {
       });
     await buyerAgent
       .post(`/api/posts/${post.id}/payments/prepare`)
-      .expect(409, { error: "ALREADY_UNLOCKED" });
+      .expect(409, {
+        error: "ALREADY_UNLOCKED",
+        message: "This post is already unlocked.",
+      });
   });
 
   it("authenticates, verifies private media, publishes immutably, and serves only its creator", async () => {
@@ -200,16 +203,28 @@ describe("creator publication API", () => {
       priceSompi: "100000001",
       canView: true,
     });
+    const verifiedUpload = (await store.getUpload(upload.id))!;
+    const duplicateUpload: Upload = {
+      ...verifiedUpload,
+      id: "11111111-1111-4111-8111-111111111111",
+      stagingKey: "staging/duplicate-upload",
+      multipartId: "duplicate-multipart",
+      state: "VERIFIED",
+    };
+    await store.createUpload(duplicateUpload);
     await creatorAgent
       .post("/api/posts")
       .send({
-        uploadId: upload.id,
+        uploadId: duplicateUpload.id,
         title: "Duplicate",
         description: "Must not exist",
         priceKas: "1",
         permanenceConfirmed: true,
       })
-      .expect(409);
+      .expect(409, {
+        error: "MEDIA_ALREADY_PUBLISHED",
+        message: COPY.mediaAlreadyPublished,
+      });
     expect(await store.creatorPosts(creator)).toHaveLength(1);
 
     const profile = await request(app)

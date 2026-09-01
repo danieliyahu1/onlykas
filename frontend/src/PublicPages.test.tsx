@@ -23,14 +23,24 @@ const post = {
   canView: false,
 };
 
-function renderPost() {
+function renderPost({
+  currentAddress = address,
+  signIn = vi.fn(async () => address),
+}: {
+  currentAddress?: string | null;
+  signIn?: () => Promise<string | null>;
+} = {}) {
   return render(
     <MemoryRouter initialEntries={["/post/post-1"]}>
       <Routes>
         <Route
           path="/post/:id"
           element={
-            <PostPage address={address} signIn={vi.fn()} signingIn={false} />
+            <PostPage
+              address={currentAddress}
+              signIn={signIn}
+              signingIn={false}
+            />
           }
         />
       </Routes>
@@ -75,10 +85,7 @@ describe("supporter payment branches", () => {
     const user = userEvent.setup();
     renderPost();
 
-    await user.click(
-      await screen.findByRole("button", { name: /unlock for/i }),
-    );
-    await user.click(await screen.findByRole("button", { name: /pay/i }));
+    await user.click(await screen.findByRole("button", { name: /view for/i }));
     expect(await screen.findByText(COPY.unlocked)).toBeVisible();
     expect(screen.getByRole("img", { name: post.title })).toBeVisible();
   });
@@ -90,15 +97,11 @@ describe("supporter payment branches", () => {
       .mockRejectedValueOnce(new Error(COPY.purchasePending));
     const user = userEvent.setup();
     renderPost();
-    await user.click(
-      await screen.findByRole("button", { name: /unlock for/i }),
-    );
-    await user.click(await screen.findByRole("button", { name: /pay/i }));
+    await user.click(await screen.findByRole("button", { name: /view for/i }));
     expect(await screen.findByText(COPY.purchasePending)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Pending" })).toBeDisabled();
     expect(
-      screen.queryByRole("button", { name: "Retry payment" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Payment confirming..." }),
+    ).toBeDisabled();
   });
 
   it("offers retry only after rejection and prepares a new attempt", async () => {
@@ -106,25 +109,20 @@ describe("supporter payment branches", () => {
       .mockResolvedValueOnce(post)
       .mockResolvedValueOnce(prepareResponse())
       .mockRejectedValueOnce(new Error(COPY.transactionRejected))
-      .mockResolvedValueOnce({ ...prepareResponse(), id: "payment-2" });
+      .mockResolvedValueOnce({ ...prepareResponse(), id: "payment-2" })
+      .mockResolvedValueOnce({ state: "CONFIRMED", message: COPY.unlocked });
     const user = userEvent.setup();
     renderPost();
-    await user.click(
-      await screen.findByRole("button", { name: /unlock for/i }),
-    );
-    expect(
-      screen.queryByRole("button", { name: "Retry payment" }),
-    ).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /pay/i }));
+    await user.click(await screen.findByRole("button", { name: /view for/i }));
     expect(await screen.findByText(COPY.transactionRejected)).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Retry payment" }));
+    await user.click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() =>
       expect(api).toHaveBeenCalledWith(
         `/api/posts/${post.id}/payments/prepare`,
         { method: "POST" },
       ),
     );
-    expect(signPreparedPayment).toHaveBeenCalledOnce();
+    expect(signPreparedPayment).toHaveBeenCalledTimes(2);
   });
 
   it("recovers a pending attempt after reload", async () => {
@@ -139,7 +137,36 @@ describe("supporter payment branches", () => {
     });
     renderPost();
     expect(await screen.findByText(COPY.purchasePending)).toBeVisible();
-    expect(screen.getByRole("button", { name: "Pending" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Payment confirming..." }),
+    ).toBeDisabled();
+  });
+
+  it("continues the requested view after sign-in", async () => {
+    vi.mocked(api)
+      .mockResolvedValueOnce(post)
+      .mockResolvedValueOnce(prepareResponse())
+      .mockResolvedValueOnce({ state: "CONFIRMED", message: COPY.unlocked });
+    const signIn = vi.fn(async () => address);
+    const user = userEvent.setup();
+    renderPost({ currentAddress: null, signIn });
+
+    await user.click(await screen.findByRole("button", { name: /view for/i }));
+
+    expect(signIn).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("img", { name: post.title })).toBeVisible();
+  });
+
+  it("does not prepare payment after cancelled sign-in", async () => {
+    const signIn = vi.fn(async () => null);
+    const user = userEvent.setup();
+    renderPost({ currentAddress: null, signIn });
+
+    await user.click(await screen.findByRole("button", { name: /view for/i }));
+
+    expect(signIn).toHaveBeenCalledOnce();
+    expect(api).toHaveBeenCalledTimes(1);
+    expect(signPreparedPayment).not.toHaveBeenCalled();
   });
 
   it("renders a media recovery message when the purchased media fails", async () => {

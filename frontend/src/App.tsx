@@ -6,6 +6,7 @@ import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
 import { Icon } from "./Icons.js";
+import { useAutoDismiss } from "./useAutoDismiss.js";
 
 export function App() {
   const [address, setAddress] = useState<string | null>(null);
@@ -14,6 +15,8 @@ export function App() {
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [profileName, setProfileName] = useState("");
   const [savingName, setSavingName] = useState(false);
+
+  useAutoDismiss(walletError, () => setWalletError(null));
 
   useEffect(() => {
     if (!address) {
@@ -61,16 +64,19 @@ export function App() {
     };
   }, []);
 
-  async function signIn() {
-    if (signingIn) return;
+  async function signIn(): Promise<string | null> {
+    if (signingIn) return null;
     setSigningIn(true);
     setWalletError(null);
     try {
-      setAddress(await authenticate());
+      const authenticatedAddress = await authenticate();
+      setAddress(authenticatedAddress);
+      return authenticatedAddress;
     } catch (error) {
       setWalletError(
         error instanceof WalletError ? error.message : COPY.verificationFailed,
       );
+      return null;
     } finally {
       setSigningIn(false);
     }
@@ -108,8 +114,13 @@ export function App() {
             ONLY<span>KAS</span>
           </Link>
           <div className="nav-group">
-            <Link to="/find" className="nav-action">
-              Find
+            <Link
+              to="/find"
+              className="nav-icon"
+              aria-label="Find a creator"
+              title="Find a creator"
+            >
+              <Icon name="search" />
             </Link>
             {address ? (
               <details className="account">
@@ -140,17 +151,19 @@ export function App() {
                     className="menu-button"
                     onClick={() => void signOut()}
                   >
-                    Sign out <Icon name="arrow-right" />
+                    Sign out
                   </button>
                 </div>
               </details>
             ) : (
               <button
-                className="connect-button"
+                className="nav-account-action"
                 disabled={signingIn}
                 onClick={() => void signIn()}
+                aria-label="Sign in with Kasware"
+                title="Sign in with Kasware"
               >
-                {signingIn ? "Signing in..." : "Sign in with Kasware"}
+                {signingIn ? "Signing in..." : "Sign in"}
               </button>
             )}
           </div>
@@ -167,6 +180,7 @@ export function App() {
               element={
                 <PublishPage
                   address={address}
+                  displayName={profile?.displayName ?? null}
                   signIn={signIn}
                   signingIn={signingIn}
                 />
@@ -177,6 +191,7 @@ export function App() {
               element={
                 <PublishPage
                   address={address}
+                  displayName={profile?.displayName ?? null}
                   signIn={signIn}
                   signingIn={signingIn}
                 />
@@ -198,7 +213,7 @@ export function App() {
           </Routes>
         </main>
         <footer>
-          <span>Testnet-10</span>
+          <span>Test environment</span>
           <span>Private by design</span>
         </footer>
       </div>

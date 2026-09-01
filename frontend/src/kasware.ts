@@ -138,9 +138,7 @@ export async function api<T = unknown>(
       message: body?.message,
     });
   if (!response.ok)
-    throw new Error(
-      body?.message ?? body?.error ?? "OnlyKas is temporarily unavailable.",
-    );
+    throw new Error(body?.message ?? "The request could not be completed.");
   console.info("[OnlyKas api] success", {
     method: init?.method ?? "GET",
     path,

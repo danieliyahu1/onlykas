@@ -30,6 +30,8 @@ export const COPY = {
   publishing: "Publishing...",
   published: "Published.",
   publishFailed: "Post was not published. Try again.",
+  mediaAlreadyPublished:
+    "This photo or video has already been published. Choose another.",
   mediaUnavailable:
     "This media is temporarily unavailable. Your purchase is unchanged.",
   unlockPrompt:

@@ -1,5 +1,5 @@
 import { COPY, NETWORK } from "@onlykas/shared";
-import { authenticate } from "./kasware.js";
+import { api, authenticate } from "./kasware.js";
 
 const address = `kaspatest:${"q".repeat(60)}`;
 
@@ -63,6 +63,24 @@ describe("Kasware authentication", () => {
     const fetchMock = vi.spyOn(window, "fetch");
     await expect(authenticate()).rejects.toThrow(COPY.walletCancelled);
     expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  it("uses the backend message instead of interpreting the error code", async () => {
+    const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "AUTH_REQUIRED",
+          message: "Please sign in first.",
+        }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(api("/api/profile")).rejects.toThrow("Please sign in first.");
     fetchMock.mockRestore();
   });
 });

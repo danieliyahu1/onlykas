@@ -174,7 +174,15 @@ export class LibsqlStore implements Store {
     });
     return result.rows.map(uploadFromRow);
   }
-  async publish(uploadId: string, post: Post): Promise<boolean> {
+  async publish(
+    uploadId: string,
+    post: Post,
+  ): Promise<"PUBLISHED" | "DUPLICATE_MEDIA" | "FAILED"> {
+    const duplicate = await this.client.execute({
+      sql: `SELECT 1 FROM posts WHERE media_digest=? LIMIT 1`,
+      args: [post.mediaDigest],
+    });
+    if (duplicate.rows[0]) return "DUPLICATE_MEDIA";
     try {
       await this.client.batch(
         [
@@ -202,9 +210,11 @@ export class LibsqlStore implements Store {
         ],
         "write",
       );
-      return (await this.getUpload(uploadId))?.state === "PUBLISHED";
+      return (await this.getUpload(uploadId))?.state === "PUBLISHED"
+        ? "PUBLISHED"
+        : "FAILED";
     } catch {
-      return false;
+      return "FAILED";
     }
   }
   async getPost(id: string): Promise<Post | null> {
