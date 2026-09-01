@@ -54,9 +54,7 @@ export function safeError(error: unknown): LogFields {
     extendedRequestId?: unknown;
   };
   const cause = error instanceof Error ? error.cause : undefined;
-  const causeDetails = (
-    cause && typeof cause === "object" ? cause : {}
-  ) as {
+  const causeDetails = (cause && typeof cause === "object" ? cause : {}) as {
     name?: unknown;
     message?: unknown;
     Code?: unknown;
