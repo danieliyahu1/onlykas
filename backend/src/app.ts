@@ -391,12 +391,10 @@ export function createApp(dependencies: AppDependencies) {
         .parse(request.body);
       const normalizedName = normalizeDisplayName(body.displayName);
       if (Array.from(normalizedName).length > 40)
-        return response
-          .status(400)
-          .json({
-            error: "INVALID_DISPLAY_NAME",
-            message: "Names can be up to 40 characters.",
-          });
+        return response.status(400).json({
+          error: "INVALID_DISPLAY_NAME",
+          message: "Names can be up to 40 characters.",
+        });
       const displayName = validateDisplayName(normalizedName);
       const profile: Profile = {
         address: request.walletSession!.address,
