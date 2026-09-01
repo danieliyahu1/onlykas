@@ -371,6 +371,7 @@ export function createApp(dependencies: AppDependencies) {
 
   app.get(
     "/api/profile",
+    optionalSession,
     requireSession,
     asyncHandler(async (request, response) => {
       response.json(
@@ -384,6 +385,7 @@ export function createApp(dependencies: AppDependencies) {
 
   app.put(
     "/api/profile",
+    optionalSession,
     requireSession,
     asyncHandler(async (request, response) => {
       const body = z
