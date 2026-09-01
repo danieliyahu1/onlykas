@@ -123,7 +123,7 @@ export class LibsqlStore implements Store {
   }
   async searchCreators(name: string, limit: number): Promise<Profile[]> {
     const result = await this.client.execute({
-      sql: `SELECT p.* FROM profiles p WHERE p.display_name IS NOT NULL AND lower(p.display_name) LIKE lower(?) ORDER BY p.display_name, p.address LIMIT ?`,
+      sql: `SELECT p.* FROM profiles p WHERE p.display_name IS NOT NULL AND lower(p.display_name) LIKE lower(?) AND EXISTS (SELECT 1 FROM posts WHERE creator=p.address) ORDER BY p.display_name, p.address LIMIT ?`,
       args: [`%${name}%`, limit],
     });
     return result.rows.map(profileFromRow);

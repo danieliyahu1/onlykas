@@ -62,6 +62,11 @@ export class MemoryStore implements Store {
       .filter((profile) =>
         profile.displayName?.toLocaleLowerCase().includes(wanted),
       )
+      .filter((profile) =>
+        [...this.posts.values()].some(
+          (post) => post.creator === profile.address,
+        ),
+      )
       .slice(0, limit)
       .map((profile) => structuredClone(profile));
   }
