@@ -8,7 +8,9 @@ test("creator entry point becomes ready after choosing media", async ({
     page.getByRole("heading", { name: /share something special/i }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /^publish/i })).toBeDisabled();
-  await expect(page.locator("img, video")).toHaveCount(0);
+  await expect(
+    page.locator(".media-stage img, .media-stage video"),
+  ).toHaveCount(0);
 
   await page.getByLabel(/choose image or video/i).setInputFiles({
     name: "moment.png",
