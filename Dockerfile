@@ -13,7 +13,9 @@ RUN pnpm build && pnpm deploy --legacy --filter @onlykas/backend --prod /prod/ba
 
 FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
+ENV FFPROBE_PATH=/usr/bin/ffprobe
 WORKDIR /app/backend
+RUN apk add --no-cache ffmpeg
 COPY --from=build /prod/backend ./
 COPY --from=build /app/backend/dist ./dist
 COPY --from=build /app/frontend/dist /app/frontend/dist

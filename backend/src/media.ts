@@ -1,5 +1,6 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
 import { Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -7,7 +8,6 @@ import { promisify } from "node:util";
 import { blake3 } from "@noble/hashes/blake3.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { fileTypeFromFile } from "file-type";
-import * as ffprobeStatic from "ffprobe-static";
 import sharp from "sharp";
 import {
   MAX_IMAGE_BYTES,
@@ -18,6 +18,7 @@ import {
 } from "@onlykas/shared";
 
 const execFileAsync = promisify(execFile);
+const ffprobePath = process.env.FFPROBE_PATH ?? bundledFfprobePath();
 const imageTypes = new Set<MediaType>([
   "image/jpeg",
   "image/png",
@@ -73,7 +74,7 @@ async function decodeCompleteImage(path: string): Promise<void> {
 async function probeCompleteVideo(path: string): Promise<void> {
   try {
     const { stdout } = await execFileAsync(
-      ffprobeStatic.path,
+      ffprobePath,
       [
         "-v",
         "error",
@@ -95,9 +96,25 @@ async function probeCompleteVideo(path: string): Promise<void> {
       !result.format?.format_name
     )
       throw new Error("Invalid video probe");
-  } catch {
+  } catch (error) {
+    if (isExecutableFailure(error)) throw error;
     throw new MediaValidationError("MALFORMED_MEDIA");
   }
+}
+
+function bundledFfprobePath(): string {
+  try {
+    return (
+      createRequire(import.meta.url)("ffprobe-static") as { path: string }
+    ).path;
+  } catch {
+    return "ffprobe";
+  }
+}
+
+function isExecutableFailure(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "EACCES" || code === "ENOEXEC";
 }
 
 async function hashFile(path: string): Promise<string> {
