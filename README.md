@@ -2,6 +2,8 @@
 
 OnlyKas is a testnet-10 paid-media application. Creators authenticate with Kasware, upload private media directly to R2, and publish immutable Turso-backed posts.
 
+Live app: https://onlykas.danieliyahu.com/
+
 ## Development
 
 Requirements: Node 24 and pnpm 11.17.
