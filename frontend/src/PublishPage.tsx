@@ -122,7 +122,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     setError(null);
     if (!address) {
       setPendingPublish(true);
-      setStatus("Connect your wallet to continue. No payment is made.");
+      setStatus("Sign in with Kasware to continue. No payment is made.");
       void signIn();
     } else if (uploadId) {
       setConfirming(true);
@@ -254,7 +254,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
         </button>
         {!address && (
           <p className="wallet-note">
-            Your wallet is only needed when you press Continue. Connecting is
+            Your wallet is only needed when you press Continue. Signing in is
             free, and no payment happens without your approval.
           </p>
         )}

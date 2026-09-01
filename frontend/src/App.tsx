@@ -113,9 +113,9 @@ export function App() {
             {address ? (
               <details className="account">
                 <summary
-                  aria-label={`Your account ${profile?.displayName ?? shorten(address)}`}
+                  aria-label={`Your account ${profile?.displayName ?? "Add your name"}`}
                 >
-                  {profile?.displayName ?? shorten(address)}
+                  {profile?.displayName ?? "Add your name"}
                 </summary>
                 <div className="account-menu">
                   <label htmlFor="display-name">Your name</label>
@@ -148,7 +148,7 @@ export function App() {
                 disabled={signingIn}
                 onClick={() => void signIn()}
               >
-                {signingIn ? "Signing in..." : "Sign in"}
+                {signingIn ? "Signing in..." : "Sign in with Kasware"}
               </button>
             )}
           </div>
