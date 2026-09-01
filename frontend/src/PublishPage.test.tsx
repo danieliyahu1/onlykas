@@ -3,10 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { COPY } from "@onlykas/shared";
 import { PublishPage } from "./PublishPage.js";
-import { api } from "./kasware.js";
+import { ApiError, api } from "./kasware.js";
 import { uploadMedia, waitForVerification } from "./upload.js";
 
-vi.mock("./kasware.js", () => ({ api: vi.fn() }));
+vi.mock("./kasware.js", async () => ({
+  ...(await vi.importActual("./kasware.js")),
+  api: vi.fn(),
+}));
 vi.mock("./upload.js", () => ({
   uploadMedia: vi.fn(),
   waitForVerification: vi.fn(),
@@ -127,7 +130,13 @@ describe("creator publish experience", () => {
   it("explains when the same media was already published", async () => {
     prepareSuccessfulPublish();
     vi.mocked(api)
-      .mockRejectedValueOnce(new Error(COPY.mediaAlreadyPublished))
+      .mockRejectedValueOnce(
+        new ApiError(
+          "MEDIA_ALREADY_PUBLISHED",
+          COPY.mediaAlreadyPublished,
+          409,
+        ),
+      )
       .mockResolvedValueOnce({ id: "new-post-id" });
     const user = userEvent.setup();
     renderPage();
@@ -138,15 +147,8 @@ describe("creator publish experience", () => {
     );
     await user.click(screen.getByRole("button", { name: /^publish/i }));
 
-    expect(
-      await screen.findByText("You've already published this photo."),
-    ).toBeVisible();
-    expect(
-      screen.queryByText(COPY.mediaAlreadyPublished),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /^publish/i }),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByText(COPY.mediaAlreadyPublished)).toBeVisible();
+    expect(screen.getByRole("button", { name: /^publish/i })).toBeVisible();
 
     await user.click(
       screen.getByRole("button", { name: "Choose another photo" }),

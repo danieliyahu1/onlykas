@@ -408,62 +408,13 @@ textarea {
   justify-content: flex-end;
   min-height: 2.5rem;
 }
-.publish-notice {
-  position: fixed;
-  right: auto;
-  bottom: 1.5rem;
-  left: 1.5rem;
-  z-index: 20;
-  width: min(calc(100% - 2rem), 42rem);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  padding: 1.25rem;
-  border: 1px solid #613c36;
-  border-left: 3px solid #ff8a70;
-  background: #211614;
-}
-.publish-notice > div {
-  display: grid;
-  gap: 0.35rem;
-}
-.publish-notice strong {
-  font-size: 1.05rem;
-}
-.publish-notice p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-.notice-action {
-  display: grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  flex: 0 0 auto;
-  min-height: 44px;
-  padding: 0;
-  color: var(--ink);
-  background: var(--acid);
-  border: 1px solid var(--acid);
-  font-weight: 800;
-  white-space: nowrap;
-}
 .change-media .icon,
-.notice-action .icon {
+.change-media .icon {
   width: 1.15rem;
   height: 1.15rem;
 }
 .change-media .icon-image-plus {
   filter: brightness(0);
-}
-.notice-action:hover,
-.notice-action:focus-visible {
-  color: var(--ink);
-  border-color: #ff8a70;
-  background: #ff8a70;
 }
 .publish-summary {
   display: flex;
@@ -705,8 +656,7 @@ footer {
 }
 @media (max-width: 720px) {
   .feedback,
-  .global-error,
-  .publish-notice {
+  .global-error {
     right: 1rem;
     bottom: 1rem;
     left: 1rem;
@@ -726,14 +676,6 @@ footer {
   }
   .dialog-actions {
     flex-direction: column;
-  }
-  .publish-notice {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .notice-action {
-    width: 100%;
   }
   h1 {
     font-size: clamp(3rem, 17vw, 5.5rem);

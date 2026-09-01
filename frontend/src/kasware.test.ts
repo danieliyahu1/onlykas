@@ -80,7 +80,12 @@ describe("Kasware authentication", () => {
       ),
     );
 
-    await expect(api("/api/profile")).rejects.toThrow("Please sign in first.");
+    const request = api("/api/profile");
+    await expect(request).rejects.toMatchObject({
+      code: "AUTH_REQUIRED",
+      message: "Please sign in first.",
+      status: 401,
+    });
     fetchMock.mockRestore();
   });
 });

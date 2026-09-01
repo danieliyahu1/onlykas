@@ -12,7 +12,7 @@ import {
   validatePost,
   type UploadError,
 } from "@onlykas/shared";
-import { api } from "./kasware.js";
+import { api, ApiError } from "./kasware.js";
 import { uploadMedia, waitForVerification } from "./upload.js";
 import { KaspaMark } from "./KaspaMark.js";
 import { Icon } from "./Icons.js";
@@ -48,7 +48,10 @@ export function PublishPage({
   const [publishing, setPublishing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{
+    code: string | null;
+    message: string;
+  } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [detailsEdited, setDetailsEdited] = useState(false);
@@ -58,7 +61,7 @@ export function PublishPage({
     priceKas: "1",
   });
 
-  useAutoDismiss(error, () => setError(null));
+  useAutoDismiss(failure?.message ?? null, () => setFailure(null));
 
   useEffect(
     () => () => {
@@ -72,11 +75,11 @@ export function PublishPage({
     if (!file) return;
     const hint = mediaHintError(file.type, file.size);
     if (hint) {
-      setError(hint);
+      setFailure({ code: null, message: hint });
       event.target.value = "";
       return;
     }
-    setError(null);
+    setFailure(null);
     setStatus(null);
     setUploadId(null);
     setSelectedFile(file);
@@ -110,7 +113,10 @@ export function PublishPage({
       setUploadId(id);
       return id;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : COPY.uploadFailed);
+      setFailure({
+        code: null,
+        message: caught instanceof Error ? caught.message : COPY.uploadFailed,
+      });
       setStatus(null);
       return null;
     } finally {
@@ -132,10 +138,12 @@ export function PublishPage({
       });
       navigate(`/post/${post.id}`);
     } catch (caught) {
-      const message =
-        caught instanceof Error ? caught.message : COPY.publishFailed;
-      if (message === COPY.mediaAlreadyPublished) setUploadId(null);
-      setError(message);
+      const apiFailure = caught instanceof ApiError ? caught : null;
+      if (apiFailure?.code === "MEDIA_ALREADY_PUBLISHED") setUploadId(null);
+      setFailure({
+        code: apiFailure?.code ?? null,
+        message: caught instanceof Error ? caught.message : COPY.publishFailed,
+      });
       setStatus(null);
     } finally {
       setPublishing(false);
@@ -148,11 +156,11 @@ export function PublishPage({
     const errors = validatePost(form.title, form.description, form.priceKas);
     if (errors.length) {
       setDetailsOpen(true);
-      setError(errors.join(" "));
+      setFailure({ code: null, message: errors.join(" ") });
       return;
     }
     setSubmitting(true);
-    setError(null);
+    setFailure(null);
     try {
       if (!address) {
         setStatus("Sign in with Kasware to publish.");
@@ -169,7 +177,6 @@ export function PublishPage({
   }
 
   const busy = submitting || uploading || publishing || signingIn;
-  const duplicateMedia = error === COPY.mediaAlreadyPublished;
   const actionLabel = signingIn
     ? "Signing in..."
     : uploading
@@ -225,7 +232,7 @@ export function PublishPage({
           )}
         </div>
 
-        {selectedFile && !busy && !duplicateMedia && (
+        {selectedFile && !busy && (
           <div className="media-actions">
             <button
               className="change-media"
@@ -239,27 +246,7 @@ export function PublishPage({
           </div>
         )}
 
-        {duplicateMedia && (
-          <div className="publish-notice" role="alert">
-            <div>
-              <strong>
-                You&apos;ve already published this{" "}
-                {selectedFile?.type.startsWith("video/") ? "video" : "photo"}.
-              </strong>
-            </div>
-            <button
-              className="notice-action"
-              type="button"
-              aria-label={`Choose another ${selectedFile?.type.startsWith("video/") ? "video" : "photo"}`}
-              title="Choose another"
-              onClick={chooseAnother}
-            >
-              <Icon name="image-plus" />
-            </button>
-          </div>
-        )}
-
-        {selectedFile && !duplicateMedia && (
+        {selectedFile && (
           <div className="publish-summary">
             <div>
               <strong>{form.title}</strong>
@@ -279,7 +266,7 @@ export function PublishPage({
           </div>
         )}
 
-        {selectedFile && detailsOpen && !duplicateMedia && (
+        {selectedFile && detailsOpen && (
           <div className="optional-details">
             <label>
               Title
@@ -321,26 +308,20 @@ export function PublishPage({
           </div>
         )}
 
-        {!duplicateMedia && (
-          <>
-            <div
-              aria-live="polite"
-              className={error ? "feedback error" : "feedback"}
-            >
-              {error ?? status}
-            </div>
-            <button
-              className="primary publish-action"
-              disabled={!selectedFile || busy}
-            >
-              {actionLabel} <Icon name="arrow-right" />
-            </button>
-            {selectedFile && (
-              <p className="permanence-note">
-                Published posts cannot be changed.
-              </p>
-            )}
-          </>
+        <div
+          aria-live="polite"
+          className={failure ? "feedback error" : "feedback"}
+        >
+          {failure?.message ?? status}
+        </div>
+        <button
+          className="primary publish-action"
+          disabled={!selectedFile || busy}
+        >
+          {actionLabel} <Icon name="arrow-right" />
+        </button>
+        {selectedFile && (
+          <p className="permanence-note">Published posts cannot be changed.</p>
         )}
       </form>
     </section>

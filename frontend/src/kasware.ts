@@ -43,6 +43,17 @@ declare global {
 
 export class WalletError extends Error {}
 
+export class ApiError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export function kasware(): Kasware {
   if (!window.kasware) throw new WalletError(COPY.kaswareMissing);
   return window.kasware;
@@ -138,7 +149,11 @@ export async function api<T = unknown>(
       message: body?.message,
     });
   if (!response.ok)
-    throw new Error(body?.message ?? "The request could not be completed.");
+    throw new ApiError(
+      body?.error ?? "REQUEST_FAILED",
+      body?.message ?? "The request could not be completed.",
+      response.status,
+    );
   console.info("[OnlyKas api] success", {
     method: init?.method ?? "GET",
     path,
