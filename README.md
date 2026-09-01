@@ -35,6 +35,8 @@ pnpm build
 
 The production image builds all workspaces and runs one Express process. Express serves the Vite bundle and all API and protected-media routes from one origin.
 
+Development and production must use separate stateful resources. Local development uses the `onlykas` Turso database and the `onlykas-development` R2 bucket. Production uses the `onlykas-production` Turso database and the `onlykas-production` R2 bucket. Do not share database credentials or bucket-scoped R2 credentials between environments.
+
 ```bash
 docker build -t onlykas .
 docker run --env-file .env -p 3000:3000 onlykas
@@ -54,6 +56,6 @@ kubectl -n onlykas create secret docker-registry ghcr-pull \
   --docker-password='<github-token-with-read-packages>'
 ```
 
-Populate the vault keys referenced by `deploy/externalsecret.yaml`: `onlykas-DATABASE_URL`, `onlykas-DATABASE_AUTH_TOKEN`, `onlykas-R2_ENDPOINT`, `onlykas-R2_ACCESS_KEY_ID`, and `onlykas-R2_SECRET_ACCESS_KEY`. The External Secrets Operator creates `onlykas-secrets` from those values.
+Populate the vault keys referenced by `deploy/externalsecret.yaml`: `onlykas-DATABASE_URL`, `onlykas-DATABASE_AUTH_TOKEN`, `onlykas-R2_ENDPOINT`, `onlykas-R2_ACCESS_KEY_ID`, and `onlykas-R2_SECRET_ACCESS_KEY`. These values must reference only the production Turso database and production R2 bucket. The External Secrets Operator creates `onlykas-secrets` from those values.
 
 The GitHub Actions workflow verifies the repository, publishes a `linux/arm64` image tagged with the commit SHA to GHCR, and updates `deploy/deployment.yaml` automatically. Argo CD then detects the manifest commit and syncs the new image.
