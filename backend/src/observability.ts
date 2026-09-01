@@ -44,10 +44,59 @@ export const logEvent: EventLogger = (event, fields = {}) => {
 };
 
 export function safeError(error: unknown): LogFields {
+  const details = error as {
+    operation?: unknown;
+    key?: unknown;
+    category?: unknown;
+    statusCode?: unknown;
+    serviceCode?: unknown;
+    requestId?: unknown;
+    extendedRequestId?: unknown;
+  };
+  const cause = error instanceof Error ? error.cause : undefined;
+  const causeDetails = (
+    cause && typeof cause === "object" ? cause : {}
+  ) as {
+    name?: unknown;
+    message?: unknown;
+    Code?: unknown;
+    $metadata?: { httpStatusCode?: unknown };
+  };
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorMessage: redact(
       error instanceof Error ? error.message : String(error),
     ),
+    ...(typeof details.operation === "string"
+      ? { storageOperation: details.operation }
+      : {}),
+    ...(typeof details.key === "string" ? { storageKey: details.key } : {}),
+    ...(typeof details.category === "string"
+      ? { storageCategory: details.category }
+      : {}),
+    ...(typeof details.statusCode === "number"
+      ? { storageStatusCode: details.statusCode }
+      : {}),
+    ...(typeof details.serviceCode === "string"
+      ? { storageServiceCode: details.serviceCode }
+      : {}),
+    ...(typeof details.requestId === "string"
+      ? { storageRequestId: details.requestId }
+      : {}),
+    ...(typeof details.extendedRequestId === "string"
+      ? { storageExtendedRequestId: details.extendedRequestId }
+      : {}),
+    ...(typeof causeDetails.name === "string"
+      ? { storageCauseName: causeDetails.name }
+      : {}),
+    ...(typeof causeDetails.message === "string"
+      ? { storageCauseMessage: redact(causeDetails.message) }
+      : {}),
+    ...(typeof causeDetails.Code === "string"
+      ? { storageCauseCode: causeDetails.Code }
+      : {}),
+    ...(typeof causeDetails.$metadata?.httpStatusCode === "number"
+      ? { storageCauseStatusCode: causeDetails.$metadata.httpStatusCode }
+      : {}),
   };
 }

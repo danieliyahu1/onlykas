@@ -5,12 +5,36 @@ import {
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  type GetObjectCommandOutput,
   HeadObjectCommand,
+  type HeadObjectCommandOutput,
   S3Client,
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ObjectStorage } from "./domain.js";
+
+export type StorageFailureCategory =
+  | "OBJECT_NOT_FOUND"
+  | "STORAGE_FORBIDDEN"
+  | "STORAGE_TIMEOUT"
+  | "STORAGE_FAILURE";
+
+export class StorageError extends Error {
+  constructor(
+    readonly operation: string,
+    readonly key: string,
+    readonly category: StorageFailureCategory,
+    readonly statusCode: number | undefined,
+    readonly serviceCode: string | undefined,
+    readonly requestId: string | undefined,
+    readonly extendedRequestId: string | undefined,
+    cause: unknown,
+  ) {
+    super(`${operation} failed for ${key}`, { cause });
+    this.name = "StorageError";
+  }
+}
 
 export class R2Storage implements ObjectStorage {
   private readonly client: S3Client;
@@ -94,18 +118,28 @@ export class R2Storage implements ObjectStorage {
     start?: number,
     end?: number,
   ): Promise<{ bytes: Uint8Array; size: number; contentType: string }> {
-    const head = await this.client.send(
-      new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
-    const result = await this.client.send(
-      new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        ...(start === undefined
-          ? {}
-          : { Range: `bytes=${start}-${end ?? ""}` }),
-      }),
-    );
+    let head: HeadObjectCommandOutput;
+    try {
+      head = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+    } catch (error) {
+      throw toStorageError("head_object", key, error);
+    }
+    let result: GetObjectCommandOutput;
+    try {
+      result = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          ...(start === undefined
+            ? {}
+            : { Range: `bytes=${start}-${end ?? ""}` }),
+        }),
+      );
+    } catch (error) {
+      throw toStorageError("get_object", key, error);
+    }
     if (!result.Body || head.ContentLength === undefined)
       throw new Error("R2 object unavailable");
     return {
@@ -139,6 +173,45 @@ export class R2Storage implements ObjectStorage {
       }),
     );
   }
+}
+
+function toStorageError(
+  operation: string,
+  key: string,
+  error: unknown,
+): StorageError {
+  const details = error as {
+    name?: unknown;
+    Code?: unknown;
+    $metadata?: {
+      httpStatusCode?: number;
+      requestId?: string;
+      extendedRequestId?: string;
+    };
+  };
+  const statusCode = details.$metadata?.httpStatusCode;
+  const serviceCode =
+    typeof details.Code === "string"
+      ? details.Code
+      : typeof details.name === "string"
+        ? details.name
+        : undefined;
+  return new StorageError(
+    operation,
+    key,
+    statusCode === 404
+      ? "OBJECT_NOT_FOUND"
+      : statusCode === 401 || statusCode === 403
+        ? "STORAGE_FORBIDDEN"
+        : details.name === "TimeoutError" || details.name === "AbortError"
+          ? "STORAGE_TIMEOUT"
+          : "STORAGE_FAILURE",
+    statusCode,
+    serviceCode,
+    details.$metadata?.requestId,
+    details.$metadata?.extendedRequestId,
+    error,
+  );
 }
 import { createWriteStream } from "node:fs";
 import { Readable } from "node:stream";

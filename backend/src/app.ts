@@ -754,11 +754,22 @@ export function createApp(dependencies: AppDependencies) {
         response.setHeader("Content-Range", `bytes */${post.mediaSize}`);
         return response.status(416).end();
       }
-      const object = await dependencies.storage.readRange(
-        post.mediaKey,
-        parsedRange?.start,
-        parsedRange?.end,
-      );
+      let object;
+      try {
+        object = await dependencies.storage.readRange(
+          post.mediaKey,
+          parsedRange?.start,
+          parsedRange?.end,
+        );
+      } catch (error) {
+        logger("media_read_failed", {
+          requestId: request.requestId,
+          postId: post.id,
+          viewer: request.walletSession!.address,
+          ...safeError(error),
+        });
+        throw error;
+      }
       response.setHeader("Accept-Ranges", "bytes");
       response.setHeader("Content-Type", post.mediaType);
       response.setHeader("Content-Length", object.bytes.byteLength);
