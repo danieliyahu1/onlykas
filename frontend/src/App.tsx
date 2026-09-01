@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import {
+  BrowserRouter,
+  Link,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { COPY, type ProfileResponse } from "@onlykas/shared";
 import { authenticate, kasware, WalletError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
@@ -114,20 +121,13 @@ export function App() {
             ONLY<span>KAS</span>
           </Link>
           <div className="nav-group">
-            <Link
-              to="/find"
-              className="nav-icon"
-              aria-label="Find a creator"
-              title="Find a creator"
-            >
-              <Icon name="search" />
-            </Link>
+            <GlobalSearch />
             {address ? (
               <details className="account">
                 <summary
                   aria-label={`Your account ${profile?.displayName ?? "Add your name"}`}
                 >
-                  <Icon name="user" /> {profile?.displayName ?? "Add your name"}
+                  <Icon name="user" /> Hi, {profile?.displayName ?? "there"}!
                 </summary>
                 <div className="account-menu">
                   <label htmlFor="display-name">Your name</label>
@@ -180,7 +180,6 @@ export function App() {
               element={
                 <PublishPage
                   address={address}
-                  displayName={profile?.displayName ?? null}
                   signIn={signIn}
                   signingIn={signingIn}
                 />
@@ -191,7 +190,6 @@ export function App() {
               element={
                 <PublishPage
                   address={address}
-                  displayName={profile?.displayName ?? null}
                   signIn={signIn}
                   signingIn={signingIn}
                 />
@@ -218,6 +216,42 @@ export function App() {
         </footer>
       </div>
     </BrowserRouter>
+  );
+}
+
+function GlobalSearch() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    setQuery(new URLSearchParams(location.search).get("q") ?? "");
+  }, [location.search]);
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = query.trim();
+    if (value) navigate(`/find?q=${encodeURIComponent(value)}`);
+  }
+
+  return (
+    <form className="global-search" onSubmit={submitSearch} role="search">
+      <label htmlFor="global-search-input" className="sr-only">
+        Search by name or Kaspa address
+      </label>
+      <input
+        id="global-search-input"
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Name or Kaspa address"
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <button type="submit" aria-label="Search">
+        <Icon name="search" />
+      </button>
+    </form>
   );
 }
 

@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   isKaspaTestnetAddress,
   type CreatorSearchResult,
@@ -10,19 +10,21 @@ import { useAutoDismiss } from "./useAutoDismiss.js";
 
 export function FindCreatorPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CreatorSearchResult[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
 
   useAutoDismiss(error, () => setError(null));
 
-  function findCreator(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = query.trim();
+  useEffect(() => {
+    const value = searchParams.get("q")?.trim() ?? "";
+    setQuery(value);
     if (!value) return;
     if (isKaspaTestnetAddress(value)) {
-      navigate(`/creator/${encodeURIComponent(value)}`);
+      navigate(`/creator/${encodeURIComponent(value)}`, { replace: true });
       return;
     }
     if (value.startsWith("kaspatest:")) {
@@ -31,27 +33,36 @@ export function FindCreatorPage() {
     }
     setError(null);
     setResults([]);
+    setSearched(false);
     setSearching(true);
     void api<CreatorSearchResult[]>(
       `/api/creators/search?q=${encodeURIComponent(value)}`,
     )
-      .then(setResults)
-      .catch(() => setError("Creators could not be found. Try again."))
+      .then((found) => {
+        setResults(found);
+        setSearched(true);
+      })
+      .catch(() => setError("Profiles could not be found. Try again."))
       .finally(() => setSearching(false));
+  }, [navigate, searchParams]);
+
+  function search(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = query.trim();
+    if (!value) return;
+    setSearchParams({ q: value });
   }
 
   return (
     <section className="find-page">
       <header>
-        <p className="eyebrow">FIND A CREATOR</p>
-        <h1>Open any creator.</h1>
-        <p className="find-intro">
-          Search by name or paste their Kaspa address.
-        </p>
+        <p className="eyebrow">SEARCH</p>
+        <h1>Find someone.</h1>
+        <p className="find-intro">Search by name or paste a Kaspa address.</p>
       </header>
-      <form onSubmit={findCreator} noValidate>
+      <form onSubmit={search} noValidate>
         <label htmlFor="creator-query">
-          Creator name or address
+          Name or Kaspa address
           <input
             id="creator-query"
             name="creator-query"
@@ -61,11 +72,12 @@ export function FindCreatorPage() {
               setQuery(event.target.value);
               setResults([]);
               setError(null);
+              setSearched(false);
             }}
             placeholder="Maya or kaspatest:..."
             autoComplete="off"
             spellCheck={false}
-            aria-label="Creator address"
+            aria-label="Name or Kaspa address"
           />
         </label>
         {error && (
@@ -74,11 +86,11 @@ export function FindCreatorPage() {
           </p>
         )}
         <button className="primary" type="submit" disabled={searching}>
-          {searching ? "Searching..." : "Open profile"} <Icon name="search" />
+          {searching ? "Searching..." : "Search"} <Icon name="search" />
         </button>
       </form>
-      {!searching && query.trim() && results.length === 0 && !error && (
-        <p className="feedback">No creators found.</p>
+      {searched && !searching && results.length === 0 && !error && (
+        <p className="feedback">No profiles found.</p>
       )}
       <div className="creator-results">
         {results.map((result) => (
