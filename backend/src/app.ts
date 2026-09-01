@@ -16,10 +16,12 @@ import {
   mediaHintError,
   NETWORK,
   normalizePostText,
+  normalizeDisplayName,
   parseKasToSompi,
   SESSION_IDLE_TTL_MS,
   UPLOAD_TTL_MS,
   validatePost,
+  validateDisplayName,
   type PostResponse,
   type UploadResponse,
 } from "@onlykas/shared";
@@ -31,6 +33,7 @@ import type {
   WalletVerifier,
   PaymentGateway,
   PaymentAttempt,
+  Profile,
 } from "./domain.js";
 import {
   logEvent,
@@ -209,6 +212,9 @@ export function createApp(dependencies: AppDependencies) {
         return response.status(401).json({ error: "AUTH_REQUIRED" });
       response.json({
         address: request.walletSession.address,
+        displayName:
+          (await dependencies.store.getProfile(request.walletSession.address))
+            ?.displayName ?? null,
         expiresAt: new Date(request.walletSession.expiresAt).toISOString(),
       });
     }),
@@ -364,6 +370,60 @@ export function createApp(dependencies: AppDependencies) {
   );
 
   app.get(
+    "/api/profile",
+    requireSession,
+    asyncHandler(async (request, response) => {
+      response.json(
+        profileResponse(
+          await dependencies.store.getProfile(request.walletSession!.address),
+          request.walletSession!.address,
+        ),
+      );
+    }),
+  );
+
+  app.put(
+    "/api/profile",
+    requireSession,
+    asyncHandler(async (request, response) => {
+      const body = z
+        .object({ displayName: z.string().max(80) })
+        .parse(request.body);
+      const normalizedName = normalizeDisplayName(body.displayName);
+      if (Array.from(normalizedName).length > 40)
+        return response
+          .status(400)
+          .json({
+            error: "INVALID_DISPLAY_NAME",
+            message: "Names can be up to 40 characters.",
+          });
+      const displayName = validateDisplayName(normalizedName);
+      const profile: Profile = {
+        address: request.walletSession!.address,
+        displayName,
+        updatedAt: now(),
+      };
+      await dependencies.store.saveProfile(profile);
+      response.json(profileResponse(profile, profile.address));
+    }),
+  );
+
+  app.get(
+    "/api/creators/search",
+    asyncHandler(async (request, response) => {
+      const query = z.string().trim().min(1).max(40).parse(request.query.q);
+      const profiles = await dependencies.store.searchCreators(query, 20);
+      response.json(
+        profiles.map((profile) => ({
+          address: profile.address,
+          displayAddress: shortenAddress(profile.address),
+          displayName: profile.displayName,
+        })),
+      );
+    }),
+  );
+
+  app.get(
     "/api/uploads/:id",
     optionalSession,
     requireSession,
@@ -456,6 +516,8 @@ export function createApp(dependencies: AppDependencies) {
       response.json({
         address,
         displayAddress: shortenAddress(address),
+        displayName:
+          (await dependencies.store.getProfile(address))?.displayName ?? null,
         posts: visible,
       });
     }),
@@ -870,6 +932,13 @@ function postResponse(post: Post, canView: boolean): PostResponse {
     mediaType: post.mediaType,
     publishedAt: new Date(post.publishedAt).toISOString(),
     canView,
+  };
+}
+function profileResponse(profile: Profile | null, address: string) {
+  return {
+    address,
+    displayAddress: shortenAddress(address),
+    displayName: profile?.displayName ?? null,
   };
 }
 function paymentResponse(attempt: PaymentAttempt) {

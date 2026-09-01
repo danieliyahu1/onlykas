@@ -103,7 +103,20 @@ export interface PostResponse {
 export interface CreatorResponse {
   address: string;
   displayAddress: string;
+  displayName: string | null;
   posts: PostResponse[];
+}
+
+export interface CreatorSearchResult {
+  address: string;
+  displayAddress: string;
+  displayName: string | null;
+}
+
+export interface ProfileResponse {
+  address: string;
+  displayAddress: string;
+  displayName: string | null;
 }
 
 export function createChallengeMessage(
@@ -116,6 +129,16 @@ export function createChallengeMessage(
 
 export function normalizePostText(value: string): string {
   return value.trim();
+}
+
+export function normalizeDisplayName(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+export function validateDisplayName(value: string): string | null {
+  const name = normalizeDisplayName(value);
+  if (Array.from(name).length > 40) return "Names can be up to 40 characters.";
+  return name.length === 0 ? null : name;
 }
 
 export function isKaspaTestnetAddress(value: string): boolean {

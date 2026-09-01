@@ -9,6 +9,7 @@ import type {
   Session,
   Store,
   Upload,
+  Profile,
 } from "./domain.js";
 
 export class LibsqlStore implements Store {
@@ -23,6 +24,7 @@ export class LibsqlStore implements Store {
       [
         `CREATE TABLE IF NOT EXISTS auth_challenges (id TEXT PRIMARY KEY, nonce TEXT NOT NULL UNIQUE, address TEXT NOT NULL, origin TEXT NOT NULL, network TEXT NOT NULL, message TEXT NOT NULL, expires_at INTEGER NOT NULL, consumed_at INTEGER)`,
         `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, address TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
+        `CREATE TABLE IF NOT EXISTS profiles (address TEXT PRIMARY KEY, display_name TEXT, updated_at INTEGER NOT NULL)`,
         `CREATE TABLE IF NOT EXISTS uploads (id TEXT PRIMARY KEY, creator TEXT NOT NULL, staging_key TEXT NOT NULL UNIQUE, multipart_id TEXT NOT NULL, state TEXT NOT NULL, hinted_type TEXT NOT NULL, hinted_size INTEGER NOT NULL, expires_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, error TEXT, digest TEXT, media_type TEXT, media_size INTEGER, final_key TEXT, parts_json TEXT NOT NULL)`,
         `CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, creator TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL, price_sompi TEXT NOT NULL, media_type TEXT NOT NULL, media_size INTEGER NOT NULL, media_digest TEXT NOT NULL UNIQUE, media_key TEXT NOT NULL, published_at INTEGER NOT NULL)`,
         `CREATE TABLE IF NOT EXISTS payment_attempts (id TEXT PRIMARY KEY, post_id TEXT NOT NULL, buyer TEXT NOT NULL, amount_sompi TEXT NOT NULL, creator TEXT NOT NULL, prepared_transaction TEXT NOT NULL, fingerprint TEXT NOT NULL, signed_transaction_id TEXT, state TEXT NOT NULL, rejection TEXT, submitted_at INTEGER, last_checked_at INTEGER, reconciliation_attempts INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
@@ -105,6 +107,26 @@ export class LibsqlStore implements Store {
       sql: `DELETE FROM sessions WHERE id = ?`,
       args: [id],
     });
+  }
+  async getProfile(address: string): Promise<Profile | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM profiles WHERE address=?`,
+      args: [address],
+    });
+    return result.rows[0] ? profileFromRow(result.rows[0]) : null;
+  }
+  async saveProfile(profile: Profile): Promise<void> {
+    await this.client.execute({
+      sql: `INSERT INTO profiles (address, display_name, updated_at) VALUES (?, ?, ?) ON CONFLICT(address) DO UPDATE SET display_name=excluded.display_name, updated_at=excluded.updated_at`,
+      args: [profile.address, profile.displayName, profile.updatedAt],
+    });
+  }
+  async searchCreators(name: string, limit: number): Promise<Profile[]> {
+    const result = await this.client.execute({
+      sql: `SELECT p.* FROM profiles p WHERE p.display_name IS NOT NULL AND lower(p.display_name) LIKE lower(?) AND EXISTS (SELECT 1 FROM posts WHERE creator=p.address) ORDER BY p.display_name, p.address LIMIT ?`,
+      args: [`%${name}%`, limit],
+    });
+    return result.rows.map(profileFromRow);
   }
   async createUpload(upload: Upload): Promise<void> {
     await this.client.execute(uploadInsert(upload));
@@ -365,6 +387,13 @@ function challengeFromRow(row: Record<string, unknown>): Challenge {
     message: text(row.message),
     expiresAt: number(row.expires_at),
     consumedAt: nullableNumber(row.consumed_at),
+  };
+}
+function profileFromRow(row: Record<string, unknown>): Profile {
+  return {
+    address: text(row.address),
+    displayName: nullableText(row.display_name),
+    updatedAt: number(row.updated_at),
   };
 }
 function uploadFromRow(row: Record<string, unknown>): Upload {

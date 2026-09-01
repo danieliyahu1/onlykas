@@ -8,6 +8,7 @@ import type {
   Session,
   Store,
   Upload,
+  Profile,
 } from "./domain.js";
 
 export class MemoryStore implements Store {
@@ -17,6 +18,7 @@ export class MemoryStore implements Store {
   readonly posts = new Map<string, Post>();
   readonly paymentAttempts = new Map<string, PaymentAttempt>();
   readonly purchases = new Map<string, Purchase>();
+  readonly profiles = new Map<string, Profile>();
 
   async initialize(): Promise<void> {}
   async createChallenge(challenge: Challenge): Promise<void> {
@@ -46,6 +48,27 @@ export class MemoryStore implements Store {
   }
   async deleteSession(id: string): Promise<void> {
     this.sessions.delete(id);
+  }
+  async getProfile(address: string): Promise<Profile | null> {
+    const profile = this.profiles.get(address);
+    return profile ? structuredClone(profile) : null;
+  }
+  async saveProfile(profile: Profile): Promise<void> {
+    this.profiles.set(profile.address, structuredClone(profile));
+  }
+  async searchCreators(name: string, limit: number): Promise<Profile[]> {
+    const wanted = name.toLocaleLowerCase();
+    return [...this.profiles.values()]
+      .filter((profile) =>
+        profile.displayName?.toLocaleLowerCase().includes(wanted),
+      )
+      .filter((profile) =>
+        [...this.posts.values()].some(
+          (post) => post.creator === profile.address,
+        ),
+      )
+      .slice(0, limit)
+      .map((profile) => structuredClone(profile));
   }
   async createUpload(upload: Upload): Promise<void> {
     this.uploads.set(upload.id, structuredClone(upload));

@@ -112,6 +112,20 @@ nav a {
   text-transform: none;
   letter-spacing: 0;
 }
+.account-menu label {
+  font-size: 0.68rem;
+}
+.account-menu input {
+  padding: 0.5rem 0;
+}
+.account-address {
+  margin: 0;
+  color: var(--muted);
+  font:
+    0.68rem "DM Mono",
+    monospace;
+  overflow-wrap: anywhere;
+}
 .menu-button {
   padding: 0.6rem 0;
   background: transparent;
@@ -148,6 +162,30 @@ main {
 }
 .find-page form {
   margin-top: 3rem;
+}
+.creator-results {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+.creator-result {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--paper);
+  text-align: left;
+}
+.creator-result:hover,
+.creator-result:focus-visible {
+  border-color: var(--acid);
+}
+.creator-result span {
+  color: var(--muted);
+  font:
+    0.72rem "DM Mono",
+    monospace;
 }
 h1 {
   margin: 0.2rem 0 1rem;

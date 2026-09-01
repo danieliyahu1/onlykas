@@ -17,6 +17,12 @@ export interface Session {
   expiresAt: number;
 }
 
+export interface Profile {
+  address: string;
+  displayName: string | null;
+  updatedAt: number;
+}
+
 export interface Upload {
   id: string;
   creator: string;
@@ -114,6 +120,9 @@ export interface Store {
   getSession(id: string, now: number): Promise<Session | null>;
   rollSession(id: string, expiresAt: number): Promise<void>;
   deleteSession(id: string): Promise<void>;
+  getProfile(address: string): Promise<Profile | null>;
+  saveProfile(profile: Profile): Promise<void>;
+  searchCreators(name: string, limit: number): Promise<Profile[]>;
   createUpload(upload: Upload): Promise<void>;
   getUpload(id: string): Promise<Upload | null>;
   updateUpload(upload: Upload): Promise<void>;

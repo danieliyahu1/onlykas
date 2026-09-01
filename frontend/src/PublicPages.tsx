@@ -46,7 +46,10 @@ export function CreatorPage() {
   return (
     <section className="profile">
       <p className="eyebrow">CREATOR</p>
-      <h1>{creator.displayAddress}</h1>
+      <h1>{creator.displayName ?? creator.displayAddress}</h1>
+      {creator.displayName && (
+        <p className="wallet">{creator.displayAddress}</p>
+      )}
       {creator.posts.length === 0 ? (
         <p role="status">Nothing published yet.</p>
       ) : (

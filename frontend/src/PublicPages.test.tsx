@@ -156,6 +156,7 @@ describe("public creator profiles", () => {
     vi.mocked(api).mockResolvedValue({
       address: post.creator,
       displayAddress: "kaspatest:cccc...cccc",
+      displayName: null,
       posts: [],
     });
     renderCreator();
