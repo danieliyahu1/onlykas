@@ -26,12 +26,7 @@ function renderPage({
 } = {}) {
   return render(
     <MemoryRouter>
-      <PublishPage
-        address={currentAddress}
-        displayName="Maya"
-        signIn={signIn}
-        signingIn={false}
-      />
+      <PublishPage address={currentAddress} signIn={signIn} signingIn={false} />
     </MemoryRouter>,
   );
 }
@@ -67,7 +62,9 @@ describe("creator publish experience", () => {
     expect(
       screen.getByRole("img", { name: /selected image preview/i }),
     ).toBeVisible();
-    expect(screen.getByText("Supporters view for 1")).toBeVisible();
+    expect(screen.getByLabelText(/Captions/)).toHaveValue(
+      "Shared just for supporters.",
+    );
     expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^publish/i }));
@@ -80,14 +77,14 @@ describe("creator publish experience", () => {
       body: JSON.stringify({
         uploadId: "upload-id",
         title: "Private photo",
-        description: "Shared just for supporters.",
+        caption: "Shared just for supporters.",
         priceKas: "1",
         permanenceConfirmed: true,
       }),
     });
   });
 
-  it("keeps optional details editable", async () => {
+  it("lets captions and price be edited", async () => {
     prepareSuccessfulPublish();
     const user = userEvent.setup();
     renderPage();
@@ -95,11 +92,8 @@ describe("creator publish experience", () => {
       screen.getByLabelText(/choose image or video/i),
       new File(["video"], "release.mp4", { type: "video/mp4" }),
     );
-    await user.click(screen.getByRole("button", { name: "Edit details" }));
-    await user.clear(screen.getByLabelText("Title"));
-    await user.type(screen.getByLabelText("Title"), "First light");
-    await user.clear(screen.getByLabelText("Note"));
-    await user.type(screen.getByLabelText("Note"), "A private video");
+    await user.clear(screen.getByLabelText(/Captions/));
+    await user.type(screen.getByLabelText(/Captions/), "A private video");
     await user.clear(screen.getByLabelText(/Price/));
     await user.type(screen.getByLabelText(/Price/), "1.25");
     await user.click(screen.getByRole("button", { name: /^publish/i }));
@@ -107,9 +101,33 @@ describe("creator publish experience", () => {
     await waitFor(() =>
       expect(api).toHaveBeenCalledWith("/api/posts", {
         method: "POST",
-        body: expect.stringContaining('"title":"First light"'),
+        body: expect.stringContaining(
+          '"title":"Private video","caption":"A private video"',
+        ),
       }),
     );
+  });
+
+  it("lets defaults be edited and restored without media", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.getByLabelText(/Captions/)).toHaveValue(
+      "Shared just for supporters.",
+    );
+    expect(screen.getByLabelText(/Price/)).toHaveValue("1");
+
+    await user.clear(screen.getByLabelText(/Captions/));
+    await user.type(screen.getByLabelText(/Captions/), "Custom captions");
+    expect(
+      screen.getByRole("button", { name: "Restore defaults" }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Restore defaults" }));
+    expect(screen.getByLabelText(/Captions/)).toHaveValue(
+      "Shared just for supporters.",
+    );
+    expect(screen.getByLabelText(/Price/)).toHaveValue("1");
   });
 
   it("does nothing after cancelled sign-in", async () => {
@@ -150,9 +168,7 @@ describe("creator publish experience", () => {
     expect(await screen.findByText(COPY.mediaAlreadyPublished)).toBeVisible();
     expect(screen.getByRole("button", { name: /^publish/i })).toBeVisible();
 
-    await user.click(
-      screen.getByRole("button", { name: "Choose another photo" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Change media" }));
     await user.upload(
       mediaInput,
       new File(["new image"], "new.png", { type: "image/png" }),

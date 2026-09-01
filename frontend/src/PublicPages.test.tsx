@@ -16,7 +16,7 @@ const post = {
   id: "post-1",
   creator: `kaspatest:${"c".repeat(60)}`,
   title: "First light",
-  description: "A private image",
+  caption: "A private image",
   priceSompi: "125000000",
   mediaType: "image/png" as const,
   publishedAt: "2026-01-01T00:00:00.000Z",
@@ -199,7 +199,7 @@ describe("public creator profiles", () => {
     renderCreator();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Creator not found.",
+      "Profile not found.",
     );
   });
 });

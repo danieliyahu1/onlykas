@@ -37,11 +37,11 @@ export function CreatorPage() {
       active = false;
     };
   }, [address]);
-  if (error) return <Message title="Creator not found." role="alert" />;
+  if (error) return <Message title="Profile not found." role="alert" />;
   if (!creator) return <Message title="Opening profile..." role="status" />;
   return (
     <section className="profile">
-      <p className="eyebrow">CREATOR</p>
+      <p className="eyebrow">PROFILE</p>
       <h1>{creator.displayName ?? creator.displayAddress}</h1>
       {creator.displayName && (
         <p className="wallet">{creator.displayAddress}</p>
@@ -241,7 +241,7 @@ export function PostPage({
     <article className="single-post">
       <p className="eyebrow">PRIVATE RELEASE</p>
       <h1>{post.title}</h1>
-      <p className="description">{post.description}</p>
+      <p className="caption">{post.caption}</p>
       <p className="price">
         <CurrencyAmount sompi={post.priceSompi} />
       </p>
@@ -300,7 +300,7 @@ export function PostPage({
         </p>
       )}
       <Link className="creator-link" to={`/creator/${post.creator}`}>
-        Created by {shorten(post.creator)}
+        By {shorten(post.creator)}
       </Link>
     </article>
   );

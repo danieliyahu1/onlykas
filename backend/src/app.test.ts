@@ -37,7 +37,7 @@ describe("creator publication API", () => {
       id: "paid-post",
       creator,
       title: "Paid release",
-      description: "Private media",
+      caption: "Private media",
       priceSompi: "100",
       mediaType: "image/png",
       mediaSize: 4,
@@ -101,7 +101,7 @@ describe("creator publication API", () => {
       id: post.id,
       creator: post.creator,
       title: post.title,
-      description: post.description,
+      caption: post.caption,
       priceSompi: post.priceSompi,
       mediaType: post.mediaType,
       publishedAt: new Date(post.publishedAt).toISOString(),
@@ -118,7 +118,7 @@ describe("creator publication API", () => {
       id: post.id,
       creator: post.creator,
       title: post.title,
-      description: post.description,
+      caption: post.caption,
       priceSompi: post.priceSompi,
       mediaType: post.mediaType,
       publishedAt: new Date(post.publishedAt).toISOString(),
@@ -192,14 +192,14 @@ describe("creator publication API", () => {
       .send({
         uploadId: upload.id,
         title: "  First light  ",
-        description: "  A private image.  ",
+        caption: "  A private image.  ",
         priceKas: "1.00000001",
         permanenceConfirmed: true,
       })
       .expect(201);
     expect(published.body).toMatchObject({
       title: "First light",
-      description: "A private image.",
+      caption: "A private image.",
       priceSompi: "100000001",
       canView: true,
     });
@@ -217,7 +217,7 @@ describe("creator publication API", () => {
       .send({
         uploadId: duplicateUpload.id,
         title: "Duplicate",
-        description: "Must not exist",
+        caption: "Must not exist",
         priceKas: "1",
         permanenceConfirmed: true,
       })

@@ -21,10 +21,10 @@ describe("post validation", () => {
   );
 
   it("normalizes text and enforces visible character limits", () => {
-    expect(validatePost(" title ", " description ", "2")).toEqual([]);
+    expect(validatePost(" title ", " caption ", "2")).toEqual([]);
     expect(validatePost(" ", " ", "0")).toEqual([
       "Title must be between 1 and 80 characters.",
-      "Description must be between 1 and 280 characters.",
+      "Captions must be between 1 and 280 characters.",
       COPY.invalidPrice,
     ]);
   });

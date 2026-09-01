@@ -23,7 +23,7 @@ const command = {
   creator,
   uploadId: verifiedUpload.id,
   title: "  First light  ",
-  description: "  A private image.  ",
+  caption: "  A private image.  ",
   priceKas: "1.00000001",
 };
 
@@ -51,7 +51,7 @@ describe("publishPost", () => {
       id: "post-id",
       creator,
       title: "First light",
-      description: "A private image.",
+      caption: "A private image.",
       priceSompi: "100000001",
       mediaType: "image/png",
       mediaSize: 100,

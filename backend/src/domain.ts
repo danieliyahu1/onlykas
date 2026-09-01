@@ -45,7 +45,7 @@ export interface Post {
   id: string;
   creator: string;
   title: string;
-  description: string;
+  caption: string;
   priceSompi: string;
   mediaType: MediaType;
   mediaSize: number;

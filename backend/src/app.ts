@@ -463,7 +463,7 @@ export function createApp(dependencies: AppDependencies) {
         .object({
           uploadId: z.string().uuid(),
           title: z.string(),
-          description: z.string(),
+          caption: z.string(),
           priceKas: z.string(),
           permanenceConfirmed: z.literal(true),
         })
@@ -473,7 +473,7 @@ export function createApp(dependencies: AppDependencies) {
           creator: request.walletSession!.address,
           uploadId: body.uploadId,
           title: body.title,
-          description: body.description,
+          caption: body.caption,
           priceKas: body.priceKas,
         },
         {
@@ -959,7 +959,7 @@ function postResponse(post: Post, canView: boolean): PostResponse {
     id: post.id,
     creator: post.creator,
     title: post.title,
-    description: post.description,
+    caption: post.caption,
     priceSompi: post.priceSompi,
     mediaType: post.mediaType,
     publishedAt: new Date(post.publishedAt).toISOString(),

@@ -11,7 +11,7 @@ export interface PublishPostCommand {
   creator: string;
   uploadId: string;
   title: string;
-  description: string;
+  caption: string;
   priceKas: string;
 }
 
@@ -43,11 +43,7 @@ export async function publishPost(
   command: PublishPostCommand,
   dependencies: PublishPostDependencies,
 ): Promise<PublishPostOutcome> {
-  const errors = validatePost(
-    command.title,
-    command.description,
-    command.priceKas,
-  );
+  const errors = validatePost(command.title, command.caption, command.priceKas);
   if (errors.length) return { type: "INVALID_POST", errors };
 
   const upload = await dependencies.repository.getUpload(command.uploadId);
@@ -64,7 +60,7 @@ export async function publishPost(
     id: dependencies.createId(),
     creator: command.creator,
     title: normalizePostText(command.title),
-    description: normalizePostText(command.description),
+    caption: normalizePostText(command.caption),
     priceSompi: parseKasToSompi(command.priceKas)!.toString(),
     mediaType: upload.mediaType,
     mediaSize: upload.mediaSize,
