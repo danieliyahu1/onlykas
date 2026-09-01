@@ -9,6 +9,7 @@ import {
 import { api } from "./kasware.js";
 import { uploadMedia, waitForVerification } from "./upload.js";
 import { KaspaMark } from "./KaspaMark.js";
+import { Icon } from "./Icons.js";
 
 interface Props {
   address: string | null;
@@ -250,7 +251,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
           className="primary"
           disabled={!selectedFile || uploading || publishing || signingIn}
         >
-          Continue
+          Continue <Icon name="arrow-right" />
         </button>
         {!address && (
           <p className="wallet-note">
@@ -276,7 +277,8 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
                 disabled={publishing}
                 onClick={() => void publish()}
               >
-                {publishing ? COPY.publishing : "Publish"}
+                {publishing ? COPY.publishing : "Publish"}{" "}
+                <Icon name="arrow-right" />
               </button>
               <button
                 className="secondary"
@@ -286,7 +288,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
                   setStatus(COPY.publishingCancelled);
                 }}
               >
-                Cancel
+                Cancel <Icon name="x" />
               </button>
             </div>
           </div>

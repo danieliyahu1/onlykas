@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { COPY, type CreatorResponse, type PostResponse } from "@onlykas/shared";
 import { api, signPreparedPayment, WalletError } from "./kasware.js";
 import { KaspaMark } from "./KaspaMark.js";
+import { Icon } from "./Icons.js";
 
 type PaymentState =
   | "preparing"
@@ -311,7 +312,8 @@ export function PostPage({
             paymentState === "pending"
           }
         >
-          Unlock for <CurrencyAmount sompi={post.priceSompi} />
+          Unlock for <CurrencyAmount sompi={post.priceSompi} />{" "}
+          <Icon name="arrow-right" />
         </button>
       )}
       {message && (
@@ -360,7 +362,7 @@ export function PostPage({
               </button>
               {paymentState === "rejected" && (
                 <button className="secondary" onClick={() => void prepare()}>
-                  Retry payment
+                  Retry payment <Icon name="arrow-right" />
                 </button>
               )}
               <button
@@ -380,7 +382,7 @@ export function PostPage({
                   setMessage(COPY.paymentCancelled);
                 }}
               >
-                Cancel
+                Cancel <Icon name="x" />
               </button>
             </div>
           </div>

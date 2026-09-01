@@ -5,6 +5,7 @@ import { authenticate, kasware, WalletError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
+import { Icon } from "./Icons.js";
 
 export function App() {
   const [address, setAddress] = useState<string | null>(null);
@@ -115,7 +116,7 @@ export function App() {
                 <summary
                   aria-label={`Your account ${profile?.displayName ?? "Add your name"}`}
                 >
-                  {profile?.displayName ?? "Add your name"}
+                  <Icon name="user" /> {profile?.displayName ?? "Add your name"}
                 </summary>
                 <div className="account-menu">
                   <label htmlFor="display-name">Your name</label>
@@ -131,14 +132,15 @@ export function App() {
                     disabled={savingName}
                     onClick={() => void saveName()}
                   >
-                    {savingName ? "Saving..." : "Save name"}
+                    {savingName ? "Saving..." : "Save name"}{" "}
+                    <Icon name="check" />
                   </button>
                   <p className="account-address">{shorten(address)}</p>
                   <button
                     className="menu-button"
                     onClick={() => void signOut()}
                   >
-                    Sign out
+                    Sign out <Icon name="arrow-right" />
                   </button>
                 </div>
               </details>

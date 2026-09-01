@@ -5,6 +5,7 @@ import {
   type CreatorSearchResult,
 } from "@onlykas/shared";
 import { api } from "./kasware.js";
+import { Icon } from "./Icons.js";
 
 export function FindCreatorPage() {
   const navigate = useNavigate();
@@ -70,8 +71,7 @@ export function FindCreatorPage() {
           </p>
         )}
         <button className="primary" type="submit" disabled={searching}>
-          {searching ? "Searching..." : "Open profile"}{" "}
-          <span aria-hidden="true">-&gt;</span>
+          {searching ? "Searching..." : "Open profile"} <Icon name="search" />
         </button>
       </form>
       {!searching && query.trim() && results.length === 0 && !error && (
