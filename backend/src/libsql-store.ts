@@ -174,23 +174,24 @@ export class LibsqlStore implements Store {
     });
     return result.rows.map(uploadFromRow);
   }
-  async publish(
+  async commitPublication(
     uploadId: string,
+    creator: string,
     post: Post,
-  ): Promise<"PUBLISHED" | "DUPLICATE_MEDIA" | "FAILED"> {
+  ): Promise<"COMMITTED" | "MEDIA_DIGEST_CONFLICT" | "UPLOAD_STATE_CONFLICT"> {
     const duplicate = await this.client.execute({
       sql: `SELECT 1 FROM posts WHERE media_digest=? LIMIT 1`,
       args: [post.mediaDigest],
     });
-    if (duplicate.rows[0]) return "DUPLICATE_MEDIA";
+    if (duplicate.rows[0]) return "MEDIA_DIGEST_CONFLICT";
     try {
-      await this.client.batch(
+      const results = await this.client.batch(
         [
           {
             sql: `INSERT INTO posts SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? FROM uploads WHERE id=? AND creator=? AND state='VERIFIED'`,
             args: [
               post.id,
-              post.creator,
+              creator,
               post.title,
               post.description,
               post.priceSompi,
@@ -200,21 +201,26 @@ export class LibsqlStore implements Store {
               post.mediaKey,
               post.publishedAt,
               uploadId,
-              post.creator,
+              creator,
             ],
           },
           {
             sql: `UPDATE uploads SET state='PUBLISHED', updated_at=? WHERE id=? AND creator=? AND state='VERIFIED'`,
-            args: [post.publishedAt, uploadId, post.creator],
+            args: [post.publishedAt, uploadId, creator],
           },
         ],
         "write",
       );
-      return (await this.getUpload(uploadId))?.state === "PUBLISHED"
-        ? "PUBLISHED"
-        : "FAILED";
-    } catch {
-      return "FAILED";
+      return results[0]?.rowsAffected === 1 && results[1]?.rowsAffected === 1
+        ? "COMMITTED"
+        : "UPLOAD_STATE_CONFLICT";
+    } catch (error) {
+      const conflict = await this.client.execute({
+        sql: `SELECT 1 FROM posts WHERE media_digest=? LIMIT 1`,
+        args: [post.mediaDigest],
+      });
+      if (conflict.rows[0]) return "MEDIA_DIGEST_CONFLICT";
+      throw error;
     }
   }
   async getPost(id: string): Promise<Post | null> {

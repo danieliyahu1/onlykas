@@ -128,7 +128,11 @@ export interface Store {
   updateUpload(upload: Upload): Promise<void>;
   claimUpload(now: number, staleBefore: number): Promise<Upload | null>;
   expiredUploads(now: number): Promise<Upload[]>;
-  publish(uploadId: string, post: Post): Promise<PublishResult>;
+  commitPublication(
+    uploadId: string,
+    creator: string,
+    post: Post,
+  ): Promise<CommitPublicationResult>;
   getPost(id: string): Promise<Post | null>;
   creatorPosts(address: string): Promise<Post[]>;
   createPaymentAttempt(attempt: PaymentAttempt): Promise<void>;
@@ -152,7 +156,8 @@ export interface Store {
   hasPurchase(postId: string, buyer: string): Promise<boolean>;
 }
 
-export type PublishResult = "PUBLISHED" | "DUPLICATE_MEDIA" | "FAILED";
+export type CommitPublicationResult =
+  "COMMITTED" | "MEDIA_DIGEST_CONFLICT" | "UPLOAD_STATE_CONFLICT";
 
 export interface ObjectStorage {
   createMultipart(key: string, contentType: string): Promise<string>;

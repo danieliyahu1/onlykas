@@ -101,22 +101,28 @@ export class MemoryStore implements Store {
       )
       .map((upload) => structuredClone(upload));
   }
-  async publish(
+  async commitPublication(
     uploadId: string,
+    creator: string,
     post: Post,
-  ): Promise<"PUBLISHED" | "DUPLICATE_MEDIA" | "FAILED"> {
+  ): Promise<"COMMITTED" | "MEDIA_DIGEST_CONFLICT" | "UPLOAD_STATE_CONFLICT"> {
     const upload = this.uploads.get(uploadId);
     if (
       [...this.posts.values()].some(
         (item) => item.mediaDigest === post.mediaDigest,
       )
     )
-      return "DUPLICATE_MEDIA";
-    if (!upload || upload.state !== "VERIFIED" || this.posts.has(post.id))
-      return "FAILED";
+      return "MEDIA_DIGEST_CONFLICT";
+    if (
+      !upload ||
+      upload.creator !== creator ||
+      upload.state !== "VERIFIED" ||
+      this.posts.has(post.id)
+    )
+      return "UPLOAD_STATE_CONFLICT";
     this.posts.set(post.id, structuredClone(post));
     upload.state = "PUBLISHED";
-    return "PUBLISHED";
+    return "COMMITTED";
   }
   async getPost(id: string): Promise<Post | null> {
     const post = this.posts.get(id);

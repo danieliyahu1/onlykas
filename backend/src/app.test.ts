@@ -63,7 +63,7 @@ describe("creator publication API", () => {
       parts: [],
     };
     await store.createUpload(upload);
-    await store.publish(upload.id, post);
+    await store.commitPublication(upload.id, creator, post);
     storage.objects.set(post.mediaKey, {
       bytes: new Uint8Array([1, 2, 3, 4]),
       contentType: post.mediaType,

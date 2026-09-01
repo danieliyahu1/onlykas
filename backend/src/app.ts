@@ -15,12 +15,9 @@ import {
   KASPA_TESTNET_ADDRESS_PATTERN,
   mediaHintError,
   NETWORK,
-  normalizePostText,
   normalizeDisplayName,
-  parseKasToSompi,
   SESSION_IDLE_TTL_MS,
   UPLOAD_TTL_MS,
-  validatePost,
   validateDisplayName,
   type PostResponse,
   type UploadResponse,
@@ -41,6 +38,7 @@ import {
   safeError,
   type EventLogger,
 } from "./observability.js";
+import { publishPost } from "./publish-post.js";
 
 const sessionCookie = "onlykas_session";
 const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
@@ -51,6 +49,8 @@ const apiMessages: Record<string, string> = {
   INVALID_UPLOAD_STATE:
     "This upload is no longer available. Choose the file again.",
   INVALID_PARTS: "The upload could not be completed. Try again.",
+  UPLOAD_NOT_FOUND: "This upload could not be found. Choose the file again.",
+  UPLOAD_FORBIDDEN: "You cannot publish this upload.",
   UPLOAD_NOT_VERIFIED: "Your media is still being prepared. Try again shortly.",
   INVALID_ADDRESS: COPY.invalidCreatorAddress,
   POST_NOT_FOUND: "This post could not be found.",
@@ -468,45 +468,43 @@ export function createApp(dependencies: AppDependencies) {
           permanenceConfirmed: z.literal(true),
         })
         .parse(request.body);
-      const errors = validatePost(body.title, body.description, body.priceKas);
-      if (errors.length)
-        return apiError(response, 422, "INVALID_POST", errors.join(" "));
-      const upload = await ownedUpload(
-        dependencies.store,
-        body.uploadId,
-        request.walletSession!.address,
+      const outcome = await publishPost(
+        {
+          creator: request.walletSession!.address,
+          uploadId: body.uploadId,
+          title: body.title,
+          description: body.description,
+          priceKas: body.priceKas,
+        },
+        {
+          repository: dependencies.store,
+          createId: randomUUID,
+          now,
+        },
       );
-      if (
-        upload.state !== "VERIFIED" ||
-        !upload.mediaType ||
-        !upload.mediaSize ||
-        !upload.digest ||
-        !upload.finalKey
-      )
+      if (outcome.type === "PUBLISHED")
+        return response.status(201).json(postResponse(outcome.post, true));
+      if (outcome.type === "INVALID_POST")
+        return apiError(
+          response,
+          422,
+          "INVALID_POST",
+          outcome.errors.join(" "),
+        );
+      if (outcome.type === "UPLOAD_NOT_FOUND")
+        return apiError(response, 404, "UPLOAD_NOT_FOUND");
+      if (outcome.type === "UPLOAD_FORBIDDEN")
+        return apiError(response, 403, "UPLOAD_FORBIDDEN");
+      if (outcome.type === "UPLOAD_NOT_READY")
         return apiError(response, 409, "UPLOAD_NOT_VERIFIED");
-      const post: Post = {
-        id: randomUUID(),
-        creator: request.walletSession!.address,
-        title: normalizePostText(body.title),
-        description: normalizePostText(body.description),
-        priceSompi: parseKasToSompi(body.priceKas)!.toString(),
-        mediaType: upload.mediaType,
-        mediaSize: upload.mediaSize,
-        mediaDigest: upload.digest,
-        mediaKey: upload.finalKey,
-        publishedAt: now(),
-      };
-      const result = await dependencies.store.publish(upload.id, post);
-      if (result === "DUPLICATE_MEDIA")
-        return response.status(409).json({
-          error: "MEDIA_ALREADY_PUBLISHED",
-          message: COPY.mediaAlreadyPublished,
-        });
-      if (result !== "PUBLISHED")
-        return response
-          .status(409)
-          .json({ error: "POST_NOT_PUBLISHED", message: COPY.publishFailed });
-      response.status(201).json(postResponse(post, true));
+      if (outcome.type === "MEDIA_ALREADY_PUBLISHED")
+        return apiError(
+          response,
+          409,
+          "MEDIA_ALREADY_PUBLISHED",
+          COPY.mediaAlreadyPublished,
+        );
+      return apiError(response, 409, "POST_NOT_PUBLISHED");
     }),
   );
 
