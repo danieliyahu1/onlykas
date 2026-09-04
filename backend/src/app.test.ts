@@ -2,7 +2,7 @@ import request from "supertest";
 import sharp from "sharp";
 import { COPY } from "@onlykas/shared";
 import { createApp } from "./app.js";
-import type { PaymentGateway, Post, Upload } from "./domain.js";
+import type { CovenantGateway, PaymentGateway, Post, Upload } from "./domain.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
 import { TestStorage } from "./test-storage.js";
@@ -316,6 +316,214 @@ describe("creator publication API", () => {
       })
       .expect(401);
     expect(result.body.message).toBe(COPY.verificationFailed);
+  });
+});
+
+describe("membership offer deployment API", () => {
+  function covenantGateway(): CovenantGateway {
+    return {
+      prepareDeploy: async () => ({
+        transaction: JSON.stringify({
+          id: "0".repeat(64),
+          version: 0,
+          inputs: [],
+          outputs: [
+            {
+              value: "1",
+              scriptPublicKey: "0000" + "20" + "b".repeat(64) + "ac",
+              covenant: {
+                type: "KCC-0020",
+                payload: JSON.stringify({ type: "DEPLOY_COVENANT" }),
+              },
+            },
+          ],
+          subnetworkId: "0".repeat(40),
+          lockTime: "0",
+          gas: "0",
+          storageMass: "20000",
+          payload: "",
+        }),
+        fingerprint: "fingerprint",
+        covenantId: "covenant-1",
+      }),
+      submitDeploy: async () => ({
+        isAccepted: true,
+        transactionId: "a".repeat(64),
+        rejection: null,
+      }),
+      mint: async () => {
+        throw new Error("unused");
+      },
+      transfer: async () => {
+        throw new Error("unused");
+      },
+      submit: async () => {
+        throw new Error("unused");
+      },
+      status: async (transactionId: string) => ({
+        isAccepted: true,
+        transactionId,
+        rejection: null,
+      }),
+    };
+  }
+
+  it("deploys a live membership offer from a signed transaction", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    const proposed = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1.5",
+        description: "A day of access",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    expect(proposed.body).toMatchObject({
+      state: "PREPARED",
+      priceSompi: "150000000",
+      description: "A day of access",
+      covenantId: "covenant-1",
+      transaction: expect.any(String),
+    });
+    expect(proposed.body.offer).toBeNull();
+
+    const finalized = await creatorAgent
+      .post(`/api/membership/deploys/${proposed.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(200);
+    expect(finalized.body).toMatchObject({
+      state: "CONFIRMED",
+      transactionId: "a".repeat(64),
+      offer: {
+        id: proposed.body.id,
+        creator,
+        covenantId: "covenant-1",
+        priceSompi: "150000000",
+        description: "A day of access",
+        isActive: true,
+      },
+    });
+    expect(finalized.body.message).toBe(COPY.offerLive);
+
+    const deploy = await creatorAgent
+      .get(`/api/membership/deploys/${proposed.body.id}`)
+      .expect(200);
+    expect(deploy.body.state).toBe("CONFIRMED");
+
+    const offers = await creatorAgent
+      .get("/api/membership/offers")
+      .expect(200);
+    expect(offers.body.offers).toHaveLength(1);
+    expect(offers.body.offers[0]).toMatchObject({
+      creator,
+      covenantId: "covenant-1",
+      priceSompi: "150000000",
+      description: "A day of access",
+      isActive: true,
+    });
+
+    await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "2",
+        description: "A different offer",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(409);
+  });
+
+  it("reuses an unchanged proposal and refuses to deploy without a gateway", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    const first = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    const reused = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(200);
+    expect(reused.body.id).toBe(first.body.id);
+
+    const noGateway = createApp({
+      store: new MemoryStore(),
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+    });
+    const strandedAgent = request.agent(noGateway);
+    await authenticate(strandedAgent, creator);
+    const unavailable = await strandedAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(503);
+    expect(unavailable.body.message).toBe(COPY.membershipUnavailable);
+  });
+
+  it("rejects invalid offers and insufficient funding", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: {
+        ...covenantGateway(),
+        prepareDeploy: async () => {
+          throw new Error("INSUFFICIENT_FUNDS");
+        },
+      },
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    const invalid = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({ price: "0", description: " ", payoutPk: "a".repeat(64) })
+      .expect(400);
+    expect(invalid.body.error).toBe("INVALID_OFFER");
+
+    const unfunded = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "5",
+        description: "Front row",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(422);
+    expect(unfunded.body.error).toBe("INSUFFICIENT_FUNDS");
+    expect(unfunded.body.message).toBe(COPY.insufficientFunds);
   });
 });
 

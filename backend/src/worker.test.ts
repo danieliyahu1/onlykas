@@ -12,6 +12,7 @@ import { TestStorage } from "./test-storage.js";
 import {
   cleanupExpiredUploads,
   processNextUpload,
+  reconcilePendingMembershipDeploys,
   reconcilePendingPayments,
 } from "./worker.js";
 
@@ -151,6 +152,144 @@ describe("media jobs", () => {
     expect(submitCount).toBe(0);
     expect(await store.hasPurchase("post", "buyer")).toBe(true);
     expect((await store.getPaymentAttempt("attempt"))?.state).toBe("CONFIRMED");
+  });
+
+  it("confirms an accepted membership offer deploy and records the offer", async () => {
+    const store = new MemoryStore();
+    await store.createMembershipOfferDeploy({
+      id: "deploy",
+      creator: "creator",
+      priceSompi: "100",
+      description: "A day of access",
+      covenantId: "covenant-1",
+      payoutPk: "payout-pk",
+      preparedTransaction: "prepared",
+      fingerprint: "fingerprint",
+      signedTransactionId: "a".repeat(64),
+      state: "PENDING",
+      rejection: null,
+      submittedAt: 10,
+      lastCheckedAt: null,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 10,
+    });
+    const gateway = {
+      prepareDeploy: async () => {
+        throw new Error("must not prepare");
+      },
+      submitDeploy: async () => {
+        throw new Error("must not submit");
+      },
+      mint: async () => {
+        throw new Error("must not mint");
+      },
+      transfer: async () => {
+        throw new Error("must not transfer");
+      },
+      submit: async () => {
+        throw new Error("must not submit");
+      },
+      status: async (transactionId: string) => ({
+        isAccepted: true,
+        transactionId,
+        rejection: null,
+      }),
+    };
+
+    expect(
+      await reconcilePendingMembershipDeploys(store, gateway, 20),
+    ).toBe(1);
+    expect(await store.getMembershipOffer("deploy")).toMatchObject({
+      id: "deploy",
+      creator: "creator",
+      covenantId: "covenant-1",
+      priceSompi: "100",
+      description: "A day of access",
+      isActive: true,
+    });
+    expect(
+      (await store.getMembershipOfferDeploy("deploy"))?.state,
+    ).toBe("CONFIRMED");
+  });
+
+  it("marks a rejected deploy submission and skips unsigned deploys", async () => {
+    const store = new MemoryStore();
+    await store.createMembershipOfferDeploy({
+      id: "unsigned",
+      creator: "creator-a",
+      priceSompi: "100",
+      description: "A day of access",
+      covenantId: "covenant-1",
+      payoutPk: "payout-pk",
+      preparedTransaction: "prepared",
+      fingerprint: "fingerprint",
+      signedTransactionId: null,
+      state: "PENDING",
+      rejection: null,
+      submittedAt: 10,
+      lastCheckedAt: null,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 10,
+    });
+    await store.createMembershipOfferDeploy({
+      id: "rejected",
+      creator: "creator-b",
+      priceSompi: "100",
+      description: "A day of access",
+      covenantId: "covenant-1",
+      payoutPk: "payout-pk",
+      preparedTransaction: "prepared",
+      fingerprint: "fingerprint",
+      signedTransactionId: "b".repeat(64),
+      state: "PENDING",
+      rejection: null,
+      submittedAt: 10,
+      lastCheckedAt: null,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 10,
+    });
+
+    const gateway = {
+      prepareDeploy: async () => {
+        throw new Error("must not prepare");
+      },
+      submitDeploy: async () => {
+        throw new Error("must not submit");
+      },
+      mint: async () => {
+        throw new Error("must not mint");
+      },
+      transfer: async () => {
+        throw new Error("must not transfer");
+      },
+      submit: async () => {
+        throw new Error("must not submit");
+      },
+      status: async () => ({
+        isAccepted: false,
+        transactionId: "b".repeat(64),
+        rejection: "TRANSACTION_REJECTED",
+      }),
+    };
+
+    expect(
+      await reconcilePendingMembershipDeploys(store, gateway, 20),
+    ).toBe(2);
+    expect((await store.getMembershipOfferDeploy("unsigned"))?.state).toBe(
+      "PENDING",
+    );
+    expect((await store.getMembershipOfferDeploy("unsigned"))?.reconciliationAttempts).toBe(
+      0,
+    );
+    expect((await store.getMembershipOfferDeploy("rejected"))?.state).toBe(
+      "REJECTED",
+    );
+    expect((await store.getMembershipOfferDeploy("rejected"))?.lastCheckedAt).toBe(
+      20,
+    );
   });
 });
 

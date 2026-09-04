@@ -4,6 +4,7 @@ import {
   isKaspaTestnetAddress,
   mediaHintError,
   parseKasToSompi,
+  validateMembershipOffer,
   validatePost,
 } from "./index.js";
 
@@ -26,6 +27,22 @@ describe("post validation", () => {
       "Title must be between 1 and 80 characters.",
       "Captions must be between 1 and 280 characters.",
       COPY.invalidPrice,
+    ]);
+  });
+});
+
+describe("membership offer validation", () => {
+  it("accepts a price and description", () => {
+    expect(validateMembershipOffer("1.5", "A private look behind the scenes")).toEqual([]);
+  });
+
+  it("rejects missing price or description and oversize descriptions", () => {
+    expect(validateMembershipOffer("0", "  ")).toEqual([
+      "Descriptions must be up to 280 characters.",
+      COPY.invalidPrice,
+    ]);
+    expect(validateMembershipOffer("1", "x".repeat(281))).toEqual([
+      "Descriptions must be up to 280 characters.",
     ]);
   });
 });

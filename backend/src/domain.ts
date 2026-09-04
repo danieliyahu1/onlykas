@@ -161,6 +161,25 @@ export interface Store {
   creatorMembershipOffers(
     creator: string,
   ): Promise<MembershipOffer[]>;
+  createMembershipOfferDeploy(deploy: MembershipOfferDeploy): Promise<void>;
+  getMembershipOfferDeploy(
+    id: string,
+  ): Promise<MembershipOfferDeploy | null>;
+  unresolvedMembershipOfferDeploy(
+    creator: string,
+  ): Promise<MembershipOfferDeploy | null>;
+  pendingMembershipOfferDeploys(): Promise<MembershipOfferDeploy[]>;
+  compareAndSetMembershipOfferDeploy(
+    id: string,
+    expectedState: MembershipOfferDeployState,
+    update: MembershipOfferDeployUpdate,
+  ): Promise<MembershipOfferDeploy | null>;
+  confirmMembershipOfferDeploy(
+    id: string,
+    expectedState: MembershipOfferDeployState,
+    offer: MembershipOffer,
+    transactionId: string,
+  ): Promise<MembershipOfferDeploy | null>;
   createMembership(membership: Membership): Promise<void>;
   getMembership(id: string): Promise<Membership | null>;
   ownerMemberships(owner: string): Promise<Membership[]>;
@@ -245,6 +264,44 @@ export interface MembershipOffer {
 
 export type MembershipState = "ACTIVE" | "EXPIRED" | "TRANSFERRED";
 
+export type MembershipOfferDeployState =
+  | "PREPARED"
+  | "PENDING"
+  | "CONFIRMED"
+  | "REJECTED";
+
+export interface MembershipOfferDeploy {
+  id: string;
+  creator: string;
+  priceSompi: string;
+  description: string;
+  covenantId: string;
+  payoutPk: string;
+  preparedTransaction: string;
+  fingerprint: string;
+  signedTransactionId: string | null;
+  state: MembershipOfferDeployState;
+  rejection: string | null;
+  submittedAt: number | null;
+  lastCheckedAt: number | null;
+  reconciliationAttempts: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type MembershipOfferDeployUpdate = Partial<
+  Pick<
+    MembershipOfferDeploy,
+    | "signedTransactionId"
+    | "state"
+    | "rejection"
+    | "submittedAt"
+    | "lastCheckedAt"
+    | "reconciliationAttempts"
+    | "updatedAt"
+  >
+>;
+
 export interface Membership {
   id: string;
   offerId: string;
@@ -293,14 +350,30 @@ export interface PreparedMembershipTransfer {
   buyer: string;
 }
 
+export interface PreparedMembershipDeploy {
+  transaction: string;
+  fingerprint: string;
+  covenantId: string;
+}
+
 export interface MembershipTransferSubmission {
   isAccepted: boolean | null;
   transactionId: string | null;
   rejection: string | null;
 }
 
+export interface MembershipDeploySubmission {
+  isAccepted: boolean | null;
+  transactionId: string | null;
+  rejection: string | null;
+}
+
 export interface CovenantGateway {
-  deploy(covenant: MembershipCovenant): Promise<{ txId: string }>;
+  prepareDeploy(
+    covenant: MembershipCovenant,
+    deployer: string,
+    payoutPk: string,
+  ): Promise<PreparedMembershipDeploy>;
   mint(
     offer: MembershipOffer,
     buyer: string,
@@ -310,6 +383,10 @@ export interface CovenantGateway {
     buyer: string,
     saleAmountSompi: string,
   ): Promise<PreparedMembershipTransfer>;
+  submitDeploy(
+    prepared: PreparedMembershipDeploy,
+    signedTransaction: string,
+  ): Promise<MembershipDeploySubmission>;
   submit(
     prepared: PreparedMembershipTransfer,
     signedTransaction: string,

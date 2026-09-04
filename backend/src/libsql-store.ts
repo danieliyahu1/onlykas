@@ -4,6 +4,9 @@ import type {
   Membership,
   MembershipCovenant,
   MembershipOffer,
+  MembershipOfferDeploy,
+  MembershipOfferDeployState,
+  MembershipOfferDeployUpdate,
   MembershipState,
   MembershipTransferAttempt,
   MembershipTransferAttemptState,
@@ -43,6 +46,9 @@ export class LibsqlStore implements Store {
         `CREATE TABLE IF NOT EXISTS membership_covenants (id TEXT PRIMARY KEY, template_json TEXT NOT NULL, template_fingerprint TEXT NOT NULL UNIQUE, amount TEXT NOT NULL, duration_ms INTEGER NOT NULL, creator_royalty_bps INTEGER NOT NULL, created_at INTEGER NOT NULL)`,
         `CREATE TABLE IF NOT EXISTS membership_offers (id TEXT PRIMARY KEY, creator TEXT NOT NULL, covenant_id TEXT NOT NULL REFERENCES membership_covenants(id), price_sompi TEXT NOT NULL, description TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
         `CREATE INDEX IF NOT EXISTS membership_offers_creator ON membership_offers (creator, is_active)`,
+        `CREATE TABLE IF NOT EXISTS membership_offer_deploys (id TEXT PRIMARY KEY, creator TEXT NOT NULL, price_sompi TEXT NOT NULL, description TEXT NOT NULL, covenant_id TEXT NOT NULL, payout_pk TEXT NOT NULL, prepared_transaction TEXT NOT NULL, fingerprint TEXT NOT NULL, signed_transaction_id TEXT, state TEXT NOT NULL, rejection TEXT, submitted_at INTEGER, last_checked_at INTEGER, reconciliation_attempts INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS membership_offer_deploys_open ON membership_offer_deploys(creator) WHERE state IN ('PREPARED','PENDING')`,
+        `CREATE INDEX IF NOT EXISTS membership_offer_deploys_pending ON membership_offer_deploys (state, updated_at)`,
         `CREATE TABLE IF NOT EXISTS memberships (id TEXT PRIMARY KEY, offer_id TEXT NOT NULL REFERENCES membership_offers(id), owner TEXT NOT NULL, creator TEXT NOT NULL, covenant_id TEXT NOT NULL REFERENCES membership_covenants(id), created_tx_id TEXT, valid_until INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'ACTIVE', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
         `CREATE INDEX IF NOT EXISTS memberships_owner ON memberships (owner, state)`,
         `CREATE INDEX IF NOT EXISTS memberships_offer ON memberships (offer_id, state)`,
@@ -434,6 +440,132 @@ export class LibsqlStore implements Store {
     });
     return result.rows.map(membershipOfferFromRow);
   }
+  async createMembershipOfferDeploy(
+    deploy: MembershipOfferDeploy,
+  ): Promise<void> {
+    try {
+      await this.client.execute({
+        sql: `INSERT INTO membership_offer_deploys VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          deploy.id,
+          deploy.creator,
+          deploy.priceSompi,
+          deploy.description,
+          deploy.covenantId,
+          deploy.payoutPk,
+          deploy.preparedTransaction,
+          deploy.fingerprint,
+          deploy.signedTransactionId,
+          deploy.state,
+          deploy.rejection,
+          deploy.submittedAt,
+          deploy.lastCheckedAt,
+          deploy.reconciliationAttempts,
+          deploy.createdAt,
+          deploy.updatedAt,
+        ],
+      });
+    } catch {
+      // An open deploy already exists for this creator; callers fall
+      // back to the unresolved record instead of overlapping one.
+    }
+  }
+  async getMembershipOfferDeploy(
+    id: string,
+  ): Promise<MembershipOfferDeploy | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_offer_deploys WHERE id=?`,
+      args: [id],
+    });
+    return result.rows[0]
+      ? membershipOfferDeployFromRow(result.rows[0])
+      : null;
+  }
+  async unresolvedMembershipOfferDeploy(
+    creator: string,
+  ): Promise<MembershipOfferDeploy | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_offer_deploys WHERE creator=? AND state IN ('PREPARED','PENDING') ORDER BY created_at DESC LIMIT 1`,
+      args: [creator],
+    });
+    return result.rows[0]
+      ? membershipOfferDeployFromRow(result.rows[0])
+      : null;
+  }
+  async pendingMembershipOfferDeploys(): Promise<MembershipOfferDeploy[]> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_offer_deploys WHERE state='PENDING' ORDER BY updated_at`,
+    });
+    return result.rows.map(membershipOfferDeployFromRow);
+  }
+  async compareAndSetMembershipOfferDeploy(
+    id: string,
+    expectedState: MembershipOfferDeployState,
+    update: MembershipOfferDeployUpdate,
+  ): Promise<MembershipOfferDeploy | null> {
+    const fields = Object.keys(
+      update,
+    ) as (keyof MembershipOfferDeployUpdate)[];
+    if (!fields.length) return this.getMembershipOfferDeploy(id);
+    const names: Record<string, string> = {
+      signedTransactionId: "signed_transaction_id",
+      state: "state",
+      rejection: "rejection",
+      submittedAt: "submitted_at",
+      lastCheckedAt: "last_checked_at",
+      reconciliationAttempts: "reconciliation_attempts",
+      updatedAt: "updated_at",
+    };
+    const values = fields.map((field) => update[field]);
+    const result = await this.client.execute({
+      sql: `UPDATE membership_offer_deploys SET ${fields.map((field) => `${names[field]}=?`).join(",")} WHERE id=? AND state=?`,
+      args: [...values, id, expectedState] as InValue[],
+    });
+    return result.rowsAffected ? this.getMembershipOfferDeploy(id) : null;
+  }
+  async confirmMembershipOfferDeploy(
+    id: string,
+    expectedState: MembershipOfferDeployState,
+    offer: MembershipOffer,
+    transactionId: string,
+  ): Promise<MembershipOfferDeploy | null> {
+    try {
+      const results = await this.client.batch(
+        [
+          {
+            sql: `UPDATE membership_offer_deploys SET state='CONFIRMED', signed_transaction_id=COALESCE(signed_transaction_id, ?), submitted_at=COALESCE(submitted_at, ?), last_checked_at=CASE WHEN state='PENDING' THEN ? ELSE last_checked_at END, reconciliation_attempts=reconciliation_attempts + CASE WHEN state='PENDING' THEN 1 ELSE 0 END, updated_at=? WHERE id=? AND state=?`,
+            args: [
+              transactionId,
+              offer.createdAt,
+              offer.createdAt,
+              offer.createdAt,
+              id,
+              expectedState,
+            ],
+          },
+          {
+            sql: `INSERT INTO membership_offers SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM membership_offer_deploys WHERE id=? AND state='CONFIRMED')`,
+            args: [
+              offer.id,
+              offer.creator,
+              offer.covenantId,
+              offer.priceSompi,
+              offer.description,
+              offer.isActive ? 1 : 0,
+              offer.createdAt,
+              offer.updatedAt,
+              id,
+            ],
+          },
+        ],
+        "write",
+      );
+      if (!results[0] || !results[0].rowsAffected) return null;
+      return this.getMembershipOfferDeploy(id);
+    } catch {
+      return null;
+    }
+  }
   async createMembership(membership: Membership): Promise<void> {
     await this.client.execute({
       sql: `INSERT INTO memberships VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -707,6 +839,28 @@ function membershipOfferFromRow(
     priceSompi: text(row.price_sompi),
     description: text(row.description),
     isActive: Boolean(row.is_active),
+    createdAt: number(row.created_at),
+    updatedAt: number(row.updated_at),
+  };
+}
+function membershipOfferDeployFromRow(
+  row: Record<string, unknown>,
+): MembershipOfferDeploy {
+  return {
+    id: text(row.id),
+    creator: text(row.creator),
+    priceSompi: text(row.price_sompi),
+    description: text(row.description),
+    covenantId: text(row.covenant_id),
+    payoutPk: text(row.payout_pk),
+    preparedTransaction: text(row.prepared_transaction),
+    fingerprint: text(row.fingerprint),
+    signedTransactionId: nullableText(row.signed_transaction_id),
+    state: text(row.state) as MembershipOfferDeploy["state"],
+    rejection: nullableText(row.rejection),
+    submittedAt: nullableNumber(row.submitted_at),
+    lastCheckedAt: nullableNumber(row.last_checked_at),
+    reconciliationAttempts: number(row.reconciliation_attempts),
     createdAt: number(row.created_at),
     updatedAt: number(row.updated_at),
   };

@@ -3,8 +3,10 @@ import type {
   CovenantGateway,
   Membership,
   MembershipCovenant,
+  MembershipDeploySubmission,
   MembershipOffer,
   MembershipTransferSubmission,
+  PreparedMembershipDeploy,
   PreparedMembershipTransfer,
 } from "./domain.js";
 import {
@@ -18,40 +20,105 @@ const ZERO_SUBNETWORK = "0".repeat(40);
 export class KaspaCovenantGateway implements CovenantGateway {
   constructor(private readonly api = "https://api-tn10.kaspa.org") {}
 
-  async deploy(
+  async prepareDeploy(
     covenant: MembershipCovenant,
-  ): Promise<{ txId: string }> {
+    deployer: string,
+    payoutPk: string,
+  ): Promise<PreparedMembershipDeploy> {
     const verified = fingerprintTemplate(covenant.templateJson);
     if (verified !== covenant.templateFingerprint)
       throw new Error("TEMPLATE_FINGERPRINT_MISMATCH");
+    const amount = BigInt(covenant.amount);
+    const [utxos, feeEstimate] = await Promise.all([
+      this.request<Utxo[]>(
+        `/addresses/${encodeURIComponent(deployer)}/utxos`,
+      ),
+      this.request<{
+        normalBuckets: { feerate: number }[];
+        priorityBucket: { feerate: number };
+      }>("/info/fee-estimate"),
+    ]);
+    const rate =
+      feeEstimate.normalBuckets[0]?.feerate ??
+      feeEstimate.priorityBucket.feerate;
+    const selected: Utxo[] = [];
+    let total = 0n;
+    for (const utxo of [...utxos].sort((a, b) =>
+      Number(BigInt(b.utxoEntry.amount) - BigInt(a.utxoEntry.amount)),
+    )) {
+      selected.push(utxo);
+      total += BigInt(utxo.utxoEntry.amount);
+      const fee = estimatedFee(selected.length, rate);
+      if (total >= amount + fee) break;
+    }
+    const fee = estimatedFee(selected.length, rate);
+    if (total < amount + fee) throw new Error("INSUFFICIENT_FUNDS");
+    const deployerScript = scriptFor(deployer);
+    if (
+      selected.some(
+        (utxo) =>
+          `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}` !==
+          deployerScript,
+      )
+    )
+      throw new Error("UTXO_OWNER_MISMATCH");
     const payload = JSON.stringify({
       type: "DEPLOY_COVENANT",
       templateFingerprint: covenant.templateFingerprint,
       template: covenant.templateJson,
+      payoutPk,
+      deployer,
     });
-    const tx = JSON.stringify({
+    const outputs: {
+      value: string;
+      scriptPublicKey: string;
+      covenant: Record<string, unknown> | null;
+    }[] = [
+      {
+        value: amount.toString(),
+        scriptPublicKey: deployerScript,
+        covenant: {
+          type: "KCC-0020",
+          payload,
+        },
+      },
+    ];
+    const change = total - amount - fee;
+    if (change > 0n)
+      outputs.push({
+        value: change.toString(),
+        scriptPublicKey: deployerScript,
+        covenant: null,
+      });
+    const transaction = JSON.stringify({
       id: "0".repeat(64),
       version: 0,
-      inputs: [],
-      outputs: [
-        {
-          value: covenant.amount,
-          scriptPublicKey: "0000" + "00".repeat(32) + "ac",
-          covenant: {
-            type: "KCC-0020",
-            payload,
-          },
+      inputs: selected.map((utxo) => ({
+        transactionId: utxo.outpoint.transactionId,
+        index: utxo.outpoint.index,
+        sequence: "0",
+        sigOpCount: 1,
+        computeBudget: 0,
+        signatureScript: "",
+        utxo: {
+          amount: utxo.utxoEntry.amount,
+          scriptPublicKey: `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}`,
+          blockDaaScore: utxo.utxoEntry.blockDaaScore,
+          isCoinbase: utxo.utxoEntry.isCoinbase,
         },
-      ],
+      })),
+      outputs,
       subnetworkId: ZERO_SUBNETWORK,
       lockTime: "0",
       gas: "0",
       storageMass: "20000",
       payload: "",
     });
-    const result = await this.submitRaw(tx);
-    if (!result.transactionId) throw new Error("DEPLOY_FAILED");
-    return { txId: result.transactionId };
+    return {
+      transaction,
+      fingerprint: digest(transaction),
+      covenantId: covenant.id,
+    };
   }
 
   async mint(
@@ -264,10 +331,25 @@ export class KaspaCovenantGateway implements CovenantGateway {
     };
   }
 
+  async submitDeploy(
+    prepared: PreparedMembershipDeploy,
+    signedTransaction: string,
+  ): Promise<MembershipDeploySubmission> {
+    return this.submitCommon(prepared, signedTransaction, false);
+  }
+
   async submit(
     prepared: PreparedMembershipTransfer,
     signedTransaction: string,
   ): Promise<MembershipTransferSubmission> {
+    return this.submitCommon(prepared, signedTransaction, true);
+  }
+
+  private async submitCommon(
+    prepared: PreparedMembershipTransfer | PreparedMembershipDeploy,
+    signedTransaction: string,
+    verifySplit: boolean,
+  ): Promise<MembershipTransferSubmission | MembershipDeploySubmission> {
     let transaction: unknown;
     try {
       transaction = JSON.parse(signedTransaction);
@@ -307,17 +389,25 @@ export class KaspaCovenantGateway implements CovenantGateway {
         transactionId: null,
         rejection: "INVALID_SIGNATURES",
       };
-    const outputs = signed.outputs as Record<string, unknown>[];
-    const royaltyOutputs = outputs.map((o) => ({
-      value: String(o.value ?? o.amount ?? "0"),
-      covenant: o.covenant as Record<string, unknown> | null,
-    }));
-    if (!verifyRoyaltySplit(royaltyOutputs, prepared.saleAmountSompi, 1000))
-      return {
-        isAccepted: false,
-        transactionId: null,
-        rejection: "ROYALTY_SPLIT_VIOLATION",
-      };
+    if (verifySplit && "saleAmountSompi" in prepared) {
+      const outputs = signed.outputs as Record<string, unknown>[];
+      const royaltyOutputs = outputs.map((o) => ({
+        value: String(o.value ?? o.amount ?? "0"),
+        covenant: o.covenant as Record<string, unknown> | null,
+      }));
+      if (
+        !verifyRoyaltySplit(
+          royaltyOutputs,
+          prepared.saleAmountSompi,
+          1000,
+        )
+      )
+        return {
+          isAccepted: false,
+          transactionId: null,
+          rejection: "ROYALTY_SPLIT_VIOLATION",
+        };
+    }
     await validateAuthoritativeInputs(signed, (path, init) =>
       this.request(path, init),
     );
@@ -382,22 +472,6 @@ export class KaspaCovenantGateway implements CovenantGateway {
       throw new Error(`Kaspa request failed: ${response.status} ${detail}`);
     }
     return (await response.json()) as T;
-  }
-
-  private async submitRaw(
-    transactionJson: string,
-  ): Promise<{ transactionId?: string; error?: string }> {
-    const transaction = JSON.parse(transactionJson);
-    return this.request<{ transactionId?: string; error?: string }>(
-      "/transactions",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          transaction: toSubmitTransaction(transaction),
-          allowOrphan: false,
-        }),
-      },
-    );
   }
 }
 

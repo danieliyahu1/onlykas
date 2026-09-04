@@ -5,10 +5,12 @@ import { R2Storage } from "./r2-storage.js";
 import {
   cleanupExpiredUploads,
   processNextUpload,
+  reconcilePendingMembershipDeploys,
   reconcilePendingPayments,
 } from "./worker.js";
 import { KaspaWalletVerifier } from "./wallet-verifier.js";
 import { KaspaPaymentGateway } from "./payment-gateway.js";
+import { KaspaCovenantGateway } from "./covenant-gateway.js";
 import { logEvent, safeError } from "./observability.js";
 
 const environment = parseEnvironment(process.env);
@@ -29,6 +31,7 @@ const app = createApp({
   storage,
   walletVerifier: new KaspaWalletVerifier(),
   paymentGateway: new KaspaPaymentGateway(environment.KASPA_NODE_URL),
+  covenantGateway: new KaspaCovenantGateway(environment.KASPA_NODE_URL),
   publicOrigin: environment.PUBLIC_ORIGIN,
   production: environment.NODE_ENV === "production",
 });
@@ -55,5 +58,14 @@ setInterval(() => {
     new KaspaPaymentGateway(environment.KASPA_NODE_URL),
   ).catch((error) =>
     logEvent("payment_reconciliation_unhandled_error", safeError(error)),
+  );
+  void reconcilePendingMembershipDeploys(
+    store,
+    new KaspaCovenantGateway(environment.KASPA_NODE_URL),
+  ).catch((error) =>
+    logEvent(
+      "membership_deploy_reconciliation_unhandled_error",
+      safeError(error),
+    ),
   );
 }, environment.MEDIA_JOB_INTERVAL_MS).unref();

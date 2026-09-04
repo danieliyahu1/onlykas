@@ -9,16 +9,21 @@ import express, {
 import helmet from "helmet";
 import { z } from "zod";
 import {
-  CHALLENGE_TTL_MS,
   COPY,
+  CHALLENGE_TTL_MS,
   createChallengeMessage,
   KASPA_TESTNET_ADDRESS_PATTERN,
   mediaHintError,
   NETWORK,
   normalizeDisplayName,
+  normalizePostText,
+  parseKasToSompi,
   SESSION_IDLE_TTL_MS,
   UPLOAD_TTL_MS,
   validateDisplayName,
+  validateMembershipOffer,
+  type MembershipDeployResponse,
+  type MembershipOfferResponse,
   type PostResponse,
   type UploadResponse,
 } from "@onlykas/shared";
@@ -31,6 +36,9 @@ import type {
   PaymentGateway,
   PaymentAttempt,
   Profile,
+  CovenantGateway,
+  MembershipOffer,
+  MembershipOfferDeploy,
 } from "./domain.js";
 import {
   logEvent,
@@ -39,6 +47,7 @@ import {
   type EventLogger,
 } from "./observability.js";
 import { publishPost } from "./publish-post.js";
+import { createMembershipCovenant } from "./covenant.js";
 
 const sessionCookie = "onlykas_session";
 const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
@@ -60,6 +69,9 @@ const apiMessages: Record<string, string> = {
   MEDIA_FORBIDDEN: "You do not have access to this media.",
   PAYMENT_UNAVAILABLE: "Payments are temporarily unavailable. Try again.",
   SERVICE_UNAVAILABLE: "OnlyKas is temporarily unavailable. Try again.",
+  MEMBERSHIP_UNAVAILABLE: COPY.membershipUnavailable,
+  ALREADY_DEPLOYED: "You already have a live membership offer.",
+  DEPLOY_NOT_FOUND: "This membership offer could not be found.",
 };
 
 export interface AppDependencies {
@@ -67,6 +79,7 @@ export interface AppDependencies {
   storage: ObjectStorage;
   walletVerifier: WalletVerifier;
   paymentGateway?: PaymentGateway;
+  covenantGateway?: CovenantGateway;
   publicOrigin: string;
   production?: boolean;
   now?: () => number;
@@ -797,6 +810,270 @@ export function createApp(dependencies: AppDependencies) {
     }),
   );
 
+  app.post(
+    "/api/membership/offers/propose",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      if (!dependencies.covenantGateway)
+        throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const creator = request.walletSession!.address;
+      const body = z
+        .object({
+          price: z.string().min(1),
+          description: z.string().min(1),
+          payoutPk: z.string().regex(/^[0-9a-f]{64}$|^[0-9a-f]{66}$/i),
+        })
+        .parse(request.body);
+      const issues = validateMembershipOffer(body.price, body.description);
+      if (issues.length)
+        return response
+          .status(400)
+          .json({ error: "INVALID_OFFER", message: issues[0] });
+      const liveOffers = await dependencies.store.creatorMembershipOffers(
+        creator,
+      );
+      if (liveOffers.length)
+        return apiError(response, 409, "ALREADY_DEPLOYED");
+      logger("membership_offer_deploy_started", {
+        requestId: request.requestId,
+        creator,
+      });
+      const priceSompi = parseKasToSompi(body.price)!.toString();
+      const description = normalizePostText(body.description);
+      const existing =
+        await dependencies.store.unresolvedMembershipOfferDeploy(creator);
+      if (existing && validPreparedDeploy(existing, priceSompi, description))
+        return response.json(membershipDeployResponse(existing, null));
+      if (existing)
+        await dependencies.store.compareAndSetMembershipOfferDeploy(
+          existing.id,
+          "PREPARED",
+          {
+            state: "REJECTED",
+            rejection: "STALE_PREPARATION",
+            updatedAt: now(),
+          },
+        );
+      const covenant = createMembershipCovenant();
+      await dependencies.store.saveCovenant(covenant);
+      let prepared;
+      try {
+        prepared = await dependencies.covenantGateway.prepareDeploy(
+          covenant,
+          creator,
+          body.payoutPk,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+          return response.status(422).json({
+            error: "INSUFFICIENT_FUNDS",
+            message: COPY.insufficientFunds,
+          });
+        throw error;
+      }
+      const deploy: MembershipOfferDeploy = {
+        id: randomUUID(),
+        creator,
+        priceSompi,
+        description,
+        covenantId: prepared.covenantId,
+        payoutPk: body.payoutPk,
+        preparedTransaction: prepared.transaction,
+        fingerprint: prepared.fingerprint,
+        signedTransactionId: null,
+        state: "PREPARED",
+        rejection: null,
+        submittedAt: null,
+        lastCheckedAt: null,
+        reconciliationAttempts: 0,
+        createdAt: now(),
+        updatedAt: now(),
+      };
+      await dependencies.store.createMembershipOfferDeploy(deploy);
+      logger("membership_deploy_prepared", {
+        requestId: request.requestId,
+        deployId: deploy.id,
+        covenantId: deploy.covenantId,
+        creator,
+        priceSompi: deploy.priceSompi,
+      });
+      response.status(201).json(membershipDeployResponse(deploy, null));
+    }),
+  );
+
+  app.post(
+    "/api/membership/deploys/:id/finalize",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      if (!dependencies.covenantGateway)
+        throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const creator = request.walletSession!.address;
+      const deploy = await dependencies.store.getMembershipOfferDeploy(
+        routeParam(request, "id"),
+      );
+      logger("membership_deploy_finalize_started", {
+        requestId: request.requestId,
+        deployId: routeParam(request, "id"),
+        creator,
+      });
+      if (!deploy || deploy.creator !== creator)
+        return apiError(response, 404, "DEPLOY_NOT_FOUND");
+      if (deploy.state === "CONFIRMED") {
+        const offer = await dependencies.store.getMembershipOffer(deploy.id);
+        return response.json(membershipDeployResponse(deploy, offer));
+      }
+      if (deploy.state === "PENDING")
+        return response.status(409).json({
+          ...membershipDeployResponse(deploy, null),
+          message: COPY.offerDeployPending,
+        });
+      const body = z
+        .object({ signedTransaction: z.string().min(1) })
+        .parse(request.body);
+      let submission;
+      try {
+        submission = await dependencies.covenantGateway.submitDeploy(
+          {
+            transaction: deploy.preparedTransaction,
+            fingerprint: deploy.fingerprint,
+            covenantId: deploy.covenantId,
+          },
+          body.signedTransaction,
+        );
+      } catch (error) {
+        const validationFailure =
+          error instanceof Error &&
+          ["INVALID_INPUT", "INPUT_CHANGED", "UTXO_OWNER_MISMATCH"].includes(
+            error.message,
+          );
+        const failedState = validationFailure ? "REJECTED" : "PENDING";
+        const pending = await dependencies.store.compareAndSetMembershipOfferDeploy(
+          deploy.id,
+          "PREPARED",
+          {
+            signedTransactionId: null,
+            state: failedState,
+            rejection: validationFailure
+              ? error instanceof Error
+                ? error.message
+                : "TRANSACTION_REJECTED"
+              : null,
+            submittedAt: validationFailure ? null : now(),
+            updatedAt: now(),
+          },
+        );
+        return response.status(validationFailure ? 422 : 202).json({
+          ...membershipDeployResponse(pending ?? deploy, null),
+          message: validationFailure
+            ? COPY.transactionRejected
+            : COPY.offerDeployPending,
+        });
+      }
+      if (submission.isAccepted === true && submission.transactionId) {
+        const offer: MembershipOffer = {
+          id: deploy.id,
+          creator,
+          covenantId: deploy.covenantId,
+          priceSompi: deploy.priceSompi,
+          description: deploy.description,
+          isActive: true,
+          createdAt: now(),
+          updatedAt: now(),
+        };
+        const updated = await dependencies.store.confirmMembershipOfferDeploy(
+          deploy.id,
+          "PREPARED",
+          offer,
+          submission.transactionId,
+        );
+        if (!updated) {
+          const current =
+            (await dependencies.store.getMembershipOfferDeploy(deploy.id))!;
+          return response.status(409).json({
+            ...membershipDeployResponse(current, null),
+            message: COPY.offerDeployPending,
+          });
+        }
+        logger("membership_deploy_finalized", {
+          requestId: request.requestId,
+          deployId: updated.id,
+          transactionId: updated.signedTransactionId,
+          covenantId: updated.covenantId,
+        });
+        return response.json({
+          ...membershipDeployResponse(updated, offer),
+          message: COPY.offerLive,
+        });
+      }
+      const updated = await dependencies.store.compareAndSetMembershipOfferDeploy(
+        deploy.id,
+        "PREPARED",
+        {
+          signedTransactionId: submission.transactionId,
+          state: submission.isAccepted === false ? "REJECTED" : "PENDING",
+          rejection: submission.rejection,
+          submittedAt: submission.transactionId ? now() : null,
+          updatedAt: now(),
+        },
+      );
+      if (!updated) {
+        const current =
+          (await dependencies.store.getMembershipOfferDeploy(deploy.id))!;
+        return response.status(409).json({
+          ...membershipDeployResponse(current, null),
+          message: COPY.offerDeployPending,
+        });
+      }
+      logger("membership_deploy_finalized", {
+        requestId: request.requestId,
+        deployId: updated.id,
+        state: updated.state,
+        transactionId: updated.signedTransactionId,
+      });
+      if (submission.isAccepted === null)
+        return response.status(202).json({
+          ...membershipDeployResponse(updated, null),
+          message: COPY.offerDeployPending,
+        });
+      return response.status(422).json({
+        ...membershipDeployResponse(updated, null),
+        message: COPY.transactionRejected,
+      });
+    }),
+  );
+
+  app.get(
+    "/api/membership/deploys/:id",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      const deploy = await dependencies.store.getMembershipOfferDeploy(
+        routeParam(request, "id"),
+      );
+      if (!deploy || deploy.creator !== request.walletSession!.address)
+        return apiError(response, 404, "DEPLOY_NOT_FOUND");
+      const offer =
+        deploy.state === "CONFIRMED"
+          ? await dependencies.store.getMembershipOffer(deploy.id)
+          : null;
+      response.json(membershipDeployResponse(deploy, offer));
+    }),
+  );
+
+  app.get(
+    "/api/membership/offers",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      const offers = await dependencies.store.creatorMembershipOffers(
+        request.walletSession!.address,
+      );
+      response.json({ offers: offers.map(membershipOfferResponse) });
+    }),
+  );
+
   app.all(
     "/api/posts/:id/media",
     optionalSession,
@@ -1004,6 +1281,52 @@ function validPreparedPayment(
   } catch {
     return false;
   }
+}
+function membershipOfferResponse(
+  offer: MembershipOffer,
+): MembershipOfferResponse {
+  return {
+    id: offer.id,
+    creator: offer.creator,
+    covenantId: offer.covenantId,
+    priceSompi: offer.priceSompi,
+    description: offer.description,
+    isActive: offer.isActive,
+    createdAt: new Date(offer.createdAt).toISOString(),
+    updatedAt: new Date(offer.updatedAt).toISOString(),
+  };
+}
+function membershipDeployResponse(
+  deploy: MembershipOfferDeploy,
+  offer: MembershipOffer | null,
+): MembershipDeployResponse {
+  const prepared = deploy.state === "PREPARED";
+  const response: MembershipDeployResponse = {
+    id: deploy.id,
+    creator: deploy.creator,
+    covenantId: deploy.covenantId,
+    priceSompi: deploy.priceSompi,
+    description: deploy.description,
+    state: deploy.state,
+    transactionId: deploy.signedTransactionId,
+    rejection: deploy.rejection,
+    offer: offer ? membershipOfferResponse(offer) : null,
+  };
+  if (prepared) {
+    response.transaction = deploy.preparedTransaction;
+    response.fingerprint = deploy.fingerprint;
+  }
+  return response;
+}
+function validPreparedDeploy(
+  deploy: MembershipOfferDeploy,
+  priceSompi: string,
+  description: string,
+): boolean {
+  return (
+    deploy.priceSompi === priceSompi &&
+    deploy.description === description
+  );
 }
 function shortenAddress(address: string) {
   return `${address.slice(0, 16)}...${address.slice(-8)}`;

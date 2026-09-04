@@ -258,12 +258,121 @@ describe("Kaspa covenant gateway", () => {
     });
   });
 
-  it("deploy rejects template fingerprint mismatch", async () => {
+  it("prepares a funded covenant deploy signed by the deployer", async () => {
+    const covenant = createMembershipCovenant();
+    const deployer = `kaspatest:${"q".repeat(61)}`;
+    const utxoScript = `20${"00".repeat(32)}ac`;
+    vi.spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith(`/addresses/${encodeURIComponent(deployer)}/utxos`))
+          return new Response(
+            JSON.stringify([
+              {
+                outpoint: { transactionId: "b".repeat(64), index: 0 },
+                utxoEntry: {
+                  amount: "200",
+                  scriptPublicKey: { scriptPublicKey: utxoScript },
+                  blockDaaScore: "1",
+                  isCoinbase: false,
+                },
+              },
+            ]),
+          );
+        if (url.endsWith("/info/fee-estimate"))
+          return new Response(
+            JSON.stringify({
+              normalBuckets: [{ feerate: 0.01 }],
+              priorityBucket: { feerate: 0.02 },
+            }),
+          );
+        throw new Error(`unexpected URL ${url}`);
+      });
+
+    const prepared = await new KaspaCovenantGateway("https://kaspa.test")
+      .prepareDeploy(covenant, deployer, "payout-pk");
+
+    expect(prepared.covenantId).toBe(covenant.id);
+    const transaction = JSON.parse(prepared.transaction);
+    expect(transaction.inputs[0]).toMatchObject({
+      utxo: { amount: "200" },
+    });
+    expect(transaction.outputs[0]).toMatchObject({
+      value: covenant.amount,
+      covenant: { type: "KCC-0020" },
+    });
+    expect(JSON.parse(transaction.outputs[0].covenant.payload)).toEqual({
+      type: "DEPLOY_COVENANT",
+      templateFingerprint: covenant.templateFingerprint,
+      template: covenant.templateJson,
+      payoutPk: "payout-pk",
+      deployer,
+    });
+    expect(prepared.fingerprint).toBe(
+      createHash("sha256").update(prepared.transaction).digest("hex"),
+    );
+  });
+
+  it("deploy rejects template fingerprint mismatch before funding", async () => {
     const covenant = createMembershipCovenant();
     covenant.templateFingerprint = "wrong";
+    const fetchMock = vi.spyOn(globalThis, "fetch");
     await expect(
-      new KaspaCovenantGateway("https://kaspa.test").deploy(covenant),
+      new KaspaCovenantGateway("https://kaspa.test").prepareDeploy(
+        covenant,
+        `kaspatest:${"q".repeat(61)}`,
+        "payout-pk",
+      ),
     ).rejects.toThrow("TEMPLATE_FINGERPRINT_MISMATCH");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("submitDeploy broadcasts only a signed, unchanged deploy", async () => {
+    const transaction = baseTransaction({
+      outputs: [
+        {
+          value: "1",
+          scriptPublicKey: "000020" + "c".repeat(64) + "ac",
+          covenant: { type: "KCC-0020", payload: { type: "DEPLOY_COVENANT" } },
+        },
+      ],
+    });
+    const prepared = {
+      transaction: JSON.stringify(transaction),
+      fingerprint: fingerprint(transaction),
+      covenantId: "covenant-1",
+    };
+    const txid = "c".repeat(64);
+    const parentScript = "20" + "b".repeat(64) + "ac";
+    vi.spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith(`/transactions/${"b".repeat(64)}`))
+          return new Response(
+            JSON.stringify({
+              outputs: [{ amount: 200, script_public_key: parentScript }],
+            }),
+          );
+        if (url.endsWith("/transactions") && init?.method === "POST")
+          return new Response(JSON.stringify({ transactionId: txid }));
+        if (url.endsWith(`/transactions/${txid}`))
+          return new Response(JSON.stringify({ is_accepted: true }));
+        throw new Error(`unexpected URL ${url}`);
+      });
+    const signed = {
+      ...transaction,
+      inputs: [{ ...transaction.inputs[0], signatureScript: "aa01" }],
+    };
+
+    await expect(
+      new KaspaCovenantGateway("https://kaspa.test").submitDeploy(
+        prepared,
+        JSON.stringify(signed),
+      ),
+    ).resolves.toMatchObject({
+      isAccepted: true,
+      transactionId: txid,
+    });
   });
 
   it("computeCreatorRoyalty matches gateway expectation", () => {

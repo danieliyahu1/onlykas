@@ -1,7 +1,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ObjectStorage, PaymentGateway, Store } from "./domain.js";
+import type {
+  CovenantGateway,
+  MembershipOffer,
+  ObjectStorage,
+  PaymentGateway,
+  Store,
+} from "./domain.js";
 import { MediaValidationError, verifyMediaFile } from "./media.js";
 import { logEvent, safeError, type EventLogger } from "./observability.js";
 
@@ -176,4 +182,70 @@ export async function reconcilePendingPayments(
     }
   }
   return attempts.length;
+}
+
+export async function reconcilePendingMembershipDeploys(
+  store: Store,
+  gateway: CovenantGateway,
+  now = Date.now(),
+): Promise<number> {
+  let deploys;
+  try {
+    deploys = await store.pendingMembershipOfferDeploys();
+  } catch (error) {
+    logEvent("membership_deploy_reconciliation_load_failed", safeError(error));
+    return 0;
+  }
+  for (const deploy of deploys) {
+    if (!deploy.signedTransactionId) continue;
+    try {
+      const submission = await gateway.status(deploy.signedTransactionId);
+      const checkedAt = now;
+      if (submission.isAccepted === true) {
+        const offer: MembershipOffer = {
+          id: deploy.id,
+          creator: deploy.creator,
+          covenantId: deploy.covenantId,
+          priceSompi: deploy.priceSompi,
+          description: deploy.description,
+          isActive: true,
+          createdAt: checkedAt,
+          updatedAt: checkedAt,
+        };
+        await store.confirmMembershipOfferDeploy(deploy.id, "PENDING", offer, deploy.signedTransactionId);
+      } else if (submission.isAccepted === false) {
+        await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
+          state: "REJECTED",
+          rejection: submission.rejection ?? "TRANSACTION_REJECTED",
+          lastCheckedAt: checkedAt,
+          reconciliationAttempts: deploy.reconciliationAttempts + 1,
+          updatedAt: checkedAt,
+        });
+      } else {
+        await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
+          lastCheckedAt: checkedAt,
+          reconciliationAttempts: deploy.reconciliationAttempts + 1,
+          updatedAt: checkedAt,
+        });
+      }
+    } catch (error) {
+      logEvent("membership_deploy_reconciliation_failed", {
+        deployId: deploy.id,
+        ...safeError(error),
+      });
+      try {
+        await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
+          lastCheckedAt: now,
+          reconciliationAttempts: deploy.reconciliationAttempts + 1,
+          updatedAt: now,
+        });
+      } catch (updateError) {
+        logEvent("membership_deploy_reconciliation_update_failed", {
+          deployId: deploy.id,
+          ...safeError(updateError),
+        });
+      }
+    }
+  }
+  return deploys.length;
 }

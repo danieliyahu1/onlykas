@@ -2,6 +2,7 @@ export const NETWORK = "kaspa_testnet_10" as const;
 export const CHALLENGE_TTL_MS = 5 * 60 * 1_000;
 export const SESSION_IDLE_TTL_MS = 15 * 60 * 1_000;
 export const UPLOAD_TTL_MS = 24 * 60 * 60 * 1_000;
+export const MEMBERSHIP_DESCRIPTION_MAX = 280;
 export const MAX_IMAGE_BYTES = 25_000_000;
 export const MAX_VIDEO_BYTES = 500_000_000;
 export const MIN_MULTIPART_PART_BYTES = 5 * 1024 * 1024;
@@ -46,6 +47,24 @@ export const COPY = {
   accessVerificationFailed: "OnlyKas can't verify access right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
   invalidCreatorAddress: "Enter a complete Kaspa testnet address.",
+  offerInvalid:
+    "Add a price and a description for your membership offer.",
+  offerSignPrompt:
+    "Sign the deploy transaction in Kasware to publish your offer.",
+  offerSigning: "Waiting for your signature...",
+  offeringDeploy: "Deploying your membership offer...",
+  offerDeployPending:
+    "Membership offer is deploying. Your price and description are fixed. Do not submit again.",
+  offerLive: "Your membership offer is live.",
+  offerPublishFailed: "The membership offer could not be published. Try again.",
+  offerMembershipTitle: "Membership",
+  offerMembershipIntro: "Offer one day of access for a fixed price.",
+  offerDescriptionLabel: "What supporters get",
+  offerDescriptionHint: "What supporters get for one day of access.",
+  offerMembershipPermanence:
+    "Once the offer is live, its price and description cannot be changed.",
+  membershipUnavailable:
+    "Membership offers are temporarily unavailable. Try again.",
 } as const;
 
 export const MEDIA_TYPES = [
@@ -121,6 +140,37 @@ export interface ProfileResponse {
   displayName: string | null;
 }
 
+export type MembershipOfferDeployState =
+  | "PREPARED"
+  | "PENDING"
+  | "CONFIRMED"
+  | "REJECTED";
+
+export interface MembershipOfferResponse {
+  id: string;
+  creator: string;
+  covenantId: string;
+  priceSompi: string;
+  description: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MembershipDeployResponse {
+  id: string;
+  creator: string;
+  covenantId: string;
+  priceSompi: string;
+  description: string;
+  state: MembershipOfferDeployState;
+  transaction?: string;
+  fingerprint?: string;
+  transactionId: string | null;
+  rejection: string | null;
+  offer: MembershipOfferResponse | null;
+}
+
 export function createChallengeMessage(
   address: string,
   nonce: string,
@@ -173,6 +223,21 @@ export function validatePost(
     Array.from(normalizedCaption).length > 280
   )
     errors.push("Captions must be between 1 and 280 characters.");
+  if (parseKasToSompi(price) === null) errors.push(COPY.invalidPrice);
+  return errors;
+}
+
+export function validateMembershipOffer(
+  price: string,
+  description: string,
+): string[] {
+  const errors: string[] = [];
+  const normalizedDescription = normalizePostText(description);
+  if (
+    Array.from(normalizedDescription).length < 1 ||
+    Array.from(normalizedDescription).length > MEMBERSHIP_DESCRIPTION_MAX
+  )
+    errors.push(`Descriptions must be up to ${MEMBERSHIP_DESCRIPTION_MAX} characters.`);
   if (parseKasToSompi(price) === null) errors.push(COPY.invalidPrice);
   return errors;
 }

@@ -3,6 +3,9 @@ import type {
   Membership,
   MembershipCovenant,
   MembershipOffer,
+  MembershipOfferDeploy,
+  MembershipOfferDeployState,
+  MembershipOfferDeployUpdate,
   MembershipTransferAttempt,
   MembershipTransferAttemptState,
   MembershipTransferAttemptUpdate,
@@ -27,6 +30,10 @@ export class MemoryStore implements Store {
   readonly profiles = new Map<string, Profile>();
   readonly covenants = new Map<string, MembershipCovenant>();
   readonly membershipOffers = new Map<string, MembershipOffer>();
+  readonly membershipOfferDeploys = new Map<
+    string,
+    MembershipOfferDeploy
+  >();
   readonly memberships = new Map<string, Membership>();
   readonly membershipTransferAttempts = new Map<
     string,
@@ -254,6 +261,77 @@ export class MemoryStore implements Store {
       .filter((offer) => offer.creator === creator && offer.isActive)
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((offer) => structuredClone(offer));
+  }
+  async createMembershipOfferDeploy(
+    deploy: MembershipOfferDeploy,
+  ): Promise<void> {
+    if (this.unresolvedOpenDeploy(deploy.creator)) return;
+    this.membershipOfferDeploys.set(deploy.id, structuredClone(deploy));
+  }
+  async getMembershipOfferDeploy(
+    id: string,
+  ): Promise<MembershipOfferDeploy | null> {
+    const deploy = this.membershipOfferDeploys.get(id);
+    return deploy ? structuredClone(deploy) : null;
+  }
+  async unresolvedMembershipOfferDeploy(
+    creator: string,
+  ): Promise<MembershipOfferDeploy | null> {
+    const deploy = this.unresolvedOpenDeploy(creator);
+    return deploy ? structuredClone(deploy) : null;
+  }
+  async pendingMembershipOfferDeploys(): Promise<MembershipOfferDeploy[]> {
+    return [...this.membershipOfferDeploys.values()]
+      .filter((deploy) => deploy.state === "PENDING")
+      .map((deploy) => structuredClone(deploy));
+  }
+  async compareAndSetMembershipOfferDeploy(
+    id: string,
+    expectedState: MembershipOfferDeployState,
+    update: MembershipOfferDeployUpdate,
+  ): Promise<MembershipOfferDeploy | null> {
+    const current = this.membershipOfferDeploys.get(id);
+    if (!current || current.state !== expectedState) return null;
+    const updated = { ...current, ...update };
+    this.membershipOfferDeploys.set(id, structuredClone(updated));
+    return structuredClone(updated);
+  }
+  async confirmMembershipOfferDeploy(
+    id: string,
+    expectedState: MembershipOfferDeployState,
+    offer: MembershipOffer,
+    transactionId: string,
+  ): Promise<MembershipOfferDeploy | null> {
+    const deploy = this.membershipOfferDeploys.get(id);
+    if (!deploy || deploy.state !== expectedState) return null;
+    if (deploy.creator !== offer.creator) return null;
+    const alreadyRecorded = this.membershipOffers.has(offer.id);
+    if (alreadyRecorded) {
+      const confirmed = {
+        ...deploy,
+        state: "CONFIRMED" as const,
+        signedTransactionId: deploy.signedTransactionId ?? transactionId,
+      };
+      this.membershipOfferDeploys.set(id, structuredClone(confirmed));
+      return structuredClone(confirmed);
+    }
+    this.membershipOffers.set(offer.id, structuredClone(offer));
+    const confirmed = {
+      ...deploy,
+      state: "CONFIRMED" as const,
+      signedTransactionId: deploy.signedTransactionId ?? transactionId,
+    };
+    this.membershipOfferDeploys.set(id, structuredClone(confirmed));
+    return structuredClone(confirmed);
+  }
+  private unresolvedOpenDeploy(creator: string): MembershipOfferDeploy | null {
+    return (
+      [...this.membershipOfferDeploys.values()].find(
+        (deploy) =>
+          deploy.creator === creator &&
+          (deploy.state === "PREPARED" || deploy.state === "PENDING"),
+      ) ?? null
+    );
   }
   async createMembership(membership: Membership): Promise<void> {
     this.memberships.set(membership.id, structuredClone(membership));
