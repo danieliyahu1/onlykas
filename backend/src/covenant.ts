@@ -62,7 +62,6 @@ export function buildMintPayload(
     covenant: Record<string, unknown>;
   }[];
 } {
-  const amount = BigInt(offer.priceSompi);
   const covenantPayload = {
     type: "MINT",
     owner: buyer,

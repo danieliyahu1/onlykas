@@ -4,7 +4,7 @@ import {
   createMembershipCovenant,
   computeCreatorRoyalty,
 } from "./covenant.js";
-import type { Membership, MembershipOffer } from "./domain.js";
+import type { MembershipOffer } from "./domain.js";
 
 function baseTransaction(
   overrides: Partial<Record<string, unknown>> = {},
@@ -62,24 +62,6 @@ function testOffer(overrides: Partial<MembershipOffer> = {}): MembershipOffer {
   };
 }
 
-function testMembership(
-  overrides: Partial<Membership> = {},
-): Membership {
-  return {
-    id: "mem-1",
-    offerId: "offer-1",
-    owner: "seller",
-    creator: "creator",
-    covenantId: "covenant-1",
-    createdTxId: "tx-1",
-    validUntil: 2000,
-    state: "ACTIVE",
-    createdAt: 1000,
-    updatedAt: 1000,
-    ...overrides,
-  };
-}
-
 describe("Kaspa covenant gateway", () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -111,8 +93,11 @@ describe("Kaspa covenant gateway", () => {
   it("validates royalty split before broadcast", async () => {
     const covenant = createMembershipCovenant();
     const offer = testOffer({ priceSompi: "1000" });
-    const royalty = computeCreatorRoyalty("1000", covenant.creatorRoyaltyBps);
-    const sellerAmount = (1000n - BigInt(royalty)).toString();
+    const royalty = computeCreatorRoyalty(
+      offer.priceSompi,
+      covenant.creatorRoyaltyBps,
+    );
+    const sellerAmount = (BigInt(offer.priceSompi) - BigInt(royalty)).toString();
     const transaction = baseTransaction({
       outputs: [
         {
@@ -130,29 +115,27 @@ describe("Kaspa covenant gateway", () => {
     const prepared = {
       transaction: JSON.stringify(transaction),
       fingerprint: fingerprint(transaction),
-      saleAmountSompi: "1000",
+      saleAmountSompi: offer.priceSompi,
       creatorRoyaltySompi: royalty,
       seller: "seller",
       buyer: "buyer",
     };
     const txid = "c".repeat(64);
     const parentScript = "20" + "b".repeat(64) + "ac";
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (input, init) => {
-        const url = String(input);
-        if (url.endsWith(`/transactions/${"b".repeat(64)}`))
-          return new Response(
-            JSON.stringify({
-              outputs: [{ amount: 200, script_public_key: parentScript }],
-            }),
-          );
-        if (url.endsWith("/transactions") && init?.method === "POST")
-          return new Response(JSON.stringify({ transactionId: txid }));
-        if (url.endsWith(`/transactions/${txid}`))
-          return new Response(JSON.stringify({ is_accepted: true }));
-        throw new Error(`unexpected URL ${url}`);
-      });
+vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/transactions/${"b".repeat(64)}`))
+        return new Response(
+          JSON.stringify({
+            outputs: [{ amount: 200, script_public_key: parentScript }],
+          }),
+        );
+      if (url.endsWith("/transactions") && init?.method === "POST")
+        return new Response(JSON.stringify({ transactionId: txid }));
+      if (url.endsWith(`/transactions/${txid}`))
+        return new Response(JSON.stringify({ is_accepted: true }));
+      throw new Error(`unexpected URL ${url}`);
+    });
     const signed = {
       ...transaction,
       inputs: [
