@@ -23,7 +23,9 @@ import {
   validateDisplayName,
   validateMembershipOffer,
   type MembershipDeployResponse,
+  type MembershipMintAttemptResponse,
   type MembershipOfferResponse,
+  type MembershipResponse,
   type PostResponse,
   type UploadResponse,
 } from "@onlykas/shared";
@@ -37,6 +39,8 @@ import type {
   PaymentAttempt,
   Profile,
   CovenantGateway,
+  Membership,
+  MembershipMintAttempt,
   MembershipOffer,
   MembershipOfferDeploy,
 } from "./domain.js";
@@ -48,6 +52,7 @@ import {
 } from "./observability.js";
 import { publishPost } from "./publish-post.js";
 import { createMembershipCovenant } from "./covenant.js";
+import { buildMintedMembership } from "./membership.js";
 
 const sessionCookie = "onlykas_session";
 const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
@@ -72,6 +77,9 @@ const apiMessages: Record<string, string> = {
   MEMBERSHIP_UNAVAILABLE: COPY.membershipUnavailable,
   ALREADY_DEPLOYED: "You already have a live membership offer.",
   DEPLOY_NOT_FOUND: "This membership offer could not be found.",
+  OFFER_UNAVAILABLE: "This membership offer is no longer available.",
+  MINT_NOT_FOUND: "This membership could not be found.",
+  MINT_PRICE_MISMATCH: COPY.membershipPriceMismatch,
 };
 
 export interface AppDependencies {
@@ -1074,6 +1082,291 @@ export function createApp(dependencies: AppDependencies) {
     }),
   );
 
+  app.get(
+    "/api/membership/offers/:creator",
+    asyncHandler(async (request, response) => {
+      const offers = await dependencies.store.creatorMembershipOffers(
+        routeParam(request, "creator"),
+      );
+      response.json({
+        offer: offers[0] ? membershipOfferResponse(offers[0]) : null,
+      });
+    }),
+  );
+
+  app.get(
+    "/api/membership/offers/:id/memberships",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      const offer = await dependencies.store.getMembershipOffer(
+        routeParam(request, "id"),
+      );
+      if (!offer) return apiError(response, 404, "OFFER_UNAVAILABLE");
+      const memberships = await dependencies.store.offerMemberships(
+        offer.id,
+        request.walletSession!.address,
+      );
+      response.json({ memberships: memberships.map(membershipResponse) });
+    }),
+  );
+
+  app.post(
+    "/api/membership/offers/:id/mints/propose",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      if (!dependencies.covenantGateway)
+        throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const offer = await dependencies.store.getMembershipOffer(
+        routeParam(request, "id"),
+      );
+      if (!offer || !offer.isActive)
+        return apiError(response, 404, "OFFER_UNAVAILABLE");
+      if (!(await dependencies.store.getCovenant(offer.covenantId)))
+        throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const buyer = request.walletSession!.address;
+      const existing =
+        await dependencies.store.unresolvedMembershipMintAttempt(
+          offer.id,
+          buyer,
+        );
+      if (existing?.state === "PENDING")
+        return response.status(409).json({
+          ...mintResponse(existing, null),
+          message: COPY.membershipPending,
+        });
+      if (existing && validPreparedMint(existing, offer))
+        return response.json(mintResponse(existing, null));
+      if (existing)
+        await dependencies.store.compareAndSetMembershipMintAttempt(
+          existing.id,
+          "PREPARED",
+          {
+            state: "REJECTED",
+            rejection: "STALE_PREPARATION",
+            updatedAt: now(),
+          },
+        );
+      logger("membership_mint_started", {
+        requestId: request.requestId,
+        offerId: offer.id,
+        buyer,
+      });
+      let prepared;
+      try {
+        prepared = await dependencies.covenantGateway.mint(offer, buyer);
+      } catch (error) {
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+          return response.status(422).json({
+            error: "INSUFFICIENT_FUNDS",
+            message: COPY.insufficientFunds,
+          });
+        throw error;
+      }
+      if (
+        prepared.saleAmountSompi !== offer.priceSompi ||
+        prepared.buyer !== buyer ||
+        prepared.seller !== offer.creator
+      )
+        return apiError(response, 400, "MINT_PRICE_MISMATCH");
+      const attempt: MembershipMintAttempt = {
+        id: randomUUID(),
+        offerId: offer.id,
+        buyer,
+        creator: offer.creator,
+        covenantId: offer.covenantId,
+        priceSompi: offer.priceSompi,
+        preparedTransaction: prepared.transaction,
+        fingerprint: prepared.fingerprint,
+        signedTransactionId: null,
+        state: "PREPARED",
+        rejection: null,
+        submittedAt: null,
+        lastCheckedAt: null,
+        reconciliationAttempts: 0,
+        createdAt: now(),
+        updatedAt: now(),
+      };
+      await dependencies.store.createMembershipMintAttempt(attempt);
+      logger("membership_mint_prepared", {
+        requestId: request.requestId,
+        mintId: attempt.id,
+        offerId: attempt.offerId,
+        buyer,
+        priceSompi: attempt.priceSompi,
+      });
+      response.status(201).json(mintResponse(attempt, null));
+    }),
+  );
+
+  app.post(
+    "/api/membership/mints/:id/finalize",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      if (!dependencies.covenantGateway)
+        throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const buyer = request.walletSession!.address;
+      const attempt = await dependencies.store.getMembershipMintAttempt(
+        routeParam(request, "id"),
+      );
+      logger("membership_mint_finalize_started", {
+        requestId: request.requestId,
+        mintId: routeParam(request, "id"),
+        buyer,
+      });
+      if (!attempt || attempt.buyer !== buyer)
+        return apiError(response, 404, "MINT_NOT_FOUND");
+      if (attempt.state === "CONFIRMED") {
+        const membership = await dependencies.store.getMembership(attempt.id);
+        return response.json(mintResponse(attempt, membership));
+      }
+      if (attempt.state === "PENDING")
+        return response.status(409).json({
+          ...mintResponse(attempt, null),
+          message: COPY.membershipPending,
+        });
+      const body = z
+        .object({ signedTransaction: z.string().min(1) })
+        .parse(request.body);
+      let submission;
+      try {
+        submission = await dependencies.covenantGateway.submitMint(
+          {
+            transaction: attempt.preparedTransaction,
+            fingerprint: attempt.fingerprint,
+            saleAmountSompi: attempt.priceSompi,
+            creatorRoyaltySompi: attempt.priceSompi,
+            seller: attempt.creator,
+            buyer,
+          },
+          body.signedTransaction,
+        );
+      } catch (error) {
+        const validationFailure =
+          error instanceof Error &&
+          ["INVALID_INPUT", "INPUT_CHANGED", "UTXO_OWNER_MISMATCH"].includes(
+            error.message,
+          );
+        const failedState = validationFailure ? "REJECTED" : "PENDING";
+        const pending = await dependencies.store.compareAndSetMembershipMintAttempt(
+          attempt.id,
+          "PREPARED",
+          {
+            signedTransactionId: null,
+            state: failedState,
+            rejection: validationFailure
+              ? error instanceof Error
+                ? error.message
+                : "TRANSACTION_REJECTED"
+              : null,
+            submittedAt: validationFailure ? null : now(),
+            updatedAt: now(),
+          },
+        );
+        return response.status(validationFailure ? 422 : 202).json({
+          ...mintResponse(pending ?? attempt, null),
+          message: validationFailure
+            ? COPY.membershipRejected
+            : COPY.membershipPending,
+        });
+      }
+      if (submission.isAccepted === true && submission.transactionId) {
+        const created = await buildMintedMembership(
+          dependencies.store,
+          { ...attempt, signedTransactionId: submission.transactionId },
+          submission.acceptedAt,
+          now(),
+        );
+        const updated = await dependencies.store.confirmMembershipMintAttempt(
+          attempt.id,
+          "PREPARED",
+          created,
+        );
+        if (!updated) {
+          const current =
+            (await dependencies.store.getMembershipMintAttempt(attempt.id))!;
+          const membership =
+            current.state === "CONFIRMED"
+              ? await dependencies.store.getMembership(current.id)
+              : null;
+          return response.status(409).json({
+            ...mintResponse(current, membership),
+            message: COPY.membershipPending,
+          });
+        }
+        logger("membership_mint_finalized", {
+          requestId: request.requestId,
+          mintId: updated.id,
+          transactionId: updated.signedTransactionId,
+          offerId: updated.offerId,
+          buyer,
+        });
+        return response.json({
+          ...mintResponse(updated, created),
+          message: COPY.membershipLive,
+        });
+      }
+      const updated = await dependencies.store.compareAndSetMembershipMintAttempt(
+        attempt.id,
+        "PREPARED",
+        {
+          signedTransactionId: submission.transactionId,
+          state: submission.isAccepted === false ? "REJECTED" : "PENDING",
+          rejection: submission.rejection,
+          submittedAt: submission.transactionId ? now() : null,
+          updatedAt: now(),
+        },
+      );
+      if (!updated) {
+        const current =
+          (await dependencies.store.getMembershipMintAttempt(attempt.id))!;
+        const membership =
+          current.state === "CONFIRMED"
+            ? await dependencies.store.getMembership(current.id)
+            : null;
+        return response.status(409).json({
+          ...mintResponse(current, membership),
+          message: COPY.membershipPending,
+        });
+      }
+      logger("membership_mint_finalized", {
+        requestId: request.requestId,
+        mintId: updated.id,
+        state: updated.state,
+        transactionId: updated.signedTransactionId,
+      });
+      if (submission.isAccepted === null)
+        return response.status(202).json({
+          ...mintResponse(updated, null),
+          message: COPY.membershipPending,
+        });
+      return response.status(422).json({
+        ...mintResponse(updated, null),
+        message: COPY.membershipRejected,
+      });
+    }),
+  );
+
+  app.get(
+    "/api/membership/mints/:id",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      const attempt = await dependencies.store.getMembershipMintAttempt(
+        routeParam(request, "id"),
+      );
+      if (!attempt || attempt.buyer !== request.walletSession!.address)
+        return apiError(response, 404, "MINT_NOT_FOUND");
+      const membership =
+        attempt.state === "CONFIRMED"
+          ? await dependencies.store.getMembership(attempt.id)
+          : null;
+      response.json(mintResponse(attempt, membership));
+    }),
+  );
+
   app.all(
     "/api/posts/:id/media",
     optionalSession,
@@ -1327,6 +1620,66 @@ function validPreparedDeploy(
     deploy.priceSompi === priceSompi &&
     deploy.description === description
   );
+}
+function mintResponse(
+  attempt: MembershipMintAttempt,
+  membership: Membership | null,
+): MembershipMintAttemptResponse {
+  const prepared = attempt.state === "PREPARED";
+  const response: MembershipMintAttemptResponse = {
+    id: attempt.id,
+    offerId: attempt.offerId,
+    creator: attempt.creator,
+    covenantId: attempt.covenantId,
+    priceSompi: attempt.priceSompi,
+    state: attempt.state,
+    transactionId: attempt.signedTransactionId,
+    rejection: attempt.rejection,
+    submittedAt: attempt.submittedAt,
+    lastCheckedAt: attempt.lastCheckedAt,
+    reconciliationAttempts: attempt.reconciliationAttempts,
+    membership: membership ? membershipResponse(membership) : null,
+  };
+  if (prepared) {
+    response.transaction = attempt.preparedTransaction;
+    response.fingerprint = attempt.fingerprint;
+  }
+  return response;
+}
+function membershipResponse(membership: Membership): MembershipResponse {
+  return {
+    id: membership.id,
+    offerId: membership.offerId,
+    owner: membership.owner,
+    creator: membership.creator,
+    covenantId: membership.covenantId,
+    createdTxId: membership.createdTxId,
+    createdAt: new Date(membership.createdAt).toISOString(),
+    validUntil: new Date(membership.validUntil).toISOString(),
+    state: membership.state,
+  };
+}
+function validPreparedMint(
+  attempt: MembershipMintAttempt,
+  offer: MembershipOffer,
+): boolean {
+  if (attempt.offerId !== offer.id || attempt.priceSompi !== offer.priceSompi)
+    return false;
+  try {
+    const transaction = JSON.parse(attempt.preparedTransaction) as {
+      outputs?: {
+        scriptPublicKey?: string;
+        covenant?: { type?: string };
+      }[];
+    };
+    return (
+      transaction.outputs?.[0]?.covenant?.type === "KCC-0020" &&
+      transaction.outputs?.[0]?.scriptPublicKey?.startsWith("000020") ===
+        true
+    );
+  } catch {
+    return false;
+  }
 }
 function shortenAddress(address: string) {
   return `${address.slice(0, 16)}...${address.slice(-8)}`;

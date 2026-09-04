@@ -197,6 +197,87 @@ vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("submitMint broadcasts a mint without demanding a creator royalty split", async () => {
+    const transaction = baseTransaction();
+    const prepared = {
+      transaction: JSON.stringify(transaction),
+      fingerprint: fingerprint(transaction),
+      saleAmountSompi: "100",
+      creatorRoyaltySompi: "100",
+      seller: "seller",
+      buyer: "buyer",
+    };
+    const txid = "c".repeat(64);
+    const parentScript = "20" + "b".repeat(64) + "ac";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/transactions/${"b".repeat(64)}`))
+        return new Response(
+          JSON.stringify({
+            outputs: [{ amount: 200, script_public_key: parentScript }],
+          }),
+        );
+      if (url.endsWith("/transactions") && init?.method === "POST")
+        return new Response(JSON.stringify({ transactionId: txid }));
+      if (url.endsWith(`/transactions/${txid}`))
+        return new Response(
+          JSON.stringify({ is_accepted: true, block_time: 1_700_000_000 }),
+        );
+      throw new Error(`unexpected URL ${url}`);
+    });
+    const signed = {
+      ...transaction,
+      inputs: [{ ...transaction.inputs[0], signatureScript: "aa01" }],
+    };
+
+    await expect(
+      new KaspaCovenantGateway("https://kaspa.test").submitMint(
+        prepared,
+        JSON.stringify(signed),
+      ),
+    ).resolves.toMatchObject({
+      isAccepted: true,
+      transactionId: txid,
+      acceptedAt: 1_700_000_000_000,
+    });
+  });
+
+  it("status converts a seconds block time to milliseconds", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/transactions/${"c".repeat(64)}`))
+        return new Response(
+          JSON.stringify({ is_accepted: true, block_time: 1_700_000_000 }),
+        );
+      throw new Error(`unexpected URL ${url}`);
+    });
+
+    await expect(
+      new KaspaCovenantGateway("https://kaspa.test").status("c".repeat(64)),
+    ).resolves.toMatchObject({
+      isAccepted: true,
+      transactionId: "c".repeat(64),
+      acceptedAt: 1_700_000_000_000,
+    });
+  });
+
+  it("status leaves a millisecond block time untouched", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/transactions/${"c".repeat(64)}`))
+        return new Response(
+          JSON.stringify({ is_accepted: true, block_time: 1_700_000_000_000 }),
+        );
+      throw new Error(`unexpected URL ${url}`);
+    });
+
+    await expect(
+      new KaspaCovenantGateway("https://kaspa.test").status("c".repeat(64)),
+    ).resolves.toMatchObject({
+      acceptedAt: 1_700_000_000_000,
+    });
+  });
+
   it("rejects invalid JSON signed transactions", async () => {
     const prepared = {
       transaction: JSON.stringify(baseTransaction()),

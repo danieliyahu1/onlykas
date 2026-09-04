@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { MembershipCovenant, MembershipOffer } from "./domain.js";
 
 const MEMBERSHIP_ROYALTY_BPS = 1000;
-const MEMBERSHIP_DURATION_MS = 24 * 60 * 60 * 1_000;
+export const MEMBERSHIP_DURATION_MS = 24 * 60 * 60 * 1_000;
 
 export function buildMembershipCovenantTemplate(
   creatorRoyaltyBps = MEMBERSHIP_ROYALTY_BPS,

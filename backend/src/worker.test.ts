@@ -11,8 +11,10 @@ import { MemoryStore } from "./memory-store.js";
 import { TestStorage } from "./test-storage.js";
 import {
   cleanupExpiredUploads,
+  expireExpiredMemberships,
   processNextUpload,
   reconcilePendingMembershipDeploys,
+  reconcilePendingMembershipMints,
   reconcilePendingPayments,
 } from "./worker.js";
 
@@ -190,10 +192,14 @@ describe("media jobs", () => {
       submit: async () => {
         throw new Error("must not submit");
       },
+      submitMint: async () => {
+        throw new Error("must not submit");
+      },
       status: async (transactionId: string) => ({
         isAccepted: true,
         transactionId,
         rejection: null,
+        acceptedAt: null,
       }),
     };
 
@@ -268,10 +274,14 @@ describe("media jobs", () => {
       submit: async () => {
         throw new Error("must not submit");
       },
+      submitMint: async () => {
+        throw new Error("must not submit");
+      },
       status: async () => ({
         isAccepted: false,
         transactionId: "b".repeat(64),
         rejection: "TRANSACTION_REJECTED",
+        acceptedAt: null,
       }),
     };
 
@@ -290,6 +300,170 @@ describe("media jobs", () => {
     expect((await store.getMembershipOfferDeploy("rejected"))?.lastCheckedAt).toBe(
       20,
     );
+  });
+});
+
+describe("membership mint reconciliation", () => {
+  function pendingMint(
+    id: string,
+    buyer = "buyer",
+    creator = "creator",
+  ) {
+    return {
+      id,
+      offerId: "offer-1",
+      buyer,
+      creator,
+      covenantId: "covenant-1",
+      priceSompi: "100",
+      preparedTransaction: "prepared",
+      fingerprint: "fingerprint",
+      signedTransactionId: "f".repeat(64),
+      state: "PENDING" as const,
+      rejection: null,
+      submittedAt: 10,
+      lastCheckedAt: 10,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 10,
+    };
+  }
+
+  function gatewayWithStatus(
+    status: (transactionId: string) => Promise<{
+      isAccepted: boolean | null;
+      transactionId: string | null;
+      rejection: string | null;
+      acceptedAt: number | null;
+    }>,
+  ) {
+    return {
+      prepareDeploy: async () => {
+        throw new Error("must not prepare");
+      },
+      submitDeploy: async () => {
+        throw new Error("must not submit");
+      },
+      mint: async () => {
+        throw new Error("must not mint");
+      },
+      transfer: async () => {
+        throw new Error("must not transfer");
+      },
+      submit: async () => {
+        throw new Error("must not submit");
+      },
+      submitMint: async () => {
+        throw new Error("must not submit");
+      },
+      status,
+    };
+  }
+
+  it("confirms an accepted mint and anchors the membership at the funding block time", async () => {
+    const store = new MemoryStore();
+    await store.createMembershipMintAttempt(pendingMint("mint"));
+    const gateway = gatewayWithStatus(async () => ({
+      isAccepted: true,
+      transactionId: "f".repeat(64),
+      rejection: null,
+      acceptedAt: 5_000,
+    }));
+
+    expect(await reconcilePendingMembershipMints(store, gateway, 20)).toBe(1);
+    expect((await store.getMembershipMintAttempt("mint"))?.state).toBe(
+      "CONFIRMED",
+    );
+    const membership = await store.getMembership("mint");
+    expect(membership).toMatchObject({
+      offerId: "offer-1",
+      owner: "buyer",
+      creator: "creator",
+      covenantId: "covenant-1",
+      createdTxId: "f".repeat(64),
+      state: "ACTIVE",
+    });
+    expect(membership?.createdAt).toBe(5_000);
+    expect(membership?.validUntil).toBe(5_000 + 24 * 60 * 60 * 1000);
+  });
+
+  it("marks a rejected pending mint and keeps quiet on undecided transactions", async () => {
+    const store = new MemoryStore();
+    await store.createMembershipMintAttempt(pendingMint("mint-a"));
+    await store.createMembershipMintAttempt({
+      ...pendingMint("mint-b", "buyer-b"),
+      signedTransactionId: "e".repeat(64),
+    });
+    const gateway = gatewayWithStatus(async (transactionId: string) => ({
+      isAccepted: transactionId === "f".repeat(64) ? false : null,
+      transactionId,
+      rejection:
+        transactionId === "f".repeat(64) ? "TRANSACTION_REJECTED" : null,
+      acceptedAt: null,
+    }));
+
+    expect(await reconcilePendingMembershipMints(store, gateway, 30)).toBe(2);
+    expect((await store.getMembershipMintAttempt("mint-a"))?.state).toBe(
+      "REJECTED",
+    );
+    expect((await store.getMembershipMintAttempt("mint-a"))?.rejection).toBe(
+      "TRANSACTION_REJECTED",
+    );
+    expect((await store.getMembershipMintAttempt("mint-b"))?.state).toBe(
+      "PENDING",
+    );
+    expect(
+      (await store.getMembershipMintAttempt("mint-b"))
+        ?.reconciliationAttempts,
+    ).toBe(1);
+    expect(
+      (await store.getMembershipMintAttempt("mint-b"))?.lastCheckedAt,
+    ).toBe(30);
+  });
+
+  it("expires active memberships past their window and leaves others alone", async () => {
+    const store = new MemoryStore();
+    const now = 100_000;
+    await store.createMembershipMintAttempt(pendingMint("mint"));
+    const membership = {
+      id: "mint",
+      offerId: "offer-1",
+      owner: "buyer",
+      creator: "creator",
+      covenantId: "covenant-1",
+      createdTxId: "f".repeat(64),
+      validUntil: 10_000,
+      state: "ACTIVE" as const,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    await store.confirmMembershipMintAttempt(
+      "mint",
+      "PENDING",
+      membership,
+    );
+    await store.createMembershipMintAttempt({
+      ...pendingMint("mint-future"),
+      id: "mint-future",
+      signedTransactionId: "c".repeat(64),
+    });
+    const future = {
+      id: "mint-future",
+      offerId: "offer-1",
+      owner: "buyer",
+      creator: "creator",
+      covenantId: "covenant-1",
+      createdTxId: "c".repeat(64),
+      validUntil: 200_000,
+      state: "ACTIVE" as const,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    await store.confirmMembershipMintAttempt("mint-future", "PENDING", future);
+
+    expect(await expireExpiredMemberships(store, now)).toBe(1);
+    expect((await store.getMembership("mint"))?.state).toBe("EXPIRED");
+    expect((await store.getMembership("mint-future"))?.state).toBe("ACTIVE");
   });
 });
 

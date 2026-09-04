@@ -4,8 +4,10 @@ import { LibsqlStore } from "./libsql-store.js";
 import { R2Storage } from "./r2-storage.js";
 import {
   cleanupExpiredUploads,
+  expireExpiredMemberships,
   processNextUpload,
   reconcilePendingMembershipDeploys,
+  reconcilePendingMembershipMints,
   reconcilePendingPayments,
 } from "./worker.js";
 import { KaspaWalletVerifier } from "./wallet-verifier.js";
@@ -67,5 +69,17 @@ setInterval(() => {
       "membership_deploy_reconciliation_unhandled_error",
       safeError(error),
     ),
+  );
+  void reconcilePendingMembershipMints(
+    store,
+    new KaspaCovenantGateway(environment.KASPA_NODE_URL),
+  ).catch((error) =>
+    logEvent(
+      "membership_mint_reconciliation_unhandled_error",
+      safeError(error),
+    ),
+  );
+  void expireExpiredMemberships(store).catch((error) =>
+    logEvent("membership_expiry_unhandled_error", safeError(error)),
   );
 }, environment.MEDIA_JOB_INTERVAL_MS).unref();

@@ -204,6 +204,27 @@ export interface Store {
     expectedState: MembershipTransferAttemptState,
     membershipUpdate: { transactionId: string; confirmedAt: number },
   ): Promise<MembershipTransferAttempt | null>;
+  createMembershipMintAttempt(attempt: MembershipMintAttempt): Promise<void>;
+  getMembershipMintAttempt(
+    id: string,
+  ): Promise<MembershipMintAttempt | null>;
+  unresolvedMembershipMintAttempt(
+    offerId: string,
+    buyer: string,
+  ): Promise<MembershipMintAttempt | null>;
+  pendingMembershipMintAttempts(): Promise<MembershipMintAttempt[]>;
+  compareAndSetMembershipMintAttempt(
+    id: string,
+    expectedState: MembershipMintAttemptState,
+    update: MembershipMintAttemptUpdate,
+  ): Promise<MembershipMintAttempt | null>;
+  confirmMembershipMintAttempt(
+    id: string,
+    expectedState: MembershipMintAttemptState,
+    membership: Membership,
+  ): Promise<MembershipMintAttempt | null>;
+  offerMemberships(offerId: string, owner: string): Promise<Membership[]>;
+  expireMemberships(now: number): Promise<number>;
 }
 
 export type CommitPublicationResult =
@@ -360,6 +381,7 @@ export interface MembershipTransferSubmission {
   isAccepted: boolean | null;
   transactionId: string | null;
   rejection: string | null;
+  acceptedAt: number | null;
 }
 
 export interface MembershipDeploySubmission {
@@ -391,12 +413,54 @@ export interface CovenantGateway {
     prepared: PreparedMembershipTransfer,
     signedTransaction: string,
   ): Promise<MembershipTransferSubmission>;
+  submitMint(
+    prepared: PreparedMembershipTransfer,
+    signedTransaction: string,
+  ): Promise<MembershipTransferSubmission>;
   status(transactionId: string): Promise<MembershipTransferSubmission>;
 }
 
 export type MembershipTransferAttemptUpdate = Partial<
   Pick<
     MembershipTransferAttempt,
+    | "signedTransactionId"
+    | "state"
+    | "rejection"
+    | "submittedAt"
+    | "lastCheckedAt"
+    | "reconciliationAttempts"
+    | "updatedAt"
+  >
+>;
+
+export type MembershipMintAttemptState =
+  | "PREPARED"
+  | "PENDING"
+  | "CONFIRMED"
+  | "REJECTED";
+
+export interface MembershipMintAttempt {
+  id: string;
+  offerId: string;
+  buyer: string;
+  creator: string;
+  covenantId: string;
+  priceSompi: string;
+  preparedTransaction: string;
+  fingerprint: string;
+  signedTransactionId: string | null;
+  state: MembershipMintAttemptState;
+  rejection: string | null;
+  submittedAt: number | null;
+  lastCheckedAt: number | null;
+  reconciliationAttempts: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type MembershipMintAttemptUpdate = Partial<
+  Pick<
+    MembershipMintAttempt,
     | "signedTransactionId"
     | "state"
     | "rejection"

@@ -3,6 +3,9 @@ import type {
   Challenge,
   Membership,
   MembershipCovenant,
+  MembershipMintAttempt,
+  MembershipMintAttemptState,
+  MembershipMintAttemptUpdate,
   MembershipOffer,
   MembershipOfferDeploy,
   MembershipOfferDeployState,
@@ -53,6 +56,9 @@ export class LibsqlStore implements Store {
         `CREATE INDEX IF NOT EXISTS memberships_owner ON memberships (owner, state)`,
         `CREATE INDEX IF NOT EXISTS memberships_offer ON memberships (offer_id, state)`,
         `CREATE TABLE IF NOT EXISTS membership_transfer_attempts (id TEXT PRIMARY KEY, membership_id TEXT NOT NULL REFERENCES memberships(id), seller TEXT NOT NULL, buyer TEXT NOT NULL, sale_amount_sompi TEXT NOT NULL, creator_royalty_sompi TEXT NOT NULL, creator_payout_address TEXT NOT NULL, prepared_transaction TEXT NOT NULL, fingerprint TEXT NOT NULL, signed_transaction_id TEXT, state TEXT NOT NULL, rejection TEXT, submitted_at INTEGER, last_checked_at INTEGER, reconciliation_attempts INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+        `CREATE TABLE IF NOT EXISTS membership_mint_attempts (id TEXT PRIMARY KEY, offer_id TEXT NOT NULL REFERENCES membership_offers(id), buyer TEXT NOT NULL, creator TEXT NOT NULL, covenant_id TEXT NOT NULL, price_sompi TEXT NOT NULL, prepared_transaction TEXT NOT NULL, fingerprint TEXT NOT NULL, signed_transaction_id TEXT, state TEXT NOT NULL, rejection TEXT, submitted_at INTEGER, last_checked_at INTEGER, reconciliation_attempts INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+        `CREATE UNIQUE INDEX IF NOT EXISTS membership_mint_attempts_open ON membership_mint_attempts(offer_id, buyer) WHERE state IN ('PREPARED','PENDING')`,
+        `CREATE INDEX IF NOT EXISTS membership_mint_attempts_pending ON membership_mint_attempts (state, updated_at)`,
       ],
       "write",
     );
@@ -707,6 +713,157 @@ export class LibsqlStore implements Store {
       return null;
     }
   }
+  async createMembershipMintAttempt(
+    attempt: MembershipMintAttempt,
+  ): Promise<void> {
+    try {
+      await this.client.execute({
+        sql: `INSERT INTO membership_mint_attempts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          attempt.id,
+          attempt.offerId,
+          attempt.buyer,
+          attempt.creator,
+          attempt.covenantId,
+          attempt.priceSompi,
+          attempt.preparedTransaction,
+          attempt.fingerprint,
+          attempt.signedTransactionId,
+          attempt.state,
+          attempt.rejection,
+          attempt.submittedAt,
+          attempt.lastCheckedAt,
+          attempt.reconciliationAttempts,
+          attempt.createdAt,
+          attempt.updatedAt,
+        ],
+      });
+    } catch {
+      // An open mint already exists for this offer and buyer; callers fall
+      // back to the unresolved record instead of overlapping one.
+    }
+  }
+  async getMembershipMintAttempt(
+    id: string,
+  ): Promise<MembershipMintAttempt | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_mint_attempts WHERE id=?`,
+      args: [id],
+    });
+    return result.rows[0]
+      ? membershipMintAttemptFromRow(result.rows[0])
+      : null;
+  }
+  async unresolvedMembershipMintAttempt(
+    offerId: string,
+    buyer: string,
+  ): Promise<MembershipMintAttempt | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_mint_attempts WHERE offer_id=? AND buyer=? AND state IN ('PREPARED','PENDING') ORDER BY created_at DESC LIMIT 1`,
+      args: [offerId, buyer],
+    });
+    return result.rows[0]
+      ? membershipMintAttemptFromRow(result.rows[0])
+      : null;
+  }
+  async pendingMembershipMintAttempts(): Promise<MembershipMintAttempt[]> {
+    const result = await this.client.execute(
+      `SELECT * FROM membership_mint_attempts WHERE state='PENDING' ORDER BY updated_at`,
+    );
+    return result.rows.map(membershipMintAttemptFromRow);
+  }
+  async compareAndSetMembershipMintAttempt(
+    id: string,
+    expectedState: MembershipMintAttemptState,
+    update: MembershipMintAttemptUpdate,
+  ): Promise<MembershipMintAttempt | null> {
+    const fields = Object.keys(
+      update,
+    ) as (keyof MembershipMintAttemptUpdate)[];
+    if (!fields.length) return this.getMembershipMintAttempt(id);
+    const names: Record<string, string> = {
+      signedTransactionId: "signed_transaction_id",
+      state: "state",
+      rejection: "rejection",
+      submittedAt: "submitted_at",
+      lastCheckedAt: "last_checked_at",
+      reconciliationAttempts: "reconciliation_attempts",
+      updatedAt: "updated_at",
+    };
+    const values = fields.map((field) => update[field]);
+    const result = await this.client.execute({
+      sql: `UPDATE membership_mint_attempts SET ${fields.map((field) => `${names[field]}=?`).join(",")} WHERE id=? AND state=?`,
+      args: [...values, id, expectedState] as InValue[],
+    });
+    return result.rowsAffected ? this.getMembershipMintAttempt(id) : null;
+  }
+  async confirmMembershipMintAttempt(
+    id: string,
+    expectedState: MembershipMintAttemptState,
+    membership: Membership,
+  ): Promise<MembershipMintAttempt | null> {
+    const current = await this.getMembershipMintAttempt(id);
+    if (!current || current.state !== expectedState) return null;
+    if (
+      current.offerId !== membership.offerId ||
+      current.buyer !== membership.owner
+    )
+      return null;
+    try {
+      const results = await this.client.batch(
+        [
+          {
+            sql: `UPDATE membership_mint_attempts SET state='CONFIRMED', signed_transaction_id=COALESCE(signed_transaction_id, ?), submitted_at=COALESCE(submitted_at, ?), last_checked_at=CASE WHEN state='PENDING' THEN ? ELSE last_checked_at END, reconciliation_attempts=reconciliation_attempts + CASE WHEN state='PENDING' THEN 1 ELSE 0 END, updated_at=? WHERE id=? AND state=?`,
+            args: [
+              membership.createdTxId,
+              membership.createdAt,
+              membership.createdAt,
+              membership.createdAt,
+              id,
+              expectedState,
+            ],
+          },
+          {
+            sql: `INSERT OR IGNORE INTO memberships VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [
+              membership.id,
+              membership.offerId,
+              membership.owner,
+              membership.creator,
+              membership.covenantId,
+              membership.createdTxId,
+              membership.validUntil,
+              membership.state,
+              membership.createdAt,
+              membership.updatedAt,
+            ],
+          },
+        ],
+        "write",
+      );
+      if (!results[0] || !results[0].rowsAffected) return null;
+      return this.getMembershipMintAttempt(id);
+    } catch {
+      return null;
+    }
+  }
+  async offerMemberships(
+    offerId: string,
+    owner: string,
+  ): Promise<Membership[]> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM memberships WHERE offer_id=? AND owner=? ORDER BY created_at DESC`,
+      args: [offerId, owner],
+    });
+    return result.rows.map(membershipFromRow);
+  }
+  async expireMemberships(now: number): Promise<number> {
+    const result = await this.client.execute({
+      sql: `UPDATE memberships SET state='EXPIRED', updated_at=? WHERE state='ACTIVE' AND valid_until <= ?`,
+      args: [now, now],
+    });
+    return result.rowsAffected;
+  }
 }
 
 function uploadInsert(upload: Upload): { sql: string; args: InValue[] } {
@@ -894,6 +1051,28 @@ function membershipTransferAttemptFromRow(
     fingerprint: text(row.fingerprint),
     signedTransactionId: nullableText(row.signed_transaction_id),
     state: text(row.state) as MembershipTransferAttempt["state"],
+    rejection: nullableText(row.rejection),
+    submittedAt: nullableNumber(row.submitted_at),
+    lastCheckedAt: nullableNumber(row.last_checked_at),
+    reconciliationAttempts: number(row.reconciliation_attempts),
+    createdAt: number(row.created_at),
+    updatedAt: number(row.updated_at),
+  };
+}
+function membershipMintAttemptFromRow(
+  row: Record<string, unknown>,
+): MembershipMintAttempt {
+  return {
+    id: text(row.id),
+    offerId: text(row.offer_id),
+    buyer: text(row.buyer),
+    creator: text(row.creator),
+    covenantId: text(row.covenant_id),
+    priceSompi: text(row.price_sompi),
+    preparedTransaction: text(row.prepared_transaction),
+    fingerprint: text(row.fingerprint),
+    signedTransactionId: nullableText(row.signed_transaction_id),
+    state: text(row.state) as MembershipMintAttempt["state"],
     rejection: nullableText(row.rejection),
     submittedAt: nullableNumber(row.submitted_at),
     lastCheckedAt: nullableNumber(row.last_checked_at),

@@ -65,6 +65,22 @@ export const COPY = {
     "Once the offer is live, its price and description cannot be changed.",
   membershipUnavailable:
     "Membership offers are temporarily unavailable. Try again.",
+  becomeMemberFor: "Become a member for {price}",
+  renewMembershipFor: "Renew for {price}",
+  membershipPrompt:
+    "Support this creator with {price} KAS and get one day of access. Kasware will show the network fee before you approve. This payment cannot be reversed.",
+  membershipSigning: "Waiting for your signature...",
+  membershipConfirming: "Confirming your membership...",
+  membershipPending: "Membership pending. Do not pay again.",
+  membershipLive: "You're a member.",
+  membershipExpired: "Your membership has expired.",
+  membershipRejected:
+    "Transaction rejected. No membership was granted. Try again.",
+  membershipNoOffer: "No membership offer from this creator yet.",
+  membershipActiveUntil: "Active until {date}.",
+  membershipExpiredOn: "Expired {date}.",
+  membershipPriceMismatch:
+    "The prepared payment does not match the offer price. Try again.",
 } as const;
 
 export const MEDIA_TYPES = [
@@ -169,6 +185,43 @@ export interface MembershipDeployResponse {
   transactionId: string | null;
   rejection: string | null;
   offer: MembershipOfferResponse | null;
+}
+
+export type MembershipState = "ACTIVE" | "EXPIRED" | "TRANSFERRED";
+
+export interface MembershipResponse {
+  id: string;
+  offerId: string;
+  owner: string;
+  creator: string;
+  covenantId: string;
+  createdTxId: string | null;
+  createdAt: string;
+  validUntil: string;
+  state: MembershipState;
+}
+
+export type MembershipMintAttemptState =
+  | "PREPARED"
+  | "PENDING"
+  | "CONFIRMED"
+  | "REJECTED";
+
+export interface MembershipMintAttemptResponse {
+  id: string;
+  offerId: string;
+  creator: string;
+  covenantId: string;
+  priceSompi: string;
+  state: MembershipMintAttemptState;
+  transaction?: string;
+  fingerprint?: string;
+  transactionId: string | null;
+  rejection: string | null;
+  submittedAt: number | null;
+  lastCheckedAt: number | null;
+  reconciliationAttempts: number;
+  membership: MembershipResponse | null;
 }
 
 export function createChallengeMessage(

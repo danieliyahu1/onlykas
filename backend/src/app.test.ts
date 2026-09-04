@@ -6,7 +6,10 @@ import type { CovenantGateway, PaymentGateway, Post, Upload } from "./domain.js"
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
 import { TestStorage } from "./test-storage.js";
-import { processNextUpload } from "./worker.js";
+import {
+  processNextUpload,
+  reconcilePendingMembershipMints,
+} from "./worker.js";
 
 const origin = "https://onlykas.test";
 const creator = `kaspatest:${"q".repeat(60)}`;
@@ -360,10 +363,14 @@ describe("membership offer deployment API", () => {
       submit: async () => {
         throw new Error("unused");
       },
+      submitMint: async () => {
+        throw new Error("unused");
+      },
       status: async (transactionId: string) => ({
         isAccepted: true,
         transactionId,
         rejection: null,
+        acceptedAt: null,
       }),
     };
   }
@@ -524,6 +531,299 @@ describe("membership offer deployment API", () => {
       .expect(422);
     expect(unfunded.body.error).toBe("INSUFFICIENT_FUNDS");
     expect(unfunded.body.message).toBe(COPY.insufficientFunds);
+  });
+});
+
+describe("membership minting API", () => {
+  const supporter = `kaspatest:${"s".repeat(60)}`;
+
+  function mintPrepared(offer: { priceSompi: string; creator: string }, buyer: string) {
+    return {
+      transaction: JSON.stringify({
+        id: "0".repeat(64),
+        version: 0,
+        inputs: [],
+        outputs: [
+          {
+            value: "1",
+            scriptPublicKey: "000020" + "c".repeat(64) + "ac",
+            covenant: {
+              type: "KCC-0020",
+              payload: JSON.stringify({ type: "MINT" }),
+            },
+          },
+        ],
+        subnetworkId: "0".repeat(40),
+        lockTime: "0",
+        gas: "0",
+        storageMass: "20000",
+        payload: "",
+      }),
+      fingerprint: "fingerprint",
+      saleAmountSompi: offer.priceSompi,
+      creatorRoyaltySompi: offer.priceSompi,
+      seller: offer.creator,
+      buyer,
+    };
+  }
+
+  function mintingGateway(
+    overrides: Partial<CovenantGateway> = {},
+  ): CovenantGateway {
+    return {
+      prepareDeploy: async () => {
+        throw new Error("unused");
+      },
+      submitDeploy: async () => {
+        throw new Error("unused");
+      },
+      mint: async (offer, buyer) => mintPrepared(offer, buyer),
+      transfer: async () => {
+        throw new Error("unused");
+      },
+      submit: async () => {
+        throw new Error("unused");
+      },
+      submitMint: async () => ({
+        isAccepted: true,
+        transactionId: "d".repeat(64),
+        rejection: null,
+        acceptedAt: null,
+      }),
+      status: async (transactionId: string) => ({
+        isAccepted: true,
+        transactionId,
+        rejection: null,
+        acceptedAt: null,
+      }),
+      ...overrides,
+    };
+  }
+
+  async function seedLiveOffer(store: MemoryStore) {
+    await store.saveCovenant({
+      id: "covenant-1",
+      templateJson: '{"type":"KCC-0020","amount":1}',
+      templateFingerprint: "a".repeat(64),
+      amount: "1",
+      durationMs: 86400_000,
+      creatorRoyaltyBps: 1000,
+      createdAt: 1,
+    });
+    await store.createMembershipOffer({
+      id: "offer-1",
+      creator,
+      covenantId: "covenant-1",
+      priceSompi: "100",
+      description: "A day of access",
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+  }
+
+  it("proposes, finalizes, and serves the live membership with recovery and the public offer", async () => {
+    const store = new MemoryStore();
+    await seedLiveOffer(store);
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: mintingGateway(),
+    });
+    const supporterAgent = request.agent(app);
+    await authenticate(supporterAgent, supporter);
+
+    const proposed = await supporterAgent
+      .post("/api/membership/offers/offer-1/mints/propose")
+      .expect(201);
+    expect(proposed.body).toMatchObject({
+      state: "PREPARED",
+      offerId: "offer-1",
+      priceSompi: "100",
+      transaction: expect.any(String),
+      fingerprint: expect.any(String),
+      membership: null,
+    });
+
+    const finalized = await supporterAgent
+      .post(`/api/membership/mints/${proposed.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(200);
+    expect(finalized.body).toMatchObject({
+      state: "CONFIRMED",
+      offerId: "offer-1",
+      transactionId: "d".repeat(64),
+      membership: {
+        id: proposed.body.id,
+        owner: supporter,
+        creator,
+        state: "ACTIVE",
+      },
+    });
+    expect(finalized.body.message).toBe(COPY.membershipLive);
+
+    const recovered = await supporterAgent
+      .get(`/api/membership/mints/${proposed.body.id}`)
+      .expect(200);
+    expect(recovered.body.state).toBe("CONFIRMED");
+    expect(recovered.body.membership.state).toBe("ACTIVE");
+    expect(
+      new Date(recovered.body.membership.validUntil).getTime() -
+        new Date(recovered.body.membership.createdAt).getTime(),
+    ).toBe(86400_000);
+
+    const memberships = await supporterAgent
+      .get("/api/membership/offers/offer-1/memberships")
+      .expect(200);
+    expect(memberships.body.memberships).toHaveLength(1);
+
+    const publicOffer = await request(app)
+      .get(`/api/membership/offers/${creator}`)
+      .expect(200);
+    expect(publicOffer.body.offer).toMatchObject({
+      id: "offer-1",
+      creator,
+      priceSompi: "100",
+    });
+  });
+
+  it("leaves an undecided transaction pending until the worker confirms it", async () => {
+    const store = new MemoryStore();
+    await seedLiveOffer(store);
+    const gateway = mintingGateway({
+      submitMint: async () => ({
+        isAccepted: null,
+        transactionId: "e".repeat(64),
+        rejection: null,
+        acceptedAt: null,
+      }),
+      status: async (transactionId: string) => ({
+        isAccepted: true,
+        transactionId,
+        rejection: null,
+        acceptedAt: 5_000,
+      }),
+    });
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: gateway,
+    });
+    const supporterAgent = request.agent(app);
+    await authenticate(supporterAgent, supporter);
+
+    const proposed = await supporterAgent
+      .post("/api/membership/offers/offer-1/mints/propose")
+      .expect(201);
+    const pending = await supporterAgent
+      .post(`/api/membership/mints/${proposed.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(202);
+    expect(pending.body).toMatchObject({
+      state: "PENDING",
+      transactionId: "e".repeat(64),
+      membership: null,
+    });
+    expect(pending.body.message).toBe(COPY.membershipPending);
+
+    const stillPending = await supporterAgent
+      .post("/api/membership/offers/offer-1/mints/propose")
+      .expect(409);
+    expect(stillPending.body.message).toBe(COPY.membershipPending);
+
+    expect(
+      await reconcilePendingMembershipMints(store, gateway, 20),
+    ).toBe(1);
+    const confirmed = await supporterAgent
+      .get(`/api/membership/mints/${proposed.body.id}`)
+      .expect(200);
+    expect(confirmed.body.state).toBe("CONFIRMED");
+    expect(confirmed.body.membership).toMatchObject({
+      id: proposed.body.id,
+      owner: supporter,
+      state: "ACTIVE",
+    });
+    expect(
+      new Date(confirmed.body.membership.createdAt).getTime(),
+    ).toBe(5_000);
+  });
+
+  it("starts a fresh mint when renewing after a confirmed membership", async () => {
+    const store = new MemoryStore();
+    await seedLiveOffer(store);
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: mintingGateway(),
+    });
+    const supporterAgent = request.agent(app);
+    await authenticate(supporterAgent, supporter);
+
+    const first = await supporterAgent
+      .post("/api/membership/offers/offer-1/mints/propose")
+      .expect(201);
+    await supporterAgent
+      .post(`/api/membership/mints/${first.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(200);
+    const second = await supporterAgent
+      .post("/api/membership/offers/offer-1/mints/propose")
+      .expect(201);
+    expect(second.body.id).not.toBe(first.body.id);
+    expect(second.body.state).toBe("PREPARED");
+  });
+
+  it("rejects a prepared mint whose funded price does not match the offer", async () => {
+    const store = new MemoryStore();
+    await seedLiveOffer(store);
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: mintingGateway({
+        mint: async (offer, buyer) => ({
+          ...mintPrepared(offer, buyer),
+          saleAmountSompi: "200",
+        }),
+      }),
+    });
+    const supporterAgent = request.agent(app);
+    await authenticate(supporterAgent, supporter);
+
+    const mismatch = await supporterAgent
+      .post("/api/membership/offers/offer-1/mints/propose")
+      .expect(400);
+    expect(mismatch.body.error).toBe("MINT_PRICE_MISMATCH");
+    expect(mismatch.body.message).toBe(COPY.membershipPriceMismatch);
+    expect(
+      await store.unresolvedMembershipMintAttempt("offer-1", supporter),
+    ).toBeNull();
+  });
+
+  it("is unavailable without a covenant gateway", async () => {
+    const store = new MemoryStore();
+    await seedLiveOffer(store);
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+    });
+    const supporterAgent = request.agent(app);
+    await authenticate(supporterAgent, supporter);
+
+    const propose = await supporterAgent
+      .post("/api/membership/offers/offer-1/mints/propose")
+      .expect(503);
+    expect(propose.body.error).toBe("MEMBERSHIP_UNAVAILABLE");
+    expect(propose.body.message).toBe(COPY.membershipUnavailable);
   });
 });
 

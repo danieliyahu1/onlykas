@@ -345,11 +345,18 @@ export class KaspaCovenantGateway implements CovenantGateway {
     return this.submitCommon(prepared, signedTransaction, true);
   }
 
+  async submitMint(
+    prepared: PreparedMembershipTransfer,
+    signedTransaction: string,
+  ): Promise<MembershipTransferSubmission> {
+    return this.submitCommon(prepared, signedTransaction, false);
+  }
+
   private async submitCommon(
     prepared: PreparedMembershipTransfer | PreparedMembershipDeploy,
     signedTransaction: string,
     verifySplit: boolean,
-  ): Promise<MembershipTransferSubmission | MembershipDeploySubmission> {
+  ): Promise<MembershipTransferSubmission> {
     let transaction: unknown;
     try {
       transaction = JSON.parse(signedTransaction);
@@ -358,6 +365,7 @@ export class KaspaCovenantGateway implements CovenantGateway {
         isAccepted: false,
         transactionId: null,
         rejection: "INVALID_TRANSACTION",
+        acceptedAt: null,
       };
     }
     const original = JSON.parse(prepared.transaction) as Record<
@@ -370,24 +378,28 @@ export class KaspaCovenantGateway implements CovenantGateway {
         isAccepted: false,
         transactionId: null,
         rejection: "INVALID_TRANSACTION",
+        acceptedAt: null,
       };
     if (digest(prepared.transaction) !== prepared.fingerprint)
       return {
         isAccepted: false,
         transactionId: null,
         rejection: "INVALID_PREPARED_TEMPLATE",
+        acceptedAt: null,
       };
     if (!sameTransaction(original, signed))
       return {
         isAccepted: false,
         transactionId: null,
         rejection: "PREPARED_TRANSACTION_CHANGED",
+        acceptedAt: null,
       };
     if (!hasAllSignatures(signed))
       return {
         isAccepted: false,
         transactionId: null,
         rejection: "INVALID_SIGNATURES",
+        acceptedAt: null,
       };
     if (verifySplit && "saleAmountSompi" in prepared) {
       const outputs = signed.outputs as Record<string, unknown>[];
@@ -406,6 +418,7 @@ export class KaspaCovenantGateway implements CovenantGateway {
           isAccepted: false,
           transactionId: null,
           rejection: "ROYALTY_SPLIT_VIOLATION",
+          acceptedAt: null,
         };
     }
     await validateAuthoritativeInputs(signed, (path, init) =>
@@ -431,7 +444,7 @@ export class KaspaCovenantGateway implements CovenantGateway {
       try {
         return await this.status(transactionId);
       } catch {
-        return { isAccepted: null, transactionId, rejection: null };
+        return { isAccepted: null, transactionId, rejection: null, acceptedAt: null };
       }
     }
     if (result.error || !result.transactionId)
@@ -439,6 +452,7 @@ export class KaspaCovenantGateway implements CovenantGateway {
         isAccepted: false,
         transactionId: result.transactionId ?? null,
         rejection: result.error ?? "TRANSACTION_REJECTED",
+        acceptedAt: null,
       };
     try {
       return await this.status(result.transactionId);
@@ -447,18 +461,21 @@ export class KaspaCovenantGateway implements CovenantGateway {
         isAccepted: null,
         transactionId: result.transactionId,
         rejection: null,
+        acceptedAt: null,
       };
     }
   }
 
   async status(transactionId: string): Promise<MembershipTransferSubmission> {
-    const status = await this.request<{ is_accepted: boolean }>(
-      `/transactions/${transactionId}`,
-    );
+    const status = await this.request<{
+      is_accepted: boolean;
+      block_time?: number;
+    }>(`/transactions/${transactionId}`);
     return {
       isAccepted: status.is_accepted ? true : null,
       transactionId,
       rejection: null,
+      acceptedAt: blockTimeToMs(status.block_time),
     };
   }
 
@@ -514,6 +531,11 @@ function scriptFor(address: string): string {
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function blockTimeToMs(blockTime: number | undefined): number | null {
+  if (!blockTime || blockTime <= 0) return null;
+  return blockTime < 10 ** 12 ? blockTime * 1000 : blockTime;
 }
 
 function estimatedFee(inputCount: number, rate: number): bigint {

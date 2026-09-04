@@ -3,6 +3,7 @@ import { MemoryStore } from "./memory-store.js";
 import type {
   Membership,
   MembershipCovenant,
+  MembershipMintAttempt,
   MembershipOffer,
   MembershipTransferAttempt,
   Store,
@@ -129,6 +130,188 @@ describe.each([
     expect(pending).toHaveLength(1);
     expect(pending[0]!.id).toBe("a");
   });
+
+  it("round-trips a membership mint attempt", async () => {
+    await seedOffer(store);
+    const attempt = testMintAttempt();
+    await store.createMembershipMintAttempt(attempt);
+    expect(await store.getMembershipMintAttempt(attempt.id)).toEqual(attempt);
+    expect(
+      (await store.unresolvedMembershipMintAttempt("offer-test", "buyer"))
+        ?.id,
+    ).toBe(attempt.id);
+  });
+
+  it("allows a renewal once the previous attempt is resolved", async () => {
+    await seedOffer(store);
+    const first = testMintAttempt({ id: "mint-1" });
+    await store.createMembershipMintAttempt(first);
+    expect(
+      await store.unresolvedMembershipMintAttempt("offer-test", "buyer"),
+    ).toMatchObject({ id: "mint-1" });
+    await store.compareAndSetMembershipMintAttempt(first.id, "PREPARED", {
+      state: "REJECTED",
+      rejection: "STALE_PREPARATION",
+      updatedAt: 2,
+    });
+    expect(
+      await store.unresolvedMembershipMintAttempt("offer-test", "buyer"),
+    ).toBeNull();
+    const second = testMintAttempt({ id: "mint-2" });
+    await store.createMembershipMintAttempt(second);
+    expect(
+      (await store.unresolvedMembershipMintAttempt("offer-test", "buyer"))
+        ?.id,
+    ).toBe("mint-2");
+  });
+
+  it("does not create an overlapping open mint for the same offer and buyer", async () => {
+    await seedOffer(store);
+    const first = testMintAttempt({ id: "mint-1" });
+    await store.createMembershipMintAttempt(first);
+    await store.createMembershipMintAttempt(
+      testMintAttempt({ id: "mint-2" }),
+    );
+    const open = await store.unresolvedMembershipMintAttempt(
+      "offer-test",
+      "buyer",
+    );
+    expect(open!.id).toBe("mint-1");
+  });
+
+  it("pendingMembershipMintAttempts returns only PENDING", async () => {
+    await seedOffer(store);
+    await store.createMembershipMintAttempt(
+      testMintAttempt({ id: "a", state: "PENDING" }),
+    );
+    await store.createMembershipMintAttempt(
+      testMintAttempt({ id: "b", state: "PREPARED" }),
+    );
+    await store.createMembershipMintAttempt(
+      testMintAttempt({ id: "c", state: "CONFIRMED" }),
+    );
+    const pending = await store.pendingMembershipMintAttempts();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.id).toBe("a");
+  });
+
+  it("compareAndSet on a mint attempt rejects a wrong expected state", async () => {
+    await seedOffer(store);
+    const attempt = testMintAttempt();
+    await store.createMembershipMintAttempt(attempt);
+    expect(
+      await store.compareAndSetMembershipMintAttempt(attempt.id, "PENDING", {
+        state: "REJECTED",
+        updatedAt: 2,
+      }),
+    ).toBeNull();
+  });
+
+  it("confirming a mint attempt records the membership without extending an existing one", async () => {
+    await seedOffer(store);
+    const prior = testMembership({
+      id: "mem-prior",
+      owner: "buyer",
+      validUntil: 5000,
+    });
+    await store.createMembership(prior);
+    const attempt = testMintAttempt({
+      id: "mint-1",
+      signedTransactionId: "tx-mint",
+      state: "PREPARED",
+    });
+    await store.createMembershipMintAttempt(attempt);
+    const membership = testMembership({
+      id: "mint-1",
+      offerId: "offer-test",
+      owner: "buyer",
+      creator: "creator",
+      covenantId: "covenant-test",
+      createdTxId: "tx-mint",
+      validUntil: 1000 + 86400_000,
+      createdAt: 1000,
+    });
+    const confirmed = await store.confirmMembershipMintAttempt(
+      "mint-1",
+      "PREPARED",
+      membership,
+    );
+    expect(confirmed).toMatchObject({
+      state: "CONFIRMED",
+      signedTransactionId: "tx-mint",
+    });
+    const minted = await store.getMembership("mint-1");
+    expect(minted).toMatchObject({
+      owner: "buyer",
+      creator: "creator",
+      validUntil: 1000 + 86400_000,
+      state: "ACTIVE",
+    });
+    const stillPrior = await store.getMembership("mem-prior");
+    expect(stillPrior!.validUntil).toBe(5000);
+  });
+
+  it("confirming a mint attempt skips a membership mismatch", async () => {
+    await seedOffer(store);
+    const attempt = testMintAttempt({ id: "mint-1" });
+    await store.createMembershipMintAttempt(attempt);
+    const mismatch = testMembership({
+      id: "mint-1",
+      owner: "someone-else",
+    });
+    expect(
+      await store.confirmMembershipMintAttempt("mint-1", "PREPARED", mismatch),
+    ).toBeNull();
+    expect((await store.getMembershipMintAttempt("mint-1"))?.state).toBe(
+      "PREPARED",
+    );
+  });
+
+  it("offerMemberships lists the owner's memberships newest first", async () => {
+    await seedOffer(store);
+    await store.createMembershipMintAttempt(
+      testMintAttempt({ id: "mint-1", state: "CONFIRMED" }),
+    );
+    await store.createMembershipMintAttempt(
+      testMintAttempt({ id: "mint-2", state: "CONFIRMED" }),
+    );
+    await store.confirmMembershipMintAttempt(
+      "mint-1",
+      "CONFIRMED",
+      testMembership({
+        id: "mint-1",
+        owner: "buyer",
+        createdAt: 1000,
+        validUntil: 5000,
+      }),
+    );
+    await store.confirmMembershipMintAttempt(
+      "mint-2",
+      "CONFIRMED",
+      testMembership({
+        id: "mint-2",
+        owner: "buyer",
+        createdAt: 2000,
+        validUntil: 6000,
+      }),
+    );
+    const list = await store.offerMemberships("offer-test", "buyer");
+    expect(list.map((membership) => membership.id)).toEqual([
+      "mint-2",
+      "mint-1",
+    ]);
+  });
+
+  it("expireMemberships transitions only ACTIVE memberships past their window", async () => {
+    await seedOffer(store);
+    await store.createMembership(testMembership({ validUntil: 500 }));
+    await store.createMembership(
+      testMembership({ id: "mem-2", validUntil: 9000 }),
+    );
+    expect(await store.expireMemberships(1000)).toBe(1);
+    expect((await store.getMembership("mem-test"))?.state).toBe("EXPIRED");
+    expect((await store.getMembership("mem-2"))?.state).toBe("ACTIVE");
+  });
 });
 
 async function seedOffer(store: Store): Promise<void> {
@@ -196,6 +379,30 @@ function testTransferAttempt(
     saleAmountSompi: "1000",
     creatorRoyaltySompi: "100",
     creatorPayoutAddress: "creator",
+    preparedTransaction: "{}",
+    fingerprint: "fingerprint",
+    signedTransactionId: null,
+    state: "PREPARED",
+    rejection: null,
+    submittedAt: null,
+    lastCheckedAt: null,
+    reconciliationAttempts: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
+function testMintAttempt(
+  overrides: Partial<MembershipMintAttempt> = {},
+): MembershipMintAttempt {
+  return {
+    id: "mint-test",
+    offerId: "offer-test",
+    buyer: "buyer",
+    creator: "creator",
+    covenantId: "covenant-test",
+    priceSompi: "100",
     preparedTransaction: "{}",
     fingerprint: "fingerprint",
     signedTransactionId: null,

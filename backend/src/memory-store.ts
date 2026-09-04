@@ -2,6 +2,9 @@ import type {
   Challenge,
   Membership,
   MembershipCovenant,
+  MembershipMintAttempt,
+  MembershipMintAttemptState,
+  MembershipMintAttemptUpdate,
   MembershipOffer,
   MembershipOfferDeploy,
   MembershipOfferDeployState,
@@ -39,6 +42,7 @@ export class MemoryStore implements Store {
     string,
     MembershipTransferAttempt
   >();
+  readonly membershipMintAttempts = new Map<string, MembershipMintAttempt>();
 
   async initialize(): Promise<void> {}
   async createChallenge(challenge: Challenge): Promise<void> {
@@ -417,5 +421,105 @@ export class MemoryStore implements Store {
       membership.updatedAt = membershipUpdate.confirmedAt;
     }
     return structuredClone(confirmed);
+  }
+  async createMembershipMintAttempt(
+    attempt: MembershipMintAttempt,
+  ): Promise<void> {
+    if (this.unresolvedOpenMint(attempt.offerId, attempt.buyer)) return;
+    this.membershipMintAttempts.set(attempt.id, structuredClone(attempt));
+  }
+  async getMembershipMintAttempt(
+    id: string,
+  ): Promise<MembershipMintAttempt | null> {
+    const attempt = this.membershipMintAttempts.get(id);
+    return attempt ? structuredClone(attempt) : null;
+  }
+  async unresolvedMembershipMintAttempt(
+    offerId: string,
+    buyer: string,
+  ): Promise<MembershipMintAttempt | null> {
+    const attempt = this.unresolvedOpenMint(offerId, buyer);
+    return attempt ? structuredClone(attempt) : null;
+  }
+  private unresolvedOpenMint(
+    offerId: string,
+    buyer: string,
+  ): MembershipMintAttempt | null {
+    return (
+      [...this.membershipMintAttempts.values()].find(
+        (attempt) =>
+          attempt.offerId === offerId &&
+          attempt.buyer === buyer &&
+          (attempt.state === "PREPARED" || attempt.state === "PENDING"),
+      ) ?? null
+    );
+  }
+  async pendingMembershipMintAttempts(): Promise<MembershipMintAttempt[]> {
+    return [...this.membershipMintAttempts.values()]
+      .filter((attempt) => attempt.state === "PENDING")
+      .map((attempt) => structuredClone(attempt));
+  }
+  async compareAndSetMembershipMintAttempt(
+    id: string,
+    expectedState: MembershipMintAttemptState,
+    update: MembershipMintAttemptUpdate,
+  ): Promise<MembershipMintAttempt | null> {
+    const current = this.membershipMintAttempts.get(id);
+    if (!current || current.state !== expectedState) return null;
+    const updated = { ...current, ...update };
+    this.membershipMintAttempts.set(id, structuredClone(updated));
+    return structuredClone(updated);
+  }
+  async confirmMembershipMintAttempt(
+    id: string,
+    expectedState: MembershipMintAttemptState,
+    membership: Membership,
+  ): Promise<MembershipMintAttempt | null> {
+    const attempt = this.membershipMintAttempts.get(id);
+    if (!attempt || attempt.state !== expectedState) return null;
+    if (
+      attempt.offerId !== membership.offerId ||
+      attempt.buyer !== membership.owner
+    )
+      return null;
+    const confirmed = {
+      ...attempt,
+      signedTransactionId: attempt.signedTransactionId ?? membership.createdTxId,
+      submittedAt: attempt.submittedAt ?? membership.createdAt,
+      lastCheckedAt:
+        expectedState === "PENDING"
+          ? membership.createdAt
+          : attempt.lastCheckedAt,
+      reconciliationAttempts:
+        attempt.reconciliationAttempts + (expectedState === "PENDING" ? 1 : 0),
+      state: "CONFIRMED" as const,
+    };
+    this.membershipMintAttempts.set(id, structuredClone(confirmed));
+    if (!this.memberships.has(membership.id))
+      this.memberships.set(membership.id, structuredClone(membership));
+    return structuredClone(confirmed);
+  }
+  async offerMemberships(
+    offerId: string,
+    owner: string,
+  ): Promise<Membership[]> {
+    return [...this.memberships.values()]
+      .filter(
+        (membership) =>
+          membership.offerId === offerId && membership.owner === owner,
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((membership) => structuredClone(membership));
+  }
+  async expireMemberships(now: number): Promise<number> {
+    let expired = 0;
+    for (const membership of this.memberships.values()) {
+      if (membership.state === "ACTIVE" && membership.validUntil <= now) {
+        membership.state = "EXPIRED";
+        membership.updatedAt = now;
+        expired += 1;
+      }
+    }
+    return expired;
   }
 }

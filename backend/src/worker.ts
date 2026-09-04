@@ -9,6 +9,7 @@ import type {
   Store,
 } from "./domain.js";
 import { MediaValidationError, verifyMediaFile } from "./media.js";
+import { buildMintedMembership } from "./membership.js";
 import { logEvent, safeError, type EventLogger } from "./observability.js";
 
 export async function processNextUpload(
@@ -248,4 +249,82 @@ export async function reconcilePendingMembershipDeploys(
     }
   }
   return deploys.length;
+}
+
+export async function reconcilePendingMembershipMints(
+  store: Store,
+  gateway: CovenantGateway,
+  now = Date.now(),
+): Promise<number> {
+  let attempts;
+  try {
+    attempts = await store.pendingMembershipMintAttempts();
+  } catch (error) {
+    logEvent("membership_mint_reconciliation_load_failed", safeError(error));
+    return 0;
+  }
+  for (const attempt of attempts) {
+    if (!attempt.signedTransactionId) continue;
+    try {
+      const submission = await gateway.status(attempt.signedTransactionId);
+      const checkedAt = now;
+      if (submission.isAccepted === true) {
+        const membership = await buildMintedMembership(
+          store,
+          attempt,
+          submission.acceptedAt,
+          now,
+        );
+        await store.confirmMembershipMintAttempt(
+          attempt.id,
+          "PENDING",
+          membership,
+        );
+      } else if (submission.isAccepted === false) {
+        await store.compareAndSetMembershipMintAttempt(attempt.id, "PENDING", {
+          state: "REJECTED",
+          rejection: submission.rejection ?? "TRANSACTION_REJECTED",
+          lastCheckedAt: checkedAt,
+          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          updatedAt: checkedAt,
+        });
+      } else {
+        await store.compareAndSetMembershipMintAttempt(attempt.id, "PENDING", {
+          lastCheckedAt: checkedAt,
+          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          updatedAt: checkedAt,
+        });
+      }
+    } catch (error) {
+      logEvent("membership_mint_reconciliation_failed", {
+        mintId: attempt.id,
+        ...safeError(error),
+      });
+      try {
+        await store.compareAndSetMembershipMintAttempt(attempt.id, "PENDING", {
+          lastCheckedAt: now,
+          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          updatedAt: now,
+        });
+      } catch (updateError) {
+        logEvent("membership_mint_reconciliation_update_failed", {
+          mintId: attempt.id,
+          ...safeError(updateError),
+        });
+      }
+    }
+  }
+  return attempts.length;
+}
+
+export async function expireExpiredMemberships(
+  store: Store,
+  now = Date.now(),
+): Promise<number> {
+  try {
+    return await store.expireMemberships(now);
+  } catch (error) {
+    logEvent("membership_expiry_failed", safeError(error));
+    return 0;
+  }
 }
