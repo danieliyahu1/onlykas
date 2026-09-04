@@ -14,6 +14,7 @@ import {
 import { KaspaWalletVerifier } from "./wallet-verifier.js";
 import { KaspaPaymentGateway } from "./payment-gateway.js";
 import { KaspaCovenantGateway } from "./covenant-gateway.js";
+import { KaspaMembershipVerifier } from "./verifier.js";
 import { logEvent, safeError } from "./observability.js";
 
 const environment = parseEnvironment(process.env);
@@ -35,6 +36,7 @@ const app = createApp({
   walletVerifier: new KaspaWalletVerifier(),
   paymentGateway: new KaspaPaymentGateway(environment.KASPA_NODE_URL),
   covenantGateway: new KaspaCovenantGateway(environment.KASPA_NODE_URL),
+  membershipVerifier: new KaspaMembershipVerifier(environment.KASPA_NODE_URL),
   publicOrigin: environment.PUBLIC_ORIGIN,
   production: environment.NODE_ENV === "production",
 });

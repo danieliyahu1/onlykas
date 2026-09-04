@@ -11,6 +11,11 @@ import type {
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
 import { TestStorage } from "./test-storage.js";
+import { MEMBERSHIP_DURATION_MS } from "./covenant.js";
+import {
+  canonicalMembershipCovenantId,
+  KaspaMembershipVerifier,
+} from "./verifier.js";
 import {
   processNextUpload,
   reconcilePendingMembershipMints,
@@ -1145,6 +1150,179 @@ describe("membership transfer API", () => {
       .expect(503);
     expect(res.body.error).toBe("TRANSFER_UNAVAILABLE");
     expect(res.body.message).toBe(COPY.transferUnavailable);
+  });
+});
+
+describe("membership on-chain verification API", () => {
+  const scanned = `kaspatest:${"v".repeat(60)}`;
+  const member = `kaspatest:${"w".repeat(60)}`;
+  const createdAt = 1_700_000_000_000;
+  const NOW = createdAt + MEMBERSHIP_DURATION_MS / 2;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function tokenCovenant(overrides: Record<string, unknown> = {}) {
+    return {
+      type: "KCC-0020",
+      payload: {
+        type: "MINT",
+        owner: member,
+        offerId: "offer-1",
+        creator: scanned,
+        created_at: createdAt,
+        valid_until: createdAt + MEMBERSHIP_DURATION_MS,
+        ...overrides,
+      },
+    };
+  }
+
+  function mockMembershipNode(
+    transactionId: string,
+    covenant: unknown,
+    index = 0,
+  ) {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/addresses/${encodeURIComponent(scanned)}/utxos`))
+        return new Response(
+          JSON.stringify([
+            {
+              outpoint: { transactionId, index },
+              utxoEntry: { amount: "1" },
+            },
+          ]),
+        );
+      if (url.endsWith(`/transactions/${transactionId}`)) {
+        const outputs: Record<string, unknown>[] = [];
+        outputs[index] = { covenant };
+        return new Response(JSON.stringify({ outputs }));
+      }
+      throw new Error(`unexpected URL ${url}`);
+    });
+  }
+
+  function verificationApp() {
+    return createApp({
+      store: new MemoryStore(),
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      membershipVerifier: new KaspaMembershipVerifier(
+        "https://kaspa.test",
+        () => NOW,
+      ),
+    });
+  }
+
+  it("validates a live membership token directly from the chain", async () => {
+    const transactionId = "0".repeat(64);
+    mockMembershipNode(transactionId, tokenCovenant());
+
+    const res = await request(verificationApp())
+      .get(`/api/verify/membership/address/${scanned}`)
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      address: scanned,
+      valid: true,
+    });
+    expect(res.body.memberships).toHaveLength(1);
+    expect(res.body.memberships[0]).toMatchObject({
+      transactionId,
+      outputIndex: 0,
+      covenantId: canonicalMembershipCovenantId(),
+      kind: "token",
+      tokenType: "MINT",
+      owner: member,
+      status: "VALID",
+    });
+    expect(res.body.memberships[0].validUntil).toBe(
+      new Date(createdAt + MEMBERSHIP_DURATION_MS).toISOString(),
+    );
+  });
+
+  it("flags a scanned token for the wrong owner", async () => {
+    mockMembershipNode("1".repeat(64), tokenCovenant());
+
+    const res = await request(verificationApp())
+      .get(`/api/verify/membership/address/${scanned}?owner=${outsider}`)
+      .expect(200);
+
+    expect(res.body.valid).toBe(false);
+    expect(res.body.memberships[0].status).toBe("OWNER_MISMATCH");
+  });
+
+  it("verifies a single utxo by transaction id and output index", async () => {
+    const transactionId = "2".repeat(64);
+    mockMembershipNode(transactionId, tokenCovenant(), 3);
+
+    const res = await request(verificationApp())
+      .get(
+        `/api/verify/membership/utxo/${transactionId}/3?owner=${member}`,
+      )
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      transactionId,
+      outputIndex: 3,
+      status: "VALID",
+      owner: member,
+    });
+  });
+
+  it("reports expired memberships", async () => {
+    const transactionId = "3".repeat(64);
+    mockMembershipNode(
+      transactionId,
+      tokenCovenant({
+        valid_until: createdAt - 1,
+        created_at: createdAt - 1 - MEMBERSHIP_DURATION_MS,
+      }),
+    );
+
+    const res = await request(verificationApp())
+      .get(`/api/verify/membership/address/${scanned}`)
+      .expect(200);
+
+    expect(res.body.valid).toBe(false);
+    expect(res.body.memberships[0].status).toBe("EXPIRED");
+  });
+
+  it("is unavailable without a verifier", async () => {
+    const app = createApp({
+      store: new MemoryStore(),
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+    });
+    const res = await request(app)
+      .get(`/api/verify/membership/address/${scanned}`)
+      .expect(503);
+    expect(res.body.error).toBe("VERIFY_UNAVAILABLE");
+  });
+
+  it("rejects an invalid address and utxo parameters", async () => {
+    const badAddress = await request(verificationApp())
+      .get("/api/verify/membership/address/not-an-address")
+      .expect(400);
+    expect(badAddress.body.error).toBe("INVALID_ADDRESS");
+
+    const badOwner = await request(verificationApp())
+      .get(`/api/verify/membership/address/${scanned}?owner=not-an-address`)
+      .expect(400);
+    expect(badOwner.body.error).toBe("INVALID_ADDRESS");
+
+    const badTransaction = await request(verificationApp())
+      .get(`/api/verify/membership/utxo/short/0`)
+      .expect(400);
+    expect(badTransaction.body.error).toBe("INVALID_REQUEST");
+
+    const badIndex = await request(verificationApp())
+      .get(`/api/verify/membership/utxo/${"4".repeat(64)}/-1`)
+      .expect(400);
+    expect(badIndex.body.error).toBe("INVALID_REQUEST");
   });
 });
 

@@ -260,6 +260,31 @@ export interface MembershipTransferAttemptResponse {
   membership: MembershipResponse | null;
 }
 
+export type MembershipCheckStatus =
+  | "VALID"
+  | "EXPIRED"
+  | "OWNER_MISMATCH"
+  | "NOT_MEMBERSHIP";
+
+export interface MembershipCheckResponse {
+  transactionId: string;
+  outputIndex: number;
+  covenantId: string | null;
+  kind: "token" | "deploy" | "none";
+  tokenType: "MINT" | "TRANSFER" | null;
+  owner: string | null;
+  createdAt: string | null;
+  validUntil: string | null;
+  status: MembershipCheckStatus;
+}
+
+export interface MembershipAddressVerificationResponse {
+  address: string;
+  verifiedAt: string;
+  valid: boolean;
+  memberships: MembershipCheckResponse[];
+}
+
 export function createChallengeMessage(
   address: string,
   nonce: string,

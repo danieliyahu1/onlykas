@@ -405,6 +405,36 @@ export interface CovenantGateway {
   status(transactionId: string): Promise<MembershipTransferSubmission>;
 }
 
+export type MembershipCheckStatus =
+  | "VALID"
+  | "EXPIRED"
+  | "OWNER_MISMATCH"
+  | "NOT_MEMBERSHIP";
+
+export interface MembershipCheck {
+  transactionId: string;
+  outputIndex: number;
+  covenantId: string | null;
+  kind: "token" | "deploy" | "none";
+  tokenType: "MINT" | "TRANSFER" | null;
+  owner: string | null;
+  createdAt: string | null;
+  validUntil: string | null;
+  status: MembershipCheckStatus;
+}
+
+export interface MembershipVerifier {
+  verifyAddress(
+    address: string,
+    expectedOwner?: string,
+  ): Promise<MembershipCheck[]>;
+  verifyUtxo(
+    transactionId: string,
+    outputIndex: number,
+    expectedOwner?: string,
+  ): Promise<MembershipCheck>;
+}
+
 export type MembershipTransferAttemptUpdate = Partial<
   Pick<
     MembershipTransferAttempt,

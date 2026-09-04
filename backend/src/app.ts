@@ -27,6 +27,7 @@ import {
   type MembershipOfferResponse,
   type MembershipResponse,
   type MembershipTransferAttemptResponse,
+  type MembershipAddressVerificationResponse,
   type PostResponse,
   type UploadResponse,
 } from "@onlykas/shared";
@@ -45,6 +46,7 @@ import type {
   MembershipOffer,
   MembershipOfferDeploy,
   MembershipTransferAttempt,
+  MembershipVerifier,
 } from "./domain.js";
 import {
   logEvent,
@@ -88,6 +90,8 @@ const apiMessages: Record<string, string> = {
   TRANSFER_EXPIRED: COPY.transferExpired,
   TRANSFER_INVALID_RECIPIENT: COPY.transferInvalidRecipient,
   TRANSFER_INVALID_AMOUNT: COPY.transferInvalidAmount,
+  VERIFY_UNAVAILABLE:
+    "On-chain verification is temporarily unavailable. Try again.",
 };
 
 export interface AppDependencies {
@@ -96,6 +100,7 @@ export interface AppDependencies {
   walletVerifier: WalletVerifier;
   paymentGateway?: PaymentGateway;
   covenantGateway?: CovenantGateway;
+  membershipVerifier?: MembershipVerifier;
   publicOrigin: string;
   production?: boolean;
   now?: () => number;
@@ -1631,6 +1636,48 @@ export function createApp(dependencies: AppDependencies) {
     }),
   );
 
+  app.get(
+    "/api/verify/membership/address/:address",
+    asyncHandler(async (request, response) => {
+      const verifier = dependencies.membershipVerifier;
+      if (!verifier) throw new HttpError(503, "VERIFY_UNAVAILABLE");
+      const address = routeParam(request, "address");
+      if (!addressPattern.test(address))
+        return apiError(response, 400, "INVALID_ADDRESS");
+      const owner = expectedOwnerFrom(request);
+      if (owner === "invalid") return apiError(response, 400, "INVALID_ADDRESS");
+      const memberships = await verifier.verifyAddress(address, owner);
+      response.json({
+        address,
+        verifiedAt: new Date(now()).toISOString(),
+        valid: memberships.some((membership) => membership.status === "VALID"),
+        memberships,
+      } satisfies MembershipAddressVerificationResponse);
+    }),
+  );
+
+  app.get(
+    "/api/verify/membership/utxo/:transactionId/:outputIndex",
+    asyncHandler(async (request, response) => {
+      const verifier = dependencies.membershipVerifier;
+      if (!verifier) throw new HttpError(503, "VERIFY_UNAVAILABLE");
+      const transactionId = routeParam(request, "transactionId");
+      if (!/^[0-9a-f]{64}$/i.test(transactionId))
+        return apiError(response, 400, "INVALID_REQUEST");
+      const outputIndex = Number(routeParam(request, "outputIndex"));
+      if (!Number.isInteger(outputIndex) || outputIndex < 0)
+        return apiError(response, 400, "INVALID_REQUEST");
+      const owner = expectedOwnerFrom(request);
+      if (owner === "invalid") return apiError(response, 400, "INVALID_ADDRESS");
+      const membership = await verifier.verifyUtxo(
+        transactionId,
+        outputIndex,
+        owner,
+      );
+      response.json(membership);
+    }),
+  );
+
   app.all(
     "/api/posts/:id/media",
     optionalSession,
@@ -1762,6 +1809,14 @@ async function ownedUpload(store: Store, id: string, creator: string) {
 function requireTrustedOrigin(request: Request, expected: string) {
   if (request.get("origin") !== expected)
     throw new HttpError(403, "ORIGIN_MISMATCH");
+}
+function expectedOwnerFrom(
+  request: Request,
+): string | undefined | "invalid" {
+  const value = request.query.owner;
+  if (value === undefined || typeof value !== "string" || value.length === 0)
+    return undefined;
+  return addressPattern.test(value) ? value : "invalid";
 }
 function setSessionCookie(response: Response, id: string, production: boolean) {
   response.cookie(sessionCookie, id, cookieOptions(production));
