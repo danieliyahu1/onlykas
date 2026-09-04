@@ -10,6 +10,7 @@ import {
 import { COPY, type ProfileResponse } from "@onlykas/shared";
 import { authenticate, kasware, WalletError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
+import { MembershipPage } from "./MembershipPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
 import { Icon } from "./Icons.js";
@@ -122,6 +123,9 @@ export function App() {
           </Link>
           <div className="nav-group">
             <GlobalSearch />
+            <Link to="/membership" className="nav-link">
+              Membership
+            </Link>
             {address ? (
               <details className="account">
                 <summary
@@ -196,6 +200,16 @@ export function App() {
               }
             />
             <Route path="/find" element={<FindCreatorPage />} />
+            <Route
+              path="/membership"
+              element={
+                <MembershipPage
+                  address={address}
+                  signIn={signIn}
+                  signingIn={signingIn}
+                />
+              }
+            />
             <Route path="/creator/:address" element={<CreatorPage />} />
             <Route
               path="/post/:id"

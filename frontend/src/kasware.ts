@@ -18,6 +18,12 @@ export interface Kasware {
   ): void;
 }
 
+export async function getWalletPublicKey(): Promise<string> {
+  const wallet = kasware();
+  const network = await wallet.getPublicKey();
+  return network;
+}
+
 export async function signPreparedPayment(
   transaction: string,
 ): Promise<string> {
