@@ -1,6 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { COPY, type CreatorResponse, type PostResponse } from "@onlykas/shared";
+import {
+  COPY,
+  type CreatorResponse,
+  type MembershipMintAttemptResponse,
+  type MembershipOfferResponse,
+  type MembershipResponse,
+  type PostResponse,
+} from "@onlykas/shared";
 import { api, signPreparedPayment, WalletError } from "./kasware.js";
 import { KaspaMark } from "./KaspaMark.js";
 import { Icon } from "./Icons.js";
@@ -18,7 +25,15 @@ type Payment = {
 const paymentStorageKey = (postId: string, address: string) =>
   `onlykas:payment:${postId}:${address}`;
 
-export function CreatorPage() {
+export function CreatorPage({
+  wallet,
+  signIn,
+  signingIn,
+}: {
+  wallet: string | null;
+  signIn: () => Promise<string | null>;
+  signingIn: boolean;
+}) {
   const { address = "" } = useParams();
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
   const [error, setError] = useState(false);
@@ -46,6 +61,12 @@ export function CreatorPage() {
       {creator.displayName && (
         <p className="wallet">{creator.displayAddress}</p>
       )}
+      <MembershipPanel
+        creator={creator.address}
+        wallet={wallet}
+        signIn={signIn}
+        signingIn={signingIn}
+      />
       {creator.posts.length === 0 ? (
         <p role="status">Nothing published yet.</p>
       ) : (
@@ -57,6 +78,248 @@ export function CreatorPage() {
       )}
     </section>
   );
+}
+
+type MembershipPhase =
+  | "preparing"
+  | "signing"
+  | "confirming"
+  | "pending"
+  | "rejected";
+
+const membershipStorageKey = (offerId: string, address: string) =>
+  `onlykas:mint:${offerId}:${address}`;
+
+function MembershipPanel({
+  creator,
+  wallet,
+  signIn,
+  signingIn,
+}: {
+  creator: string;
+  wallet: string | null;
+  signIn: () => Promise<string | null>;
+  signingIn: boolean;
+}) {
+  const [offer, setOffer] = useState<MembershipOfferResponse | null>(null);
+  const [attempt, setAttempt] =
+    useState<MembershipMintAttemptResponse | null>(null);
+  const [memberships, setMemberships] = useState<MembershipResponse[]>([]);
+  const [phase, setPhase] = useState<MembershipPhase | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  useAutoDismiss(message, () => setMessage(null));
+  useEffect(() => {
+    let active = true;
+    void api<{ offer: MembershipOfferResponse | null }>(
+      `/api/membership/offers/${encodeURIComponent(creator)}`,
+    )
+      .then((value) => {
+        if (active) setOffer(value.offer);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [creator]);
+  const loadMemberships = useCallback(async () => {
+    if (!offer || !wallet) {
+      setMemberships([]);
+      return;
+    }
+    try {
+      const value = await api<{ memberships: MembershipResponse[] }>(
+        `/api/membership/offers/${offer.id}/memberships`,
+      );
+      setMemberships(value.memberships);
+    } catch {
+      // Membership status load is best-effort.
+    }
+  }, [offer, wallet]);
+  useEffect(() => {
+    void loadMemberships();
+  }, [loadMemberships]);
+  useEffect(() => {
+    if (!offer || !wallet) return;
+    const key = membershipStorageKey(offer.id, wallet);
+    const savedId = window.localStorage.getItem(key);
+    if (!savedId) return;
+    let active = true;
+    void (async () => {
+      try {
+        const recovered = await api<MembershipMintAttemptResponse>(
+          `/api/membership/mints/${savedId}`,
+        );
+        if (!active) return;
+        setAttempt(recovered);
+        if (recovered.state === "PENDING") {
+          setPhase("pending");
+          setMessage(COPY.membershipPending);
+        } else if (recovered.state === "CONFIRMED") {
+          window.localStorage.removeItem(key);
+          await loadMemberships();
+        } else {
+          window.localStorage.removeItem(key);
+        }
+      } catch {
+        window.localStorage.removeItem(key);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [offer, wallet, loadMemberships]);
+  useEffect(() => {
+    if (phase !== "pending" || !attempt || !wallet) return;
+    const key = membershipStorageKey(attempt.offerId, wallet);
+    const check = async () => {
+      try {
+        const current = await api<MembershipMintAttemptResponse>(
+          `/api/membership/mints/${attempt.id}`,
+        );
+        if (current.state === "CONFIRMED") {
+          window.localStorage.removeItem(key);
+          setAttempt(current);
+          setPhase(null);
+          setMessage(COPY.membershipLive);
+          await loadMemberships();
+        } else if (current.state === "REJECTED") {
+          window.localStorage.removeItem(key);
+          setAttempt(current);
+          setPhase("rejected");
+          setMessage(COPY.membershipRejected);
+        }
+      } catch {
+        setMessage(COPY.accessVerificationFailed);
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [attempt, loadMemberships, phase, wallet]);
+  if (!offer) return null;
+  const now = Date.now();
+  const live = memberships.find(
+    (membership) =>
+      membership.state === "ACTIVE" &&
+      new Date(membership.validUntil).getTime() > now,
+  );
+  const lapsed = !live && memberships[0] ? memberships[0] : undefined;
+  const price = formatKas(offer.priceSompi);
+  async function pay() {
+    const buyer = wallet ?? (await signIn());
+    if (!buyer || !offer) return;
+    setMessage(null);
+    setPhase("preparing");
+    try {
+      const proposed = await api<MembershipMintAttemptResponse>(
+        `/api/membership/offers/${offer.id}/mints/propose`,
+        { method: "POST" },
+      );
+      setAttempt(proposed);
+      setPhase("signing");
+      setMessage(COPY.membershipPrompt.replace("{price}", formatKas(offer.priceSompi)));
+      const signed = await signPreparedPayment(proposed.transaction!);
+      window.localStorage.setItem(membershipStorageKey(offer.id, buyer), proposed.id);
+      setPhase("confirming");
+      setMessage(COPY.membershipConfirming);
+      const result = await api<MembershipMintAttemptResponse>(
+        `/api/membership/mints/${proposed.id}/finalize`,
+        { method: "POST", body: JSON.stringify({ signedTransaction: signed }) },
+      );
+      setAttempt(result);
+      if (result.state === "PENDING") {
+        setPhase("pending");
+        setMessage(COPY.membershipPending);
+      } else if (result.state === "REJECTED") {
+        window.localStorage.removeItem(membershipStorageKey(offer.id, buyer));
+        setPhase("rejected");
+        setMessage(COPY.membershipRejected);
+      } else {
+        window.localStorage.removeItem(membershipStorageKey(offer.id, buyer));
+        setPhase(null);
+        setMessage(COPY.membershipLive);
+        await loadMemberships();
+      }
+    } catch (caught) {
+      const text =
+        caught instanceof WalletError
+          ? caught.message
+          : caught instanceof Error
+            ? caught.message
+            : COPY.membershipRejected;
+      setMessage(text);
+      if (text === COPY.membershipPending) setPhase("pending");
+      else {
+        window.localStorage.removeItem(membershipStorageKey(offer.id, buyer));
+        setPhase("rejected");
+      }
+    }
+  }
+  const busyLabel =
+    phase === "preparing"
+      ? "Preparing payment..."
+      : phase === "signing"
+        ? COPY.membershipSigning
+        : phase === "confirming"
+          ? COPY.membershipConfirming
+          : phase === "pending"
+            ? COPY.membershipPending
+            : null;
+  const statusBanner = live
+    ? `${COPY.membershipLive} ${COPY.membershipActiveUntil.replace("{date}", formatDate(live.validUntil))}`
+    : lapsed
+      ? `${COPY.membershipExpired} ${COPY.membershipExpiredOn.replace("{date}", formatDate(lapsed.validUntil))}`
+      : null;
+  return (
+    <aside className="membership-panel">
+      <p className="eyebrow">MEMBERSHIP</p>
+      <p className="offer-description">{offer.description}</p>
+      {statusBanner ? (
+        <p className="feedback success">{statusBanner}</p>
+      ) : null}
+      {message && (
+        <p className="feedback" role="status">
+          {message}
+        </p>
+      )}
+      <p className="price">
+        {price} <KaspaMark />
+        <span className="sr-only">KAS</span>
+      </p>
+      <button
+        className={live ? "secondary" : "primary"}
+        onClick={() => void pay()}
+        disabled={
+          signingIn ||
+          phase === "preparing" ||
+          phase === "signing" ||
+          phase === "confirming" ||
+          phase === "pending"
+        }
+      >
+        {busyLabel ??
+          (live ? (
+            <>
+              {COPY.renewMembershipFor.replace("{price}", price)}{" "}
+              <Icon name="arrow-right" />
+            </>
+          ) : (
+            <>
+              {COPY.becomeMemberFor.replace("{price}", price)}{" "}
+              <Icon name="arrow-right" />
+            </>
+          ))}
+      </button>
+    </aside>
+  );
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export function PostPage({

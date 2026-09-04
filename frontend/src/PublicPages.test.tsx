@@ -48,11 +48,25 @@ function renderPost({
   );
 }
 
-function renderCreator(address = post.creator) {
+function renderCreator(
+  address = post.creator,
+  {
+    wallet = null,
+    signIn = vi.fn(async () => address),
+  }: {
+    wallet?: string | null;
+    signIn?: () => Promise<string | null>;
+  } = {},
+) {
   return render(
     <MemoryRouter initialEntries={[`/creator/${address}`]}>
       <Routes>
-        <Route path="/creator/:address" element={<CreatorPage />} />
+        <Route
+          path="/creator/:address"
+          element={
+            <CreatorPage wallet={wallet} signIn={signIn} signingIn={false} />
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -67,7 +81,8 @@ function prepareResponse() {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.mocked(api).mockReset();
+  vi.mocked(signPreparedPayment).mockReset();
   window.localStorage.clear();
   vi.mocked(api).mockImplementation(async (path) => {
     if (path === `/api/posts/${post.id}`) return post;
@@ -201,5 +216,147 @@ describe("public creator profiles", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Profile not found.",
     );
+  });
+});
+
+describe("membership panel on creator profiles", () => {
+  const offer = {
+    id: "offer-1",
+    creator: post.creator,
+    covenantId: "covenant-1",
+    priceSompi: "125000000",
+    description: "A day of access",
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const membership = {
+    id: "membership-1",
+    offerId: "offer-1",
+    owner: address,
+    creator: post.creator,
+    covenantId: "covenant-1",
+    createdTxId: "tx-1",
+    createdAt: "2099-01-01T00:00:00.000Z",
+    validUntil: "2099-01-02T00:00:00.000Z",
+    state: "ACTIVE" as const,
+  };
+  const preparedMint = {
+    id: "mint-1",
+    offerId: "offer-1",
+    creator: post.creator,
+    covenantId: "covenant-1",
+    priceSompi: "125000000",
+    state: "PREPARED" as const,
+    transaction: '{"inputs":[]}',
+    fingerprint: "fingerprint",
+    transactionId: null,
+    rejection: null,
+    submittedAt: null,
+    lastCheckedAt: null,
+    reconciliationAttempts: 0,
+    membership: null,
+  };
+
+  function creatorApi() {
+    const encodedCreator = encodeURIComponent(post.creator);
+    vi.mocked(api).mockImplementation(async (path) => {
+      if (path === `/api/creators/${encodedCreator}`)
+        return {
+          address: post.creator,
+          displayAddress: "kaspatest:cccc...cccc",
+          displayName: null,
+          posts: [],
+        };
+      if (path === `/api/membership/offers/${encodedCreator}`)
+        return { offer };
+      if (path === `/api/membership/offers/${offer.id}/memberships`)
+        return { memberships: [membership] };
+      throw new Error(`unexpected request: ${path}`);
+    });
+  }
+
+  it("offers membership and a supporter becomes a member", async () => {
+    const signIn = vi.fn(async () => address);
+    creatorApi();
+    vi.mocked(api)
+      .mockResolvedValueOnce({
+        address: post.creator,
+        displayAddress: "kaspatest:cccc...cccc",
+        displayName: null,
+        posts: [],
+      })
+      .mockResolvedValueOnce({ offer })
+      .mockResolvedValueOnce(preparedMint)
+      .mockResolvedValueOnce({
+        ...preparedMint,
+        state: "CONFIRMED",
+        transactionId: "signed",
+        membership,
+      });
+    const user = userEvent.setup();
+    renderCreator(post.creator, { wallet: null, signIn });
+
+    expect(await screen.findByText("A day of access")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: /become a member for 1.25/i }),
+    );
+
+    expect(signIn).toHaveBeenCalledOnce();
+    expect(api).toHaveBeenCalledWith(
+      `/api/membership/offers/${offer.id}/mints/propose`,
+      { method: "POST" },
+    );
+    expect(api).toHaveBeenCalledWith(
+      `/api/membership/mints/mint-1/finalize`,
+      { method: "POST", body: JSON.stringify({ signedTransaction: "signed" }) },
+    );
+    expect(await screen.findByText(COPY.membershipLive)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /become a member for 1.25/i }),
+    ).toBeVisible();
+  });
+
+  it("shows the active membership of a signed-in supporter", async () => {
+    creatorApi();
+    renderCreator(post.creator, { wallet: address });
+
+    expect(
+      await screen.findByText(/You're a member\. Active until/i),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /renew for 1.25/i })).toBeVisible();
+  });
+
+  it("recovers a pending membership attempt after reload", async () => {
+    window.localStorage.setItem(
+      `onlykas:mint:${offer.id}:${address}`,
+      "mint-1",
+    );
+    vi.mocked(api).mockImplementation(async (path) => {
+      const encodedCreator = encodeURIComponent(post.creator);
+      if (path === `/api/creators/${encodedCreator}`)
+        return {
+          address: post.creator,
+          displayAddress: "kaspatest:cccc...cccc",
+          displayName: null,
+          posts: [],
+        };
+      if (path === `/api/membership/offers/${encodedCreator}`) return { offer };
+      if (path === `/api/membership/mints/mint-1`)
+        return {
+          ...preparedMint,
+          state: "PENDING",
+          transactionId: "signed",
+        };
+      if (path === `/api/membership/offers/${offer.id}/memberships`)
+        return { memberships: [] };
+      throw new Error(`unexpected request: ${path}`);
+    });
+    renderCreator(post.creator, { wallet: address });
+
+    const pendingButton = await screen.findByRole("button", {
+      name: COPY.membershipPending,
+    });
+    expect(pendingButton).toBeDisabled();
   });
 });

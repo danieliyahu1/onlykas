@@ -210,7 +210,16 @@ export function App() {
                 />
               }
             />
-            <Route path="/creator/:address" element={<CreatorPage />} />
+            <Route
+              path="/creator/:address"
+              element={
+                <CreatorPage
+                  wallet={address}
+                  signIn={signIn}
+                  signingIn={signingIn}
+                />
+              }
+            />
             <Route
               path="/post/:id"
               element={
