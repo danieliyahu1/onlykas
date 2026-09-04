@@ -95,9 +95,7 @@ export async function runVerifierCli(
     }
     throw new Error(usage());
   } catch (error) {
-    stderr.write(
-      `${error instanceof Error ? error.message : String(error)}\n`,
-    );
+    stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     return 1;
   }
 }

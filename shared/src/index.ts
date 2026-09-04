@@ -261,10 +261,7 @@ export interface MembershipTransferAttemptResponse {
 }
 
 export type MembershipCheckStatus =
-  | "VALID"
-  | "EXPIRED"
-  | "OWNER_MISMATCH"
-  | "NOT_MEMBERSHIP";
+  "VALID" | "EXPIRED" | "OWNER_MISMATCH" | "NOT_MEMBERSHIP";
 
 export interface MembershipCheckResponse {
   transactionId: string;

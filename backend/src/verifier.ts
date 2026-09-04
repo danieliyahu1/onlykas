@@ -116,7 +116,13 @@ export function recognizeMembershipDeploy(
   const deployer = requiredString(payload, "deployer");
   if (!templateFingerprint || !template || !payoutPk || !deployer) return null;
   if (fingerprintTemplate(template) !== templateFingerprint) return null;
-  return { type: "DEPLOY_COVENANT", templateFingerprint, template, payoutPk, deployer };
+  return {
+    type: "DEPLOY_COVENANT",
+    templateFingerprint,
+    template,
+    payoutPk,
+    deployer,
+  };
 }
 
 export function membershipTokenValidity(
@@ -179,8 +185,7 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
   }
 
   private async covenantForUtxo(utxo: VerifierUtxo): Promise<unknown> {
-    if (utxo.utxoEntry.covenant !== undefined)
-      return utxo.utxoEntry.covenant;
+    if (utxo.utxoEntry.covenant !== undefined) return utxo.utxoEntry.covenant;
     return this.transactionCovenant(
       utxo.outpoint.transactionId,
       utxo.outpoint.index,

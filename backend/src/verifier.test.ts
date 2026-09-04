@@ -81,9 +81,7 @@ describe("membership covenant recognition", () => {
 
   it("rejects tokens whose window does not match the canonical duration", () => {
     expect(
-      recognizeMembershipToken(
-        tokenCovenant({ valid_until: createdAt + 1 }),
-      ),
+      recognizeMembershipToken(tokenCovenant({ valid_until: createdAt + 1 })),
     ).toBeNull();
   });
 
@@ -92,7 +90,9 @@ describe("membership covenant recognition", () => {
     expect(
       recognizeMembershipToken(tokenCovenant({ created_at: "later" })),
     ).toBeNull();
-    expect(recognizeMembershipToken(tokenCovenant({ type: "BURN" }))).toBeNull();
+    expect(
+      recognizeMembershipToken(tokenCovenant({ type: "BURN" })),
+    ).toBeNull();
   });
 
   it("rejects non-KCC-0020 covenants", () => {
@@ -145,7 +145,11 @@ describe("membership deploy recognition", () => {
 describe("membership token validity", () => {
   it("is valid while valid_until is in the future", () => {
     expect(
-      membershipTokenValidity(recognizeMembershipToken(tokenCovenant())!, undefined, NOW),
+      membershipTokenValidity(
+        recognizeMembershipToken(tokenCovenant())!,
+        undefined,
+        NOW,
+      ),
     ).toBe("VALID");
   });
 
@@ -154,9 +158,9 @@ describe("membership token validity", () => {
     expect(
       membershipTokenValidity(token, undefined, token.validUntil + 1),
     ).toBe("EXPIRED");
-    expect(
-      membershipTokenValidity(token, undefined, token.validUntil),
-    ).toBe("EXPIRED");
+    expect(membershipTokenValidity(token, undefined, token.validUntil)).toBe(
+      "EXPIRED",
+    );
   });
 
   it("flags an owner mismatch before expiry", () => {
@@ -198,7 +202,10 @@ describe("KaspaMembershipVerifier", () => {
       throw new Error(`unexpected URL ${url}`);
     });
 
-    const verifier = new KaspaMembershipVerifier("https://kaspa.test", () => NOW);
+    const verifier = new KaspaMembershipVerifier(
+      "https://kaspa.test",
+      () => NOW,
+    );
     const memberships = await verifier.verifyAddress(owner);
     expect(memberships).toHaveLength(1);
     const membership = memberships[0]!;
@@ -225,8 +232,14 @@ describe("KaspaMembershipVerifier", () => {
       if (url.endsWith(`/addresses/${encodeURIComponent(owner)}/utxos`))
         return new Response(
           JSON.stringify([
-            { outpoint: { transactionId, index: 0 }, utxoEntry: { amount: "1" } },
-            { outpoint: { transactionId, index: 1 }, utxoEntry: { amount: "1" } },
+            {
+              outpoint: { transactionId, index: 0 },
+              utxoEntry: { amount: "1" },
+            },
+            {
+              outpoint: { transactionId, index: 1 },
+              utxoEntry: { amount: "1" },
+            },
           ]),
         );
       if (url.endsWith(`/transactions/${transactionId}`))
@@ -246,7 +259,10 @@ describe("KaspaMembershipVerifier", () => {
       throw new Error(`unexpected URL ${url}`);
     });
 
-    const verifier = new KaspaMembershipVerifier("https://kaspa.test", () => NOW);
+    const verifier = new KaspaMembershipVerifier(
+      "https://kaspa.test",
+      () => NOW,
+    );
     const memberships = await verifier.verifyAddress(owner);
     expect(memberships).toHaveLength(2);
     expect(memberships[0]!.status).toBe("EXPIRED");
@@ -259,32 +275,37 @@ describe("KaspaMembershipVerifier", () => {
 
   it("prefers a covenant embedded in the utxo entry", async () => {
     const transactionId = "c".repeat(64);
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = String(input);
-      if (url.endsWith(`/addresses/${encodeURIComponent(owner)}/utxos`))
-        return new Response(
-          JSON.stringify([
-            {
-              outpoint: { transactionId, index: 0 },
-              utxoEntry: {
-                amount: "1",
-                covenant: tokenCovenant(),
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith(`/addresses/${encodeURIComponent(owner)}/utxos`))
+          return new Response(
+            JSON.stringify([
+              {
+                outpoint: { transactionId, index: 0 },
+                utxoEntry: {
+                  amount: "1",
+                  covenant: tokenCovenant(),
+                },
               },
-            },
-          ]),
-        );
-      throw new Error(`unexpected URL ${url}`);
-    });
+            ]),
+          );
+        throw new Error(`unexpected URL ${url}`);
+      });
 
-    const verifier = new KaspaMembershipVerifier("https://kaspa.test", () => NOW);
+    const verifier = new KaspaMembershipVerifier(
+      "https://kaspa.test",
+      () => NOW,
+    );
     const memberships = await verifier.verifyAddress(owner);
     expect(memberships).toHaveLength(1);
     const membership = memberships[0]!;
 
     expect(membership.status).toBe("VALID");
     expect(
-      fetchMock.mock.calls.every(
-        ([input]) => String(input).includes("/addresses/"),
+      fetchMock.mock.calls.every(([input]) =>
+        String(input).includes("/addresses/"),
       ),
     ).toBe(true);
   });
@@ -302,7 +323,10 @@ describe("KaspaMembershipVerifier", () => {
       throw new Error(`unexpected URL ${url}`);
     });
 
-    const verifier = new KaspaMembershipVerifier("https://kaspa.test", () => NOW);
+    const verifier = new KaspaMembershipVerifier(
+      "https://kaspa.test",
+      () => NOW,
+    );
     const none = await verifier.verifyUtxo(transactionId, 0);
     const other = await verifier.verifyUtxo(transactionId, 1);
 
@@ -338,7 +362,10 @@ describe("KaspaMembershipVerifier", () => {
       throw new Error(`unexpected URL ${url}`);
     });
 
-    const verifier = new KaspaMembershipVerifier("https://kaspa.test", () => NOW);
+    const verifier = new KaspaMembershipVerifier(
+      "https://kaspa.test",
+      () => NOW,
+    );
     const deploy = await verifier.verifyUtxo(transactionId, 0);
 
     expect(deploy.status).toBe("NOT_MEMBERSHIP");

@@ -1259,9 +1259,7 @@ describe("membership on-chain verification API", () => {
     mockMembershipNode(transactionId, tokenCovenant(), 3);
 
     const res = await request(verificationApp())
-      .get(
-        `/api/verify/membership/utxo/${transactionId}/3?owner=${member}`,
-      )
+      .get(`/api/verify/membership/utxo/${transactionId}/3?owner=${member}`)
       .expect(200);
 
     expect(res.body).toMatchObject({

@@ -1645,7 +1645,8 @@ export function createApp(dependencies: AppDependencies) {
       if (!addressPattern.test(address))
         return apiError(response, 400, "INVALID_ADDRESS");
       const owner = expectedOwnerFrom(request);
-      if (owner === "invalid") return apiError(response, 400, "INVALID_ADDRESS");
+      if (owner === "invalid")
+        return apiError(response, 400, "INVALID_ADDRESS");
       const memberships = await verifier.verifyAddress(address, owner);
       response.json({
         address,
@@ -1668,7 +1669,8 @@ export function createApp(dependencies: AppDependencies) {
       if (!Number.isInteger(outputIndex) || outputIndex < 0)
         return apiError(response, 400, "INVALID_REQUEST");
       const owner = expectedOwnerFrom(request);
-      if (owner === "invalid") return apiError(response, 400, "INVALID_ADDRESS");
+      if (owner === "invalid")
+        return apiError(response, 400, "INVALID_ADDRESS");
       const membership = await verifier.verifyUtxo(
         transactionId,
         outputIndex,
@@ -1810,9 +1812,7 @@ function requireTrustedOrigin(request: Request, expected: string) {
   if (request.get("origin") !== expected)
     throw new HttpError(403, "ORIGIN_MISMATCH");
 }
-function expectedOwnerFrom(
-  request: Request,
-): string | undefined | "invalid" {
+function expectedOwnerFrom(request: Request): string | undefined | "invalid" {
   const value = request.query.owner;
   if (value === undefined || typeof value !== "string" || value.length === 0)
     return undefined;

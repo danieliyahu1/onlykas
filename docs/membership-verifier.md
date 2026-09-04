@@ -46,12 +46,12 @@ accepted.
 
 Each checked UTXO yields one `MembershipCheck` with a status:
 
-| Status         | Meaning                                                        |
-| -------------- | -------------------------------------------------------------- |
-| `VALID`        | token recognized, `expectedOwner` matches (if given), and `valid_until > now` |
-| `EXPIRED`      | token recognized but `valid_until <= now`                      |
-| `OWNER_MISMATCH` | token recognized and unexpired, but `owner !== expectedOwner` |
-| `NOT_MEMBERSHIP` | covenant is missing, not `KCC-0020`, or fails recognition    |
+| Status           | Meaning                                                                       |
+| ---------------- | ----------------------------------------------------------------------------- |
+| `VALID`          | token recognized, `expectedOwner` matches (if given), and `valid_until > now` |
+| `EXPIRED`        | token recognized but `valid_until <= now`                                     |
+| `OWNER_MISMATCH` | token recognized and unexpired, but `owner !== expectedOwner`                 |
+| `NOT_MEMBERSHIP` | covenant is missing, not `KCC-0020`, or fails recognition                     |
 
 Precedence: `OWNER_MISMATCH` is reported before `EXPIRED` when both apply. An
 address scan is `valid` when at least one scanned UTXO is `VALID`.
