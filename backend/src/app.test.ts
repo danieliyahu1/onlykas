@@ -2,7 +2,12 @@ import request from "supertest";
 import sharp from "sharp";
 import { COPY } from "@onlykas/shared";
 import { createApp } from "./app.js";
-import type { CovenantGateway, PaymentGateway, Post, Upload } from "./domain.js";
+import type {
+  CovenantGateway,
+  PaymentGateway,
+  Post,
+  Upload,
+} from "./domain.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
 import { TestStorage } from "./test-storage.js";
@@ -427,9 +432,7 @@ describe("membership offer deployment API", () => {
       .expect(200);
     expect(deploy.body.state).toBe("CONFIRMED");
 
-    const offers = await creatorAgent
-      .get("/api/membership/offers")
-      .expect(200);
+    const offers = await creatorAgent.get("/api/membership/offers").expect(200);
     expect(offers.body.offers).toHaveLength(1);
     expect(offers.body.offers[0]).toMatchObject({
       creator,
@@ -537,7 +540,10 @@ describe("membership offer deployment API", () => {
 describe("membership minting API", () => {
   const supporter = `kaspatest:${"s".repeat(60)}`;
 
-  function mintPrepared(offer: { priceSompi: string; creator: string }, buyer: string) {
+  function mintPrepared(
+    offer: { priceSompi: string; creator: string },
+    buyer: string,
+  ) {
     return {
       transaction: JSON.stringify({
         id: "0".repeat(64),
@@ -735,9 +741,7 @@ describe("membership minting API", () => {
       .expect(409);
     expect(stillPending.body.message).toBe(COPY.membershipPending);
 
-    expect(
-      await reconcilePendingMembershipMints(store, gateway, 20),
-    ).toBe(1);
+    expect(await reconcilePendingMembershipMints(store, gateway, 20)).toBe(1);
     const confirmed = await supporterAgent
       .get(`/api/membership/mints/${proposed.body.id}`)
       .expect(200);
@@ -747,9 +751,7 @@ describe("membership minting API", () => {
       owner: supporter,
       state: "ACTIVE",
     });
-    expect(
-      new Date(confirmed.body.membership.createdAt).getTime(),
-    ).toBe(5_000);
+    expect(new Date(confirmed.body.membership.createdAt).getTime()).toBe(5_000);
   });
 
   it("starts a fresh mint when renewing after a confirmed membership", async () => {

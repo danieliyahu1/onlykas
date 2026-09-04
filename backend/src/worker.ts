@@ -213,7 +213,12 @@ export async function reconcilePendingMembershipDeploys(
           createdAt: checkedAt,
           updatedAt: checkedAt,
         };
-        await store.confirmMembershipOfferDeploy(deploy.id, "PENDING", offer, deploy.signedTransactionId);
+        await store.confirmMembershipOfferDeploy(
+          deploy.id,
+          "PENDING",
+          offer,
+          deploy.signedTransactionId,
+        );
       } else if (submission.isAccepted === false) {
         await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
           state: "REJECTED",

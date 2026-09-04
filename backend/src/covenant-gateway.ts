@@ -30,9 +30,7 @@ export class KaspaCovenantGateway implements CovenantGateway {
       throw new Error("TEMPLATE_FINGERPRINT_MISMATCH");
     const amount = BigInt(covenant.amount);
     const [utxos, feeEstimate] = await Promise.all([
-      this.request<Utxo[]>(
-        `/addresses/${encodeURIComponent(deployer)}/utxos`,
-      ),
+      this.request<Utxo[]>(`/addresses/${encodeURIComponent(deployer)}/utxos`),
       this.request<{
         normalBuckets: { feerate: number }[];
         priorityBucket: { feerate: number };
@@ -229,7 +227,9 @@ export class KaspaCovenantGateway implements CovenantGateway {
   ): Promise<PreparedMembershipTransfer> {
     const royaltyBps = 1000;
     const creatorRoyalty = computeCreatorRoyalty(saleAmountSompi, royaltyBps);
-    const sellerAmount = (BigInt(saleAmountSompi) - BigInt(creatorRoyalty)).toString();
+    const sellerAmount = (
+      BigInt(saleAmountSompi) - BigInt(creatorRoyalty)
+    ).toString();
     const [utxos, feeEstimate] = await Promise.all([
       this.request<Utxo[]>(
         `/addresses/${encodeURIComponent(membership.owner)}/utxos`,
@@ -407,13 +407,7 @@ export class KaspaCovenantGateway implements CovenantGateway {
         value: String(o.value ?? o.amount ?? "0"),
         covenant: o.covenant as Record<string, unknown> | null,
       }));
-      if (
-        !verifyRoyaltySplit(
-          royaltyOutputs,
-          prepared.saleAmountSompi,
-          1000,
-        )
-      )
+      if (!verifyRoyaltySplit(royaltyOutputs, prepared.saleAmountSompi, 1000))
         return {
           isAccepted: false,
           transactionId: null,
@@ -444,7 +438,12 @@ export class KaspaCovenantGateway implements CovenantGateway {
       try {
         return await this.status(transactionId);
       } catch {
-        return { isAccepted: null, transactionId, rejection: null, acceptedAt: null };
+        return {
+          isAccepted: null,
+          transactionId,
+          rejection: null,
+          acceptedAt: null,
+        };
       }
     }
     if (result.error || !result.transactionId)
@@ -521,8 +520,7 @@ function scriptFor(address: string): string {
       buffer &= (1n << BigInt(bits)) - 1n;
     }
   }
-  if (bytes[0] !== 0 || bytes.length !== 33)
-    throw new Error("INVALID_ADDRESS");
+  if (bytes[0] !== 0 || bytes.length !== 33) throw new Error("INVALID_ADDRESS");
   return `000020${bytes
     .slice(1)
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -580,8 +578,7 @@ async function validateAuthoritativeInputs(
         index?: number;
         amount: number | string;
         script_public_key:
-          | string
-          | { script_public_key?: string; scriptPublicKey?: string };
+          string | { script_public_key?: string; scriptPublicKey?: string };
       }[];
     };
     const output = parent.outputs?.[index];

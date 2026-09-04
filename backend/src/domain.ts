@@ -158,13 +158,9 @@ export interface Store {
   saveCovenant(covenant: MembershipCovenant): Promise<void>;
   createMembershipOffer(offer: MembershipOffer): Promise<void>;
   getMembershipOffer(id: string): Promise<MembershipOffer | null>;
-  creatorMembershipOffers(
-    creator: string,
-  ): Promise<MembershipOffer[]>;
+  creatorMembershipOffers(creator: string): Promise<MembershipOffer[]>;
   createMembershipOfferDeploy(deploy: MembershipOfferDeploy): Promise<void>;
-  getMembershipOfferDeploy(
-    id: string,
-  ): Promise<MembershipOfferDeploy | null>;
+  getMembershipOfferDeploy(id: string): Promise<MembershipOfferDeploy | null>;
   unresolvedMembershipOfferDeploy(
     creator: string,
   ): Promise<MembershipOfferDeploy | null>;
@@ -183,10 +179,7 @@ export interface Store {
   createMembership(membership: Membership): Promise<void>;
   getMembership(id: string): Promise<Membership | null>;
   ownerMemberships(owner: string): Promise<Membership[]>;
-  activeMembershipForPost(
-    postId: string,
-    viewer: string,
-  ): Promise<boolean>;
+  activeMembershipForPost(postId: string, viewer: string): Promise<boolean>;
   createMembershipTransferAttempt(
     attempt: MembershipTransferAttempt,
   ): Promise<void>;
@@ -205,9 +198,7 @@ export interface Store {
     membershipUpdate: { transactionId: string; confirmedAt: number },
   ): Promise<MembershipTransferAttempt | null>;
   createMembershipMintAttempt(attempt: MembershipMintAttempt): Promise<void>;
-  getMembershipMintAttempt(
-    id: string,
-  ): Promise<MembershipMintAttempt | null>;
+  getMembershipMintAttempt(id: string): Promise<MembershipMintAttempt | null>;
   unresolvedMembershipMintAttempt(
     offerId: string,
     buyer: string,
@@ -286,10 +277,7 @@ export interface MembershipOffer {
 export type MembershipState = "ACTIVE" | "EXPIRED" | "TRANSFERRED";
 
 export type MembershipOfferDeployState =
-  | "PREPARED"
-  | "PENDING"
-  | "CONFIRMED"
-  | "REJECTED";
+  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
 
 export interface MembershipOfferDeploy {
   id: string;
@@ -337,10 +325,7 @@ export interface Membership {
 }
 
 export type MembershipTransferAttemptState =
-  | "PREPARED"
-  | "PENDING"
-  | "CONFIRMED"
-  | "REJECTED";
+  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
 
 export interface MembershipTransferAttempt {
   id: string;
@@ -434,10 +419,7 @@ export type MembershipTransferAttemptUpdate = Partial<
 >;
 
 export type MembershipMintAttemptState =
-  | "PREPARED"
-  | "PENDING"
-  | "CONFIRMED"
-  | "REJECTED";
+  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
 
 export interface MembershipMintAttempt {
   id: string;

@@ -203,9 +203,7 @@ describe("media jobs", () => {
       }),
     };
 
-    expect(
-      await reconcilePendingMembershipDeploys(store, gateway, 20),
-    ).toBe(1);
+    expect(await reconcilePendingMembershipDeploys(store, gateway, 20)).toBe(1);
     expect(await store.getMembershipOffer("deploy")).toMatchObject({
       id: "deploy",
       creator: "creator",
@@ -214,9 +212,9 @@ describe("media jobs", () => {
       description: "A day of access",
       isActive: true,
     });
-    expect(
-      (await store.getMembershipOfferDeploy("deploy"))?.state,
-    ).toBe("CONFIRMED");
+    expect((await store.getMembershipOfferDeploy("deploy"))?.state).toBe(
+      "CONFIRMED",
+    );
   });
 
   it("marks a rejected deploy submission and skips unsigned deploys", async () => {
@@ -285,30 +283,25 @@ describe("media jobs", () => {
       }),
     };
 
-    expect(
-      await reconcilePendingMembershipDeploys(store, gateway, 20),
-    ).toBe(2);
+    expect(await reconcilePendingMembershipDeploys(store, gateway, 20)).toBe(2);
     expect((await store.getMembershipOfferDeploy("unsigned"))?.state).toBe(
       "PENDING",
     );
-    expect((await store.getMembershipOfferDeploy("unsigned"))?.reconciliationAttempts).toBe(
-      0,
-    );
+    expect(
+      (await store.getMembershipOfferDeploy("unsigned"))
+        ?.reconciliationAttempts,
+    ).toBe(0);
     expect((await store.getMembershipOfferDeploy("rejected"))?.state).toBe(
       "REJECTED",
     );
-    expect((await store.getMembershipOfferDeploy("rejected"))?.lastCheckedAt).toBe(
-      20,
-    );
+    expect(
+      (await store.getMembershipOfferDeploy("rejected"))?.lastCheckedAt,
+    ).toBe(20);
   });
 });
 
 describe("membership mint reconciliation", () => {
-  function pendingMint(
-    id: string,
-    buyer = "buyer",
-    creator = "creator",
-  ) {
+  function pendingMint(id: string, buyer = "buyer", creator = "creator") {
     return {
       id,
       offerId: "offer-1",
@@ -413,8 +406,7 @@ describe("membership mint reconciliation", () => {
       "PENDING",
     );
     expect(
-      (await store.getMembershipMintAttempt("mint-b"))
-        ?.reconciliationAttempts,
+      (await store.getMembershipMintAttempt("mint-b"))?.reconciliationAttempts,
     ).toBe(1);
     expect(
       (await store.getMembershipMintAttempt("mint-b"))?.lastCheckedAt,
@@ -437,11 +429,7 @@ describe("membership mint reconciliation", () => {
       createdAt: 1,
       updatedAt: 1,
     };
-    await store.confirmMembershipMintAttempt(
-      "mint",
-      "PENDING",
-      membership,
-    );
+    await store.confirmMembershipMintAttempt("mint", "PENDING", membership);
     await store.createMembershipMintAttempt({
       ...pendingMint("mint-future"),
       id: "mint-future",

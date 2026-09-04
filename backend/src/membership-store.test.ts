@@ -137,8 +137,7 @@ describe.each([
     await store.createMembershipMintAttempt(attempt);
     expect(await store.getMembershipMintAttempt(attempt.id)).toEqual(attempt);
     expect(
-      (await store.unresolvedMembershipMintAttempt("offer-test", "buyer"))
-        ?.id,
+      (await store.unresolvedMembershipMintAttempt("offer-test", "buyer"))?.id,
     ).toBe(attempt.id);
   });
 
@@ -160,8 +159,7 @@ describe.each([
     const second = testMintAttempt({ id: "mint-2" });
     await store.createMembershipMintAttempt(second);
     expect(
-      (await store.unresolvedMembershipMintAttempt("offer-test", "buyer"))
-        ?.id,
+      (await store.unresolvedMembershipMintAttempt("offer-test", "buyer"))?.id,
     ).toBe("mint-2");
   });
 
@@ -169,9 +167,7 @@ describe.each([
     await seedOffer(store);
     const first = testMintAttempt({ id: "mint-1" });
     await store.createMembershipMintAttempt(first);
-    await store.createMembershipMintAttempt(
-      testMintAttempt({ id: "mint-2" }),
-    );
+    await store.createMembershipMintAttempt(testMintAttempt({ id: "mint-2" }));
     const open = await store.unresolvedMembershipMintAttempt(
       "offer-test",
       "buyer",
@@ -350,9 +346,7 @@ function testOffer(): MembershipOffer {
   };
 }
 
-function testMembership(
-  overrides: Partial<Membership> = {},
-): Membership {
+function testMembership(overrides: Partial<Membership> = {}): Membership {
   return {
     id: "mem-test",
     offerId: "offer-test",

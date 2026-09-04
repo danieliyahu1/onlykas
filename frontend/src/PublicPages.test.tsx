@@ -268,8 +268,7 @@ describe("membership panel on creator profiles", () => {
           displayName: null,
           posts: [],
         };
-      if (path === `/api/membership/offers/${encodedCreator}`)
-        return { offer };
+      if (path === `/api/membership/offers/${encodedCreator}`) return { offer };
       if (path === `/api/membership/offers/${offer.id}/memberships`)
         return { memberships: [membership] };
       throw new Error(`unexpected request: ${path}`);
@@ -307,10 +306,10 @@ describe("membership panel on creator profiles", () => {
       `/api/membership/offers/${offer.id}/mints/propose`,
       { method: "POST" },
     );
-    expect(api).toHaveBeenCalledWith(
-      `/api/membership/mints/mint-1/finalize`,
-      { method: "POST", body: JSON.stringify({ signedTransaction: "signed" }) },
-    );
+    expect(api).toHaveBeenCalledWith(`/api/membership/mints/mint-1/finalize`, {
+      method: "POST",
+      body: JSON.stringify({ signedTransaction: "signed" }),
+    });
     expect(await screen.findByText(COPY.membershipLive)).toBeVisible();
     expect(
       screen.getByRole("button", { name: /become a member for 1.25/i }),
@@ -324,7 +323,9 @@ describe("membership panel on creator profiles", () => {
     expect(
       await screen.findByText(/You're a member\. Active until/i),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: /renew for 1.25/i })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /renew for 1.25/i }),
+    ).toBeVisible();
   });
 
   it("recovers a pending membership attempt after reload", async () => {

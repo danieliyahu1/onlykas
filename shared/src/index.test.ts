@@ -33,7 +33,9 @@ describe("post validation", () => {
 
 describe("membership offer validation", () => {
   it("accepts a price and description", () => {
-    expect(validateMembershipOffer("1.5", "A private look behind the scenes")).toEqual([]);
+    expect(
+      validateMembershipOffer("1.5", "A private look behind the scenes"),
+    ).toEqual([]);
   });
 
   it("rejects missing price or description and oversize descriptions", () => {

@@ -81,11 +81,7 @@ export function CreatorPage({
 }
 
 type MembershipPhase =
-  | "preparing"
-  | "signing"
-  | "confirming"
-  | "pending"
-  | "rejected";
+  "preparing" | "signing" | "confirming" | "pending" | "rejected";
 
 const membershipStorageKey = (offerId: string, address: string) =>
   `onlykas:mint:${offerId}:${address}`;
@@ -102,8 +98,9 @@ function MembershipPanel({
   signingIn: boolean;
 }) {
   const [offer, setOffer] = useState<MembershipOfferResponse | null>(null);
-  const [attempt, setAttempt] =
-    useState<MembershipMintAttemptResponse | null>(null);
+  const [attempt, setAttempt] = useState<MembershipMintAttemptResponse | null>(
+    null,
+  );
   const [memberships, setMemberships] = useState<MembershipResponse[]>([]);
   const [phase, setPhase] = useState<MembershipPhase | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -217,9 +214,14 @@ function MembershipPanel({
       );
       setAttempt(proposed);
       setPhase("signing");
-      setMessage(COPY.membershipPrompt.replace("{price}", formatKas(offer.priceSompi)));
+      setMessage(
+        COPY.membershipPrompt.replace("{price}", formatKas(offer.priceSompi)),
+      );
       const signed = await signPreparedPayment(proposed.transaction!);
-      window.localStorage.setItem(membershipStorageKey(offer.id, buyer), proposed.id);
+      window.localStorage.setItem(
+        membershipStorageKey(offer.id, buyer),
+        proposed.id,
+      );
       setPhase("confirming");
       setMessage(COPY.membershipConfirming);
       const result = await api<MembershipMintAttemptResponse>(
@@ -274,9 +276,7 @@ function MembershipPanel({
     <aside className="membership-panel">
       <p className="eyebrow">MEMBERSHIP</p>
       <p className="offer-description">{offer.description}</p>
-      {statusBanner ? (
-        <p className="feedback success">{statusBanner}</p>
-      ) : null}
+      {statusBanner ? <p className="feedback success">{statusBanner}</p> : null}
       {message && (
         <p className="feedback" role="status">
           {message}

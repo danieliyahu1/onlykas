@@ -121,9 +121,7 @@ export function buildTransferPayload(
         },
       },
       {
-        value: String(
-          BigInt(saleAmountSompi) - BigInt(creatorRoyaltySompi),
-        ),
+        value: String(BigInt(saleAmountSompi) - BigInt(creatorRoyaltySompi)),
         scriptPublicKey: "",
         covenant: null,
       },
@@ -160,7 +158,6 @@ export function verifyRoyaltySplit(
   if (covenantOutput.value !== expectedRoyalty) return false;
   const otherOutput = outputs.find((o) => o !== covenantOutput);
   if (!otherOutput) return false;
-  const expectedSeller =
-    BigInt(saleAmountSompi) - BigInt(expectedRoyalty);
+  const expectedSeller = BigInt(saleAmountSompi) - BigInt(expectedRoyalty);
   return BigInt(otherOutput.value) === expectedSeller;
 }

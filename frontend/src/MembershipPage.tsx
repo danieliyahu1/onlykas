@@ -5,7 +5,12 @@ import {
   type MembershipDeployResponse,
   type MembershipOfferResponse,
 } from "@onlykas/shared";
-import { api, ApiError, getWalletPublicKey, signPreparedPayment } from "./kasware.js";
+import {
+  api,
+  ApiError,
+  getWalletPublicKey,
+  signPreparedPayment,
+} from "./kasware.js";
 import { KaspaMark } from "./KaspaMark.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
@@ -132,7 +137,8 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
       const apiFailure = caught instanceof ApiError ? caught : null;
       setFailure({
         code: apiFailure?.code ?? null,
-        message: caught instanceof Error ? caught.message : COPY.offerPublishFailed,
+        message:
+          caught instanceof Error ? caught.message : COPY.offerPublishFailed,
       });
       setStatus(null);
     } finally {
@@ -195,10 +201,7 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
           >
             {failure?.message ?? status}
           </div>
-          <button
-            className="primary publish-action"
-            disabled={busy || polling}
-          >
+          <button className="primary publish-action" disabled={busy || polling}>
             {actionLabel}
           </button>
         </div>

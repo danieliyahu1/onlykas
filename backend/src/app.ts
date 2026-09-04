@@ -838,11 +838,9 @@ export function createApp(dependencies: AppDependencies) {
         return response
           .status(400)
           .json({ error: "INVALID_OFFER", message: issues[0] });
-      const liveOffers = await dependencies.store.creatorMembershipOffers(
-        creator,
-      );
-      if (liveOffers.length)
-        return apiError(response, 409, "ALREADY_DEPLOYED");
+      const liveOffers =
+        await dependencies.store.creatorMembershipOffers(creator);
+      if (liveOffers.length) return apiError(response, 409, "ALREADY_DEPLOYED");
       logger("membership_offer_deploy_started", {
         requestId: request.requestId,
         creator,
@@ -957,21 +955,22 @@ export function createApp(dependencies: AppDependencies) {
             error.message,
           );
         const failedState = validationFailure ? "REJECTED" : "PENDING";
-        const pending = await dependencies.store.compareAndSetMembershipOfferDeploy(
-          deploy.id,
-          "PREPARED",
-          {
-            signedTransactionId: null,
-            state: failedState,
-            rejection: validationFailure
-              ? error instanceof Error
-                ? error.message
-                : "TRANSACTION_REJECTED"
-              : null,
-            submittedAt: validationFailure ? null : now(),
-            updatedAt: now(),
-          },
-        );
+        const pending =
+          await dependencies.store.compareAndSetMembershipOfferDeploy(
+            deploy.id,
+            "PREPARED",
+            {
+              signedTransactionId: null,
+              state: failedState,
+              rejection: validationFailure
+                ? error instanceof Error
+                  ? error.message
+                  : "TRANSACTION_REJECTED"
+                : null,
+              submittedAt: validationFailure ? null : now(),
+              updatedAt: now(),
+            },
+          );
         return response.status(validationFailure ? 422 : 202).json({
           ...membershipDeployResponse(pending ?? deploy, null),
           message: validationFailure
@@ -997,8 +996,9 @@ export function createApp(dependencies: AppDependencies) {
           submission.transactionId,
         );
         if (!updated) {
-          const current =
-            (await dependencies.store.getMembershipOfferDeploy(deploy.id))!;
+          const current = (await dependencies.store.getMembershipOfferDeploy(
+            deploy.id,
+          ))!;
           return response.status(409).json({
             ...membershipDeployResponse(current, null),
             message: COPY.offerDeployPending,
@@ -1015,20 +1015,22 @@ export function createApp(dependencies: AppDependencies) {
           message: COPY.offerLive,
         });
       }
-      const updated = await dependencies.store.compareAndSetMembershipOfferDeploy(
-        deploy.id,
-        "PREPARED",
-        {
-          signedTransactionId: submission.transactionId,
-          state: submission.isAccepted === false ? "REJECTED" : "PENDING",
-          rejection: submission.rejection,
-          submittedAt: submission.transactionId ? now() : null,
-          updatedAt: now(),
-        },
-      );
+      const updated =
+        await dependencies.store.compareAndSetMembershipOfferDeploy(
+          deploy.id,
+          "PREPARED",
+          {
+            signedTransactionId: submission.transactionId,
+            state: submission.isAccepted === false ? "REJECTED" : "PENDING",
+            rejection: submission.rejection,
+            submittedAt: submission.transactionId ? now() : null,
+            updatedAt: now(),
+          },
+        );
       if (!updated) {
-        const current =
-          (await dependencies.store.getMembershipOfferDeploy(deploy.id))!;
+        const current = (await dependencies.store.getMembershipOfferDeploy(
+          deploy.id,
+        ))!;
         return response.status(409).json({
           ...membershipDeployResponse(current, null),
           message: COPY.offerDeployPending,
@@ -1126,11 +1128,10 @@ export function createApp(dependencies: AppDependencies) {
       if (!(await dependencies.store.getCovenant(offer.covenantId)))
         throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
       const buyer = request.walletSession!.address;
-      const existing =
-        await dependencies.store.unresolvedMembershipMintAttempt(
-          offer.id,
-          buyer,
-        );
+      const existing = await dependencies.store.unresolvedMembershipMintAttempt(
+        offer.id,
+        buyer,
+      );
       if (existing?.state === "PENDING")
         return response.status(409).json({
           ...mintResponse(existing, null),
@@ -1250,21 +1251,22 @@ export function createApp(dependencies: AppDependencies) {
             error.message,
           );
         const failedState = validationFailure ? "REJECTED" : "PENDING";
-        const pending = await dependencies.store.compareAndSetMembershipMintAttempt(
-          attempt.id,
-          "PREPARED",
-          {
-            signedTransactionId: null,
-            state: failedState,
-            rejection: validationFailure
-              ? error instanceof Error
-                ? error.message
-                : "TRANSACTION_REJECTED"
-              : null,
-            submittedAt: validationFailure ? null : now(),
-            updatedAt: now(),
-          },
-        );
+        const pending =
+          await dependencies.store.compareAndSetMembershipMintAttempt(
+            attempt.id,
+            "PREPARED",
+            {
+              signedTransactionId: null,
+              state: failedState,
+              rejection: validationFailure
+                ? error instanceof Error
+                  ? error.message
+                  : "TRANSACTION_REJECTED"
+                : null,
+              submittedAt: validationFailure ? null : now(),
+              updatedAt: now(),
+            },
+          );
         return response.status(validationFailure ? 422 : 202).json({
           ...mintResponse(pending ?? attempt, null),
           message: validationFailure
@@ -1285,8 +1287,9 @@ export function createApp(dependencies: AppDependencies) {
           created,
         );
         if (!updated) {
-          const current =
-            (await dependencies.store.getMembershipMintAttempt(attempt.id))!;
+          const current = (await dependencies.store.getMembershipMintAttempt(
+            attempt.id,
+          ))!;
           const membership =
             current.state === "CONFIRMED"
               ? await dependencies.store.getMembership(current.id)
@@ -1308,20 +1311,22 @@ export function createApp(dependencies: AppDependencies) {
           message: COPY.membershipLive,
         });
       }
-      const updated = await dependencies.store.compareAndSetMembershipMintAttempt(
-        attempt.id,
-        "PREPARED",
-        {
-          signedTransactionId: submission.transactionId,
-          state: submission.isAccepted === false ? "REJECTED" : "PENDING",
-          rejection: submission.rejection,
-          submittedAt: submission.transactionId ? now() : null,
-          updatedAt: now(),
-        },
-      );
+      const updated =
+        await dependencies.store.compareAndSetMembershipMintAttempt(
+          attempt.id,
+          "PREPARED",
+          {
+            signedTransactionId: submission.transactionId,
+            state: submission.isAccepted === false ? "REJECTED" : "PENDING",
+            rejection: submission.rejection,
+            submittedAt: submission.transactionId ? now() : null,
+            updatedAt: now(),
+          },
+        );
       if (!updated) {
-        const current =
-          (await dependencies.store.getMembershipMintAttempt(attempt.id))!;
+        const current = (await dependencies.store.getMembershipMintAttempt(
+          attempt.id,
+        ))!;
         const membership =
           current.state === "CONFIRMED"
             ? await dependencies.store.getMembership(current.id)
@@ -1616,10 +1621,7 @@ function validPreparedDeploy(
   priceSompi: string,
   description: string,
 ): boolean {
-  return (
-    deploy.priceSompi === priceSompi &&
-    deploy.description === description
-  );
+  return deploy.priceSompi === priceSompi && deploy.description === description;
 }
 function mintResponse(
   attempt: MembershipMintAttempt,
@@ -1674,8 +1676,7 @@ function validPreparedMint(
     };
     return (
       transaction.outputs?.[0]?.covenant?.type === "KCC-0020" &&
-      transaction.outputs?.[0]?.scriptPublicKey?.startsWith("000020") ===
-        true
+      transaction.outputs?.[0]?.scriptPublicKey?.startsWith("000020") === true
     );
   } catch {
     return false;

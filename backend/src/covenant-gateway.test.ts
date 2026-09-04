@@ -1,14 +1,9 @@
 import { createHash } from "node:crypto";
 import { KaspaCovenantGateway } from "./covenant-gateway.js";
-import {
-  createMembershipCovenant,
-  computeCreatorRoyalty,
-} from "./covenant.js";
+import { createMembershipCovenant, computeCreatorRoyalty } from "./covenant.js";
 import type { MembershipOffer } from "./domain.js";
 
-function baseTransaction(
-  overrides: Partial<Record<string, unknown>> = {},
-) {
+function baseTransaction(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: "0".repeat(64),
     version: 0,
@@ -97,7 +92,9 @@ describe("Kaspa covenant gateway", () => {
       offer.priceSompi,
       covenant.creatorRoyaltyBps,
     );
-    const sellerAmount = (BigInt(offer.priceSompi) - BigInt(royalty)).toString();
+    const sellerAmount = (
+      BigInt(offer.priceSompi) - BigInt(royalty)
+    ).toString();
     const transaction = baseTransaction({
       outputs: [
         {
@@ -122,7 +119,7 @@ describe("Kaspa covenant gateway", () => {
     };
     const txid = "c".repeat(64);
     const parentScript = "20" + "b".repeat(64) + "ac";
-vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith(`/transactions/${"b".repeat(64)}`))
         return new Response(
@@ -138,9 +135,7 @@ vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     });
     const signed = {
       ...transaction,
-      inputs: [
-        { ...transaction.inputs[0], signatureScript: "aa01" },
-      ],
+      inputs: [{ ...transaction.inputs[0], signatureScript: "aa01" }],
     };
 
     await expect(
@@ -180,9 +175,7 @@ vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     const signed = {
       ...transaction,
-      inputs: [
-        { ...transaction.inputs[0], signatureScript: "aa01" },
-      ],
+      inputs: [{ ...transaction.inputs[0], signatureScript: "aa01" }],
     };
 
     await expect(
@@ -326,35 +319,35 @@ vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const covenant = createMembershipCovenant();
     const deployer = `kaspatest:${"q".repeat(61)}`;
     const utxoScript = `20${"00".repeat(32)}ac`;
-    vi.spyOn(globalThis, "fetch")
-      .mockImplementation(async (input) => {
-        const url = String(input);
-        if (url.endsWith(`/addresses/${encodeURIComponent(deployer)}/utxos`))
-          return new Response(
-            JSON.stringify([
-              {
-                outpoint: { transactionId: "b".repeat(64), index: 0 },
-                utxoEntry: {
-                  amount: "200",
-                  scriptPublicKey: { scriptPublicKey: utxoScript },
-                  blockDaaScore: "1",
-                  isCoinbase: false,
-                },
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/addresses/${encodeURIComponent(deployer)}/utxos`))
+        return new Response(
+          JSON.stringify([
+            {
+              outpoint: { transactionId: "b".repeat(64), index: 0 },
+              utxoEntry: {
+                amount: "200",
+                scriptPublicKey: { scriptPublicKey: utxoScript },
+                blockDaaScore: "1",
+                isCoinbase: false,
               },
-            ]),
-          );
-        if (url.endsWith("/info/fee-estimate"))
-          return new Response(
-            JSON.stringify({
-              normalBuckets: [{ feerate: 0.01 }],
-              priorityBucket: { feerate: 0.02 },
-            }),
-          );
-        throw new Error(`unexpected URL ${url}`);
-      });
+            },
+          ]),
+        );
+      if (url.endsWith("/info/fee-estimate"))
+        return new Response(
+          JSON.stringify({
+            normalBuckets: [{ feerate: 0.01 }],
+            priorityBucket: { feerate: 0.02 },
+          }),
+        );
+      throw new Error(`unexpected URL ${url}`);
+    });
 
-    const prepared = await new KaspaCovenantGateway("https://kaspa.test")
-      .prepareDeploy(covenant, deployer, "payout-pk");
+    const prepared = await new KaspaCovenantGateway(
+      "https://kaspa.test",
+    ).prepareDeploy(covenant, deployer, "payout-pk");
 
     expect(prepared.covenantId).toBe(covenant.id);
     const transaction = JSON.parse(prepared.transaction);
@@ -408,21 +401,20 @@ vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     };
     const txid = "c".repeat(64);
     const parentScript = "20" + "b".repeat(64) + "ac";
-    vi.spyOn(globalThis, "fetch")
-      .mockImplementation(async (input, init) => {
-        const url = String(input);
-        if (url.endsWith(`/transactions/${"b".repeat(64)}`))
-          return new Response(
-            JSON.stringify({
-              outputs: [{ amount: 200, script_public_key: parentScript }],
-            }),
-          );
-        if (url.endsWith("/transactions") && init?.method === "POST")
-          return new Response(JSON.stringify({ transactionId: txid }));
-        if (url.endsWith(`/transactions/${txid}`))
-          return new Response(JSON.stringify({ is_accepted: true }));
-        throw new Error(`unexpected URL ${url}`);
-      });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith(`/transactions/${"b".repeat(64)}`))
+        return new Response(
+          JSON.stringify({
+            outputs: [{ amount: 200, script_public_key: parentScript }],
+          }),
+        );
+      if (url.endsWith("/transactions") && init?.method === "POST")
+        return new Response(JSON.stringify({ transactionId: txid }));
+      if (url.endsWith(`/transactions/${txid}`))
+        return new Response(JSON.stringify({ is_accepted: true }));
+      throw new Error(`unexpected URL ${url}`);
+    });
     const signed = {
       ...transaction,
       inputs: [{ ...transaction.inputs[0], signatureScript: "aa01" }],

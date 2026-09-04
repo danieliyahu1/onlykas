@@ -437,9 +437,7 @@ export class LibsqlStore implements Store {
     });
     return result.rows[0] ? membershipOfferFromRow(result.rows[0]) : null;
   }
-  async creatorMembershipOffers(
-    creator: string,
-  ): Promise<MembershipOffer[]> {
+  async creatorMembershipOffers(creator: string): Promise<MembershipOffer[]> {
     const result = await this.client.execute({
       sql: `SELECT * FROM membership_offers WHERE creator=? AND is_active=1 ORDER BY created_at DESC`,
       args: [creator],
@@ -483,9 +481,7 @@ export class LibsqlStore implements Store {
       sql: `SELECT * FROM membership_offer_deploys WHERE id=?`,
       args: [id],
     });
-    return result.rows[0]
-      ? membershipOfferDeployFromRow(result.rows[0])
-      : null;
+    return result.rows[0] ? membershipOfferDeployFromRow(result.rows[0]) : null;
   }
   async unresolvedMembershipOfferDeploy(
     creator: string,
@@ -494,9 +490,7 @@ export class LibsqlStore implements Store {
       sql: `SELECT * FROM membership_offer_deploys WHERE creator=? AND state IN ('PREPARED','PENDING') ORDER BY created_at DESC LIMIT 1`,
       args: [creator],
     });
-    return result.rows[0]
-      ? membershipOfferDeployFromRow(result.rows[0])
-      : null;
+    return result.rows[0] ? membershipOfferDeployFromRow(result.rows[0]) : null;
   }
   async pendingMembershipOfferDeploys(): Promise<MembershipOfferDeploy[]> {
     const result = await this.client.execute({
@@ -509,9 +503,7 @@ export class LibsqlStore implements Store {
     expectedState: MembershipOfferDeployState,
     update: MembershipOfferDeployUpdate,
   ): Promise<MembershipOfferDeploy | null> {
-    const fields = Object.keys(
-      update,
-    ) as (keyof MembershipOfferDeployUpdate)[];
+    const fields = Object.keys(update) as (keyof MembershipOfferDeployUpdate)[];
     if (!fields.length) return this.getMembershipOfferDeploy(id);
     const names: Record<string, string> = {
       signedTransactionId: "signed_transaction_id",
@@ -650,7 +642,9 @@ export class LibsqlStore implements Store {
       ? membershipTransferAttemptFromRow(result.rows[0])
       : null;
   }
-  async pendingMembershipTransferAttempts(): Promise<MembershipTransferAttempt[]> {
+  async pendingMembershipTransferAttempts(): Promise<
+    MembershipTransferAttempt[]
+  > {
     const result = await this.client.execute(
       `SELECT * FROM membership_transfer_attempts WHERE state='PENDING' ORDER BY updated_at`,
     );
@@ -661,7 +655,9 @@ export class LibsqlStore implements Store {
     expectedState: MembershipTransferAttemptState,
     update: MembershipTransferAttemptUpdate,
   ): Promise<MembershipTransferAttempt | null> {
-    const fields = Object.keys(update) as (keyof MembershipTransferAttemptUpdate)[];
+    const fields = Object.keys(
+      update,
+    ) as (keyof MembershipTransferAttemptUpdate)[];
     if (!fields.length) return this.getMembershipTransferAttempt(id);
     const names: Record<string, string> = {
       signedTransactionId: "signed_transaction_id",
@@ -677,9 +673,7 @@ export class LibsqlStore implements Store {
       sql: `UPDATE membership_transfer_attempts SET ${fields.map((field) => `${names[field]}=?`).join(",")} WHERE id=? AND state=?`,
       args: [...values, id, expectedState] as InValue[],
     });
-    return result.rowsAffected
-      ? this.getMembershipTransferAttempt(id)
-      : null;
+    return result.rowsAffected ? this.getMembershipTransferAttempt(id) : null;
   }
   async confirmMembershipTransferAttempt(
     id: string,
@@ -750,9 +744,7 @@ export class LibsqlStore implements Store {
       sql: `SELECT * FROM membership_mint_attempts WHERE id=?`,
       args: [id],
     });
-    return result.rows[0]
-      ? membershipMintAttemptFromRow(result.rows[0])
-      : null;
+    return result.rows[0] ? membershipMintAttemptFromRow(result.rows[0]) : null;
   }
   async unresolvedMembershipMintAttempt(
     offerId: string,
@@ -762,9 +754,7 @@ export class LibsqlStore implements Store {
       sql: `SELECT * FROM membership_mint_attempts WHERE offer_id=? AND buyer=? AND state IN ('PREPARED','PENDING') ORDER BY created_at DESC LIMIT 1`,
       args: [offerId, buyer],
     });
-    return result.rows[0]
-      ? membershipMintAttemptFromRow(result.rows[0])
-      : null;
+    return result.rows[0] ? membershipMintAttemptFromRow(result.rows[0]) : null;
   }
   async pendingMembershipMintAttempts(): Promise<MembershipMintAttempt[]> {
     const result = await this.client.execute(
@@ -777,9 +767,7 @@ export class LibsqlStore implements Store {
     expectedState: MembershipMintAttemptState,
     update: MembershipMintAttemptUpdate,
   ): Promise<MembershipMintAttempt | null> {
-    const fields = Object.keys(
-      update,
-    ) as (keyof MembershipMintAttemptUpdate)[];
+    const fields = Object.keys(update) as (keyof MembershipMintAttemptUpdate)[];
     if (!fields.length) return this.getMembershipMintAttempt(id);
     const names: Record<string, string> = {
       signedTransactionId: "signed_transaction_id",
@@ -986,9 +974,7 @@ function covenantFromRow(row: Record<string, unknown>): MembershipCovenant {
     createdAt: number(row.created_at),
   };
 }
-function membershipOfferFromRow(
-  row: Record<string, unknown>,
-): MembershipOffer {
+function membershipOfferFromRow(row: Record<string, unknown>): MembershipOffer {
   return {
     id: text(row.id),
     creator: text(row.creator),

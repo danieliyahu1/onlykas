@@ -118,9 +118,10 @@ describe("creator membership offer experience", () => {
     await user.click(screen.getByRole("button", { name: /^publish offer/i }));
 
     expect(await screen.findByText(COPY.invalidPrice)).toBeVisible();
-    expect(
-      api,
-    ).not.toHaveBeenCalledWith("/api/membership/offers/propose", expect.anything());
+    expect(api).not.toHaveBeenCalledWith(
+      "/api/membership/offers/propose",
+      expect.anything(),
+    );
   });
 
   it("refuses to publish after a cancelled sign-in", async () => {

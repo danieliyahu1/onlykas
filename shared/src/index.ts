@@ -47,8 +47,7 @@ export const COPY = {
   accessVerificationFailed: "OnlyKas can't verify access right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
   invalidCreatorAddress: "Enter a complete Kaspa testnet address.",
-  offerInvalid:
-    "Add a price and a description for your membership offer.",
+  offerInvalid: "Add a price and a description for your membership offer.",
   offerSignPrompt:
     "Sign the deploy transaction in Kasware to publish your offer.",
   offerSigning: "Waiting for your signature...",
@@ -157,10 +156,7 @@ export interface ProfileResponse {
 }
 
 export type MembershipOfferDeployState =
-  | "PREPARED"
-  | "PENDING"
-  | "CONFIRMED"
-  | "REJECTED";
+  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
 
 export interface MembershipOfferResponse {
   id: string;
@@ -202,10 +198,7 @@ export interface MembershipResponse {
 }
 
 export type MembershipMintAttemptState =
-  | "PREPARED"
-  | "PENDING"
-  | "CONFIRMED"
-  | "REJECTED";
+  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
 
 export interface MembershipMintAttemptResponse {
   id: string;
@@ -290,7 +283,9 @@ export function validateMembershipOffer(
     Array.from(normalizedDescription).length < 1 ||
     Array.from(normalizedDescription).length > MEMBERSHIP_DESCRIPTION_MAX
   )
-    errors.push(`Descriptions must be up to ${MEMBERSHIP_DESCRIPTION_MAX} characters.`);
+    errors.push(
+      `Descriptions must be up to ${MEMBERSHIP_DESCRIPTION_MAX} characters.`,
+    );
   if (parseKasToSompi(price) === null) errors.push(COPY.invalidPrice);
   return errors;
 }

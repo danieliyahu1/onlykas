@@ -33,10 +33,7 @@ export class MemoryStore implements Store {
   readonly profiles = new Map<string, Profile>();
   readonly covenants = new Map<string, MembershipCovenant>();
   readonly membershipOffers = new Map<string, MembershipOffer>();
-  readonly membershipOfferDeploys = new Map<
-    string,
-    MembershipOfferDeploy
-  >();
+  readonly membershipOfferDeploys = new Map<string, MembershipOfferDeploy>();
   readonly memberships = new Map<string, Membership>();
   readonly membershipTransferAttempts = new Map<
     string,
@@ -258,9 +255,7 @@ export class MemoryStore implements Store {
     const offer = this.membershipOffers.get(id);
     return offer ? structuredClone(offer) : null;
   }
-  async creatorMembershipOffers(
-    creator: string,
-  ): Promise<MembershipOffer[]> {
+  async creatorMembershipOffers(creator: string): Promise<MembershipOffer[]> {
     return [...this.membershipOffers.values()]
       .filter((offer) => offer.creator === creator && offer.isActive)
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -368,10 +363,7 @@ export class MemoryStore implements Store {
   async createMembershipTransferAttempt(
     attempt: MembershipTransferAttempt,
   ): Promise<void> {
-    this.membershipTransferAttempts.set(
-      attempt.id,
-      structuredClone(attempt),
-    );
+    this.membershipTransferAttempts.set(attempt.id, structuredClone(attempt));
   }
   async getMembershipTransferAttempt(
     id: string,
@@ -379,7 +371,9 @@ export class MemoryStore implements Store {
     const value = this.membershipTransferAttempts.get(id);
     return value ? structuredClone(value) : null;
   }
-  async pendingMembershipTransferAttempts(): Promise<MembershipTransferAttempt[]> {
+  async pendingMembershipTransferAttempts(): Promise<
+    MembershipTransferAttempt[]
+  > {
     return [...this.membershipTransferAttempts.values()]
       .filter((attempt) => attempt.state === "PENDING")
       .map((attempt) => structuredClone(attempt));
@@ -484,7 +478,8 @@ export class MemoryStore implements Store {
       return null;
     const confirmed = {
       ...attempt,
-      signedTransactionId: attempt.signedTransactionId ?? membership.createdTxId,
+      signedTransactionId:
+        attempt.signedTransactionId ?? membership.createdTxId,
       submittedAt: attempt.submittedAt ?? membership.createdAt,
       lastCheckedAt:
         expectedState === "PENDING"
