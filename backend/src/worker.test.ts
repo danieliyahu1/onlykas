@@ -15,6 +15,7 @@ import {
   processNextUpload,
   reconcilePendingMembershipDeploys,
   reconcilePendingMembershipMints,
+  reconcilePendingMembershipTransfers,
   reconcilePendingPayments,
 } from "./worker.js";
 
@@ -452,6 +453,155 @@ describe("membership mint reconciliation", () => {
     expect(await expireExpiredMemberships(store, now)).toBe(1);
     expect((await store.getMembership("mint"))?.state).toBe("EXPIRED");
     expect((await store.getMembership("mint-future"))?.state).toBe("ACTIVE");
+  });
+});
+
+describe("membership transfer reconciliation", () => {
+  function pendingTransfer(id: string) {
+    return {
+      id,
+      membershipId: "membership-1",
+      seller: "seller",
+      buyer: "buyer",
+      saleAmountSompi: "500000000",
+      creatorRoyaltySompi: "50000000",
+      creatorPayoutAddress: "creator",
+      preparedTransaction: "prepared",
+      fingerprint: "fingerprint",
+      signedTransactionId: "f".repeat(64),
+      state: "PENDING" as const,
+      rejection: null,
+      submittedAt: 10,
+      lastCheckedAt: 10,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 10,
+    };
+  }
+
+  async function seedMembership(store: MemoryStore) {
+    await store.saveCovenant({
+      id: "covenant-1",
+      templateJson: '{"type":"KCC-0020","amount":1}',
+      templateFingerprint: "a".repeat(64),
+      amount: "1",
+      durationMs: 86400_000,
+      creatorRoyaltyBps: 1000,
+      createdAt: 1,
+    });
+    await store.createMembershipOffer({
+      id: "offer-1",
+      creator: "creator",
+      covenantId: "covenant-1",
+      priceSompi: "100",
+      description: "A day of access",
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    await store.createMembership({
+      id: "membership-1",
+      offerId: "offer-1",
+      owner: "seller",
+      creator: "creator",
+      covenantId: "covenant-1",
+      createdTxId: null,
+      validUntil: 100_000,
+      state: "ACTIVE",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+  }
+
+  function gatewayWithStatus(
+    status: (transactionId: string) => Promise<{
+      isAccepted: boolean | null;
+      transactionId: string | null;
+      rejection: string | null;
+      acceptedAt: number | null;
+    }>,
+  ) {
+    return {
+      prepareDeploy: async () => {
+        throw new Error("must not prepare");
+      },
+      submitDeploy: async () => {
+        throw new Error("must not submit");
+      },
+      mint: async () => {
+        throw new Error("must not mint");
+      },
+      transfer: async () => {
+        throw new Error("must not transfer");
+      },
+      submit: async () => {
+        throw new Error("must not submit");
+      },
+      submitMint: async () => {
+        throw new Error("must not submit");
+      },
+      status,
+    };
+  }
+
+  it("confirms an accepted transfer and moves the membership to the buyer", async () => {
+    const store = new MemoryStore();
+    await seedMembership(store);
+    await store.createMembershipTransferAttempt(pendingTransfer("transfer"));
+    const gateway = gatewayWithStatus(async () => ({
+      isAccepted: true,
+      transactionId: "f".repeat(64),
+      rejection: null,
+      acceptedAt: 5_000,
+    }));
+
+    expect(await reconcilePendingMembershipTransfers(store, gateway, 20)).toBe(
+      1,
+    );
+    expect((await store.getMembershipTransferAttempt("transfer"))?.state).toBe(
+      "CONFIRMED",
+    );
+    const membership = await store.getMembership("membership-1");
+    expect(membership!.owner).toBe("buyer");
+    expect(membership!.state).toBe("ACTIVE");
+    expect(membership!.validUntil).toBe(100_000);
+  });
+
+  it("marks a rejected pending transfer and keeps quiet on undecided transactions", async () => {
+    const store = new MemoryStore();
+    await seedMembership(store);
+    await store.createMembershipTransferAttempt(pendingTransfer("transfer-a"));
+    await store.createMembershipTransferAttempt({
+      ...pendingTransfer("transfer-b"),
+      signedTransactionId: "e".repeat(64),
+    });
+    const gateway = gatewayWithStatus(async (transactionId: string) => ({
+      isAccepted: transactionId === "f".repeat(64) ? false : null,
+      transactionId,
+      rejection:
+        transactionId === "f".repeat(64) ? "TRANSACTION_REJECTED" : null,
+      acceptedAt: null,
+    }));
+
+    expect(await reconcilePendingMembershipTransfers(store, gateway, 30)).toBe(
+      2,
+    );
+    expect(
+      (await store.getMembershipTransferAttempt("transfer-a"))?.state,
+    ).toBe("REJECTED");
+    expect(
+      (await store.getMembershipTransferAttempt("transfer-a"))?.rejection,
+    ).toBe("TRANSACTION_REJECTED");
+    expect(
+      (await store.getMembershipTransferAttempt("transfer-b"))?.state,
+    ).toBe("PENDING");
+    expect(
+      (await store.getMembershipTransferAttempt("transfer-b"))
+        ?.reconciliationAttempts,
+    ).toBe(1);
+    expect(
+      (await store.getMembershipTransferAttempt("transfer-b"))?.lastCheckedAt,
+    ).toBe(30);
   });
 });
 

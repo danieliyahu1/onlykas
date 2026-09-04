@@ -361,3 +361,196 @@ describe("membership panel on creator profiles", () => {
     expect(pendingButton).toBeDisabled();
   });
 });
+
+describe("membership transfer panel", () => {
+  const offer = {
+    id: "offer-1",
+    creator: post.creator,
+    covenantId: "covenant-1",
+    priceSompi: "125000000",
+    description: "A day of access",
+    isActive: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const membership = {
+    id: "membership-1",
+    offerId: "offer-1",
+    owner: address,
+    creator: post.creator,
+    covenantId: "covenant-1",
+    createdTxId: "tx-1",
+    createdAt: "2099-01-01T00:00:00.000Z",
+    validUntil: "2099-01-02T00:00:00.000Z",
+    state: "ACTIVE" as const,
+  };
+  const recipient = `kaspatest:${"r".repeat(60)}`;
+  const prepared = {
+    id: "transfer-1",
+    membershipId: "membership-1",
+    seller: address,
+    buyer: recipient,
+    saleAmountSompi: "500000000",
+    creatorRoyaltySompi: "50000000",
+    creatorPayoutAddress: post.creator,
+    state: "PREPARED" as const,
+    transaction: '{"inputs":[]}',
+    fingerprint: "fingerprint",
+    transactionId: null,
+    rejection: null,
+    submittedAt: null,
+    lastCheckedAt: null,
+    reconciliationAttempts: 0,
+    membership: null,
+  };
+
+  function transferApi({
+    propose = prepared,
+    finalize = {
+      ...prepared,
+      state: "CONFIRMED" as const,
+      transactionId: "a".repeat(64),
+      membership: { ...membership, owner: recipient },
+    },
+  }: {
+    propose?: typeof prepared;
+    finalize?: { state: string; [key: string]: unknown };
+  } = {}) {
+    const encodedCreator = encodeURIComponent(post.creator);
+    let transferred = false;
+    vi.mocked(api).mockImplementation(async (path, init) => {
+      if (path === `/api/creators/${encodedCreator}`)
+        return {
+          address: post.creator,
+          displayAddress: "kaspatest:cccc...cccc",
+          displayName: null,
+          posts: [],
+        };
+      if (path === `/api/membership/offers/${encodedCreator}`) return { offer };
+      if (path === `/api/membership/offers/${offer.id}/memberships`)
+        return transferred
+          ? { memberships: [] }
+          : { memberships: [membership] };
+      if (init?.method === "POST") {
+        if (
+          path === "/api/membership/memberships/membership-1/transfers/propose"
+        )
+          return propose;
+        if (path === "/api/membership/transfers/transfer-1/finalize") {
+          transferred = true;
+          return finalize;
+        }
+      }
+      if (path === "/api/membership/transfers/transfer-1") return finalize;
+      throw new Error(`unexpected request: ${path}`);
+    });
+  }
+
+  it("shows the holder a resell control for their active membership", async () => {
+    transferApi();
+    renderCreator(post.creator, { wallet: address });
+
+    expect(
+      await screen.findByRole("button", { name: COPY.transferTitle }),
+    ).toBeVisible();
+  });
+
+  it("hides the resell control from a non-holder", async () => {
+    transferApi();
+    const visitor = `kaspatest:${"v".repeat(60)}`;
+    renderCreator(post.creator, { wallet: visitor });
+
+    await screen.findByText("A day of access");
+    expect(
+      screen.queryByRole("button", { name: COPY.transferTitle }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("transfers the membership after signing and reloads the holder view", async () => {
+    transferApi();
+    const user = userEvent.setup();
+    renderCreator(post.creator, { wallet: address });
+
+    await user.click(
+      await screen.findByRole("button", { name: COPY.transferTitle }),
+    );
+    await user.type(
+      screen.getByLabelText(COPY.transferRecipientLabel),
+      recipient,
+    );
+    await user.click(screen.getByRole("button", { name: COPY.transferTitle }));
+
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith(
+        "/api/membership/memberships/membership-1/transfers/propose",
+        {
+          method: "POST",
+          body: JSON.stringify({ recipient, saleAmount: "1" }),
+        },
+      ),
+    );
+    expect(signPreparedPayment).toHaveBeenCalledWith('{"inputs":[]}');
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith(
+        "/api/membership/transfers/transfer-1/finalize",
+        {
+          method: "POST",
+          body: JSON.stringify({ signedTransaction: "signed" }),
+        },
+      ),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: COPY.transferTitle }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      window.localStorage.getItem(`onlykas:transfer:membership-1:${address}`),
+    ).toBeNull();
+  });
+
+  it("shows validation errors without proposing a transfer", async () => {
+    transferApi();
+    const user = userEvent.setup();
+    renderCreator(post.creator, { wallet: address });
+
+    await user.click(
+      await screen.findByRole("button", { name: COPY.transferTitle }),
+    );
+    await user.type(
+      screen.getByLabelText(COPY.transferRecipientLabel),
+      "not-an-address",
+    );
+    await user.click(screen.getByRole("button", { name: COPY.transferTitle }));
+
+    expect(
+      await screen.findByText(COPY.transferInvalidRecipient),
+    ).toBeVisible();
+    expect(api).not.toHaveBeenCalledWith(
+      "/api/membership/memberships/membership-1/transfers/propose",
+      expect.anything(),
+    );
+  });
+
+  it("recovers a pending transfer after reload and stays disabled", async () => {
+    window.localStorage.setItem(
+      `onlykas:transfer:membership-1:${address}`,
+      "transfer-1",
+    );
+    transferApi({
+      finalize: {
+        ...prepared,
+        state: "PENDING",
+        transactionId: "a".repeat(64),
+        membership: null,
+      },
+    });
+    renderCreator(post.creator, { wallet: address });
+
+    const pendingButton = await screen.findByRole("button", {
+      name: COPY.transferPending,
+    });
+    expect(pendingButton).toBeDisabled();
+  });
+});

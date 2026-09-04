@@ -8,6 +8,7 @@ import {
   processNextUpload,
   reconcilePendingMembershipDeploys,
   reconcilePendingMembershipMints,
+  reconcilePendingMembershipTransfers,
   reconcilePendingPayments,
 } from "./worker.js";
 import { KaspaWalletVerifier } from "./wallet-verifier.js";
@@ -76,6 +77,15 @@ setInterval(() => {
   ).catch((error) =>
     logEvent(
       "membership_mint_reconciliation_unhandled_error",
+      safeError(error),
+    ),
+  );
+  void reconcilePendingMembershipTransfers(
+    store,
+    new KaspaCovenantGateway(environment.KASPA_NODE_URL),
+  ).catch((error) =>
+    logEvent(
+      "membership_transfer_reconciliation_unhandled_error",
       safeError(error),
     ),
   );

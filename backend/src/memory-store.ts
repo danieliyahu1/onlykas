@@ -411,7 +411,8 @@ export class MemoryStore implements Store {
     this.membershipTransferAttempts.set(id, structuredClone(confirmed));
     const membership = this.memberships.get(attempt.membershipId);
     if (membership) {
-      membership.state = "TRANSFERRED";
+      membership.owner = attempt.buyer;
+      membership.state = "ACTIVE";
       membership.updatedAt = membershipUpdate.confirmedAt;
     }
     return structuredClone(confirmed);

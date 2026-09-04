@@ -695,8 +695,8 @@ export class LibsqlStore implements Store {
             ],
           },
           {
-            sql: `UPDATE memberships SET state='TRANSFERRED', updated_at=? WHERE id=(SELECT membership_id FROM membership_transfer_attempts WHERE id=? AND state='CONFIRMED')`,
-            args: [membershipUpdate.confirmedAt, id],
+            sql: `UPDATE memberships SET owner=(SELECT buyer FROM membership_transfer_attempts WHERE id=? AND state='CONFIRMED'), state='ACTIVE', updated_at=? WHERE id=(SELECT membership_id FROM membership_transfer_attempts WHERE id=? AND state='CONFIRMED')`,
+            args: [id, membershipUpdate.confirmedAt, id],
           },
         ],
         "write",

@@ -26,6 +26,7 @@ import {
   type MembershipMintAttemptResponse,
   type MembershipOfferResponse,
   type MembershipResponse,
+  type MembershipTransferAttemptResponse,
   type PostResponse,
   type UploadResponse,
 } from "@onlykas/shared";
@@ -43,6 +44,7 @@ import type {
   MembershipMintAttempt,
   MembershipOffer,
   MembershipOfferDeploy,
+  MembershipTransferAttempt,
 } from "./domain.js";
 import {
   logEvent,
@@ -80,6 +82,12 @@ const apiMessages: Record<string, string> = {
   OFFER_UNAVAILABLE: "This membership offer is no longer available.",
   MINT_NOT_FOUND: "This membership could not be found.",
   MINT_PRICE_MISMATCH: COPY.membershipPriceMismatch,
+  TRANSFER_NOT_FOUND: COPY.transferNotFound,
+  TRANSFER_UNAVAILABLE: COPY.transferUnavailable,
+  TRANSFER_NOT_HOLDER: COPY.transferNotHolder,
+  TRANSFER_EXPIRED: COPY.transferExpired,
+  TRANSFER_INVALID_RECIPIENT: COPY.transferInvalidRecipient,
+  TRANSFER_INVALID_AMOUNT: COPY.transferInvalidAmount,
 };
 
 export interface AppDependencies {
@@ -1372,6 +1380,257 @@ export function createApp(dependencies: AppDependencies) {
     }),
   );
 
+  app.post(
+    "/api/membership/memberships/:id/transfers/propose",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      if (!dependencies.covenantGateway)
+        throw new HttpError(503, "TRANSFER_UNAVAILABLE");
+      const seller = request.walletSession!.address;
+      const membership = await dependencies.store.getMembership(
+        routeParam(request, "id"),
+      );
+      if (!membership) return apiError(response, 404, "MINT_NOT_FOUND");
+      if (membership.owner !== seller)
+        return apiError(response, 403, "TRANSFER_NOT_HOLDER");
+      if (membership.state !== "ACTIVE" || membership.validUntil <= now())
+        return apiError(response, 409, "TRANSFER_EXPIRED");
+      const body = z
+        .object({
+          recipient: z.string().min(1),
+          saleAmount: z.string().min(1),
+        })
+        .parse(request.body);
+      const saleAmountSompi = parseKasToSompi(body.saleAmount);
+      if (saleAmountSompi === null || saleAmountSompi <= 0n)
+        return apiError(response, 422, "TRANSFER_INVALID_AMOUNT");
+      if (!addressPattern.test(body.recipient)) {
+        return apiError(response, 422, "TRANSFER_INVALID_RECIPIENT");
+      }
+      if (body.recipient === seller)
+        return apiError(response, 422, "TRANSFER_INVALID_RECIPIENT");
+      logger("membership_transfer_started", {
+        requestId: request.requestId,
+        membershipId: membership.id,
+        seller,
+        recipient: body.recipient,
+      });
+      let prepared;
+      try {
+        prepared = await dependencies.covenantGateway.transfer(
+          membership,
+          body.recipient,
+          saleAmountSompi.toString(),
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+          throw new HttpError(422, "TRANSFER_INVALID_AMOUNT");
+        throw error;
+      }
+      const attempt: MembershipTransferAttempt = {
+        id: randomUUID(),
+        membershipId: membership.id,
+        seller,
+        buyer: body.recipient,
+        saleAmountSompi: prepared.saleAmountSompi,
+        creatorRoyaltySompi: prepared.creatorRoyaltySompi,
+        creatorPayoutAddress: membership.creator,
+        preparedTransaction: prepared.transaction,
+        fingerprint: prepared.fingerprint,
+        signedTransactionId: null,
+        state: "PREPARED",
+        rejection: null,
+        submittedAt: null,
+        lastCheckedAt: null,
+        reconciliationAttempts: 0,
+        createdAt: now(),
+        updatedAt: now(),
+      };
+      await dependencies.store.createMembershipTransferAttempt(attempt);
+      logger("membership_transfer_prepared", {
+        requestId: request.requestId,
+        transferId: attempt.id,
+        membershipId: membership.id,
+        seller,
+        buyer: attempt.buyer,
+        saleAmountSompi: attempt.saleAmountSompi,
+        creatorRoyaltySompi: attempt.creatorRoyaltySompi,
+      });
+      response.status(201).json(transferResponse(attempt, null));
+    }),
+  );
+
+  app.post(
+    "/api/membership/transfers/:id/finalize",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      if (!dependencies.covenantGateway)
+        throw new HttpError(503, "TRANSFER_UNAVAILABLE");
+      const seller = request.walletSession!.address;
+      const attempt = await dependencies.store.getMembershipTransferAttempt(
+        routeParam(request, "id"),
+      );
+      logger("membership_transfer_finalize_started", {
+        requestId: request.requestId,
+        transferId: routeParam(request, "id"),
+        seller,
+      });
+      if (!attempt || attempt.seller !== seller)
+        return apiError(response, 404, "TRANSFER_NOT_FOUND");
+      if (attempt.state === "CONFIRMED") {
+        const current = await dependencies.store.getMembership(
+          attempt.membershipId,
+        );
+        return response.json(transferResponse(attempt, current));
+      }
+      if (attempt.state === "PENDING")
+        return response.status(409).json({
+          ...transferResponse(attempt, null),
+          message: COPY.transferPending,
+        });
+      const body = z
+        .object({ signedTransaction: z.string().min(1) })
+        .parse(request.body);
+      const membership = await dependencies.store.getMembership(
+        attempt.membershipId,
+      );
+      if (!membership) return apiError(response, 404, "TRANSFER_NOT_FOUND");
+      let submission;
+      try {
+        submission = await dependencies.covenantGateway.submit(
+          {
+            transaction: attempt.preparedTransaction,
+            fingerprint: attempt.fingerprint,
+            saleAmountSompi: attempt.saleAmountSompi,
+            creatorRoyaltySompi: attempt.creatorRoyaltySompi,
+            seller: attempt.seller,
+            buyer: attempt.buyer,
+          },
+          body.signedTransaction,
+        );
+      } catch (error) {
+        const validationFailure =
+          error instanceof Error &&
+          ["INVALID_INPUT", "INPUT_CHANGED", "UTXO_OWNER_MISMATCH"].includes(
+            error.message,
+          );
+        const failedState = validationFailure ? "REJECTED" : "PENDING";
+        const pending =
+          await dependencies.store.compareAndSetMembershipTransferAttempt(
+            attempt.id,
+            "PREPARED",
+            {
+              signedTransactionId: null,
+              state: failedState,
+              rejection: validationFailure
+                ? error instanceof Error
+                  ? error.message
+                  : "TRANSACTION_REJECTED"
+                : null,
+              submittedAt: validationFailure ? null : now(),
+              updatedAt: now(),
+            },
+          );
+        return response.status(validationFailure ? 422 : 202).json({
+          ...transferResponse(pending ?? attempt, null),
+          message: validationFailure
+            ? COPY.transferRejected
+            : COPY.transferPending,
+        });
+      }
+      if (submission.isAccepted === true && submission.transactionId) {
+        const updated =
+          await dependencies.store.confirmMembershipTransferAttempt(
+            attempt.id,
+            "PREPARED",
+            {
+              transactionId: submission.transactionId,
+              confirmedAt: now(),
+            },
+          );
+        if (!updated) {
+          const current =
+            (await dependencies.store.getMembershipTransferAttempt(
+              attempt.id,
+            ))!;
+          return response.status(409).json({
+            ...transferResponse(current, null),
+            message: COPY.transferPending,
+          });
+        }
+        logger("membership_transfer_finalized", {
+          requestId: request.requestId,
+          transferId: updated.id,
+          transactionId: updated.signedTransactionId,
+          membershipId: updated.membershipId,
+        });
+        const currentMembership = await dependencies.store.getMembership(
+          updated.membershipId,
+        );
+        return response.json({
+          ...transferResponse(updated, currentMembership),
+          message: COPY.transferSent,
+        });
+      }
+      const updated =
+        await dependencies.store.compareAndSetMembershipTransferAttempt(
+          attempt.id,
+          "PREPARED",
+          {
+            signedTransactionId: submission.transactionId,
+            state: submission.isAccepted === false ? "REJECTED" : "PENDING",
+            rejection: submission.rejection,
+            submittedAt: submission.transactionId ? now() : null,
+            updatedAt: now(),
+          },
+        );
+      if (!updated) {
+        const current = (await dependencies.store.getMembershipTransferAttempt(
+          attempt.id,
+        ))!;
+        return response.status(409).json({
+          ...transferResponse(current, null),
+          message: COPY.transferPending,
+        });
+      }
+      logger("membership_transfer_finalized", {
+        requestId: request.requestId,
+        transferId: updated.id,
+        state: updated.state,
+        transactionId: updated.signedTransactionId,
+      });
+      if (submission.isAccepted === null)
+        return response.status(202).json({
+          ...transferResponse(updated, null),
+          message: COPY.transferPending,
+        });
+      return response.status(422).json({
+        ...transferResponse(updated, null),
+        message: COPY.transferRejected,
+      });
+    }),
+  );
+
+  app.get(
+    "/api/membership/transfers/:id",
+    optionalSession,
+    requireSession,
+    asyncHandler(async (request, response) => {
+      const attempt = await dependencies.store.getMembershipTransferAttempt(
+        routeParam(request, "id"),
+      );
+      if (!attempt || attempt.seller !== request.walletSession!.address)
+        return apiError(response, 404, "TRANSFER_NOT_FOUND");
+      const membership =
+        attempt.state === "CONFIRMED"
+          ? await dependencies.store.getMembership(attempt.membershipId)
+          : null;
+      response.json(transferResponse(attempt, membership));
+    }),
+  );
+
   app.all(
     "/api/posts/:id/media",
     optionalSession,
@@ -1648,6 +1907,34 @@ function mintResponse(
   }
   return response;
 }
+function transferResponse(
+  attempt: MembershipTransferAttempt,
+  membership: Membership | null,
+): MembershipTransferAttemptResponse {
+  const prepared = attempt.state === "PREPARED";
+  const response: MembershipTransferAttemptResponse = {
+    id: attempt.id,
+    membershipId: attempt.membershipId,
+    seller: attempt.seller,
+    buyer: attempt.buyer,
+    saleAmountSompi: attempt.saleAmountSompi,
+    creatorRoyaltySompi: attempt.creatorRoyaltySompi,
+    creatorPayoutAddress: attempt.creatorPayoutAddress,
+    state: attempt.state,
+    transactionId: attempt.signedTransactionId,
+    rejection: attempt.rejection,
+    submittedAt: attempt.submittedAt,
+    lastCheckedAt: attempt.lastCheckedAt,
+    reconciliationAttempts: attempt.reconciliationAttempts,
+    membership: membership ? membershipResponse(membership) : null,
+  };
+  if (prepared) {
+    response.transaction = attempt.preparedTransaction;
+    response.fingerprint = attempt.fingerprint;
+  }
+  return response;
+}
+
 function membershipResponse(membership: Membership): MembershipResponse {
   return {
     id: membership.id,

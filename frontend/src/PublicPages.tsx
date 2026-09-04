@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   COPY,
+  isKaspaTestnetAddress,
+  parseKasToSompi,
   type CreatorResponse,
   type MembershipMintAttemptResponse,
   type MembershipOfferResponse,
   type MembershipResponse,
+  type MembershipTransferAttemptResponse,
   type PostResponse,
 } from "@onlykas/shared";
 import { api, signPreparedPayment, WalletError } from "./kasware.js";
@@ -282,6 +285,13 @@ function MembershipPanel({
           {message}
         </p>
       )}
+      {live && wallet && wallet === live.owner ? (
+        <TransferPanel
+          membership={live}
+          wallet={wallet}
+          onChanged={loadMemberships}
+        />
+      ) : null}
       <p className="price">
         {price} <KaspaMark />
         <span className="sr-only">KAS</span>
@@ -320,6 +330,234 @@ function formatDate(iso: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+type TransferPhase =
+  "preparing" | "signing" | "confirming" | "pending" | "rejected";
+
+const transferStorageKey = (membershipId: string, address: string) =>
+  `onlykas:transfer:${membershipId}:${address}`;
+
+function TransferPanel({
+  membership,
+  wallet,
+  onChanged,
+}: {
+  membership: MembershipResponse;
+  wallet: string;
+  onChanged: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [recipient, setRecipient] = useState("");
+  const [salePrice, setSalePrice] = useState("1");
+  const [phase, setPhase] = useState<TransferPhase | null>(null);
+  const [attempt, setAttempt] =
+    useState<MembershipTransferAttemptResponse | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  useAutoDismiss(message, () => setMessage(null));
+
+  const key = transferStorageKey(membership.id, wallet);
+  const remaining = new Date(membership.validUntil).getTime() - Date.now();
+  const remainingLabel =
+    remaining > 86_400_000
+      ? `${Math.round(remaining / 86_400_000)} days`
+      : remaining > 3_600_000
+        ? `${Math.round(remaining / 3_600_000)} hours`
+        : `${Math.max(1, Math.round(remaining / 60_000))} minutes`;
+
+  useEffect(() => {
+    const savedId = window.localStorage.getItem(key);
+    if (!savedId) return;
+    let active = true;
+    void (async () => {
+      try {
+        const recovered = await api<MembershipTransferAttemptResponse>(
+          `/api/membership/transfers/${savedId}`,
+        );
+        if (!active) return;
+        setAttempt(recovered);
+        if (recovered.state === "PENDING") {
+          setOpen(true);
+          setPhase("pending");
+          setMessage(COPY.transferPending);
+        } else if (recovered.state === "CONFIRMED") {
+          window.localStorage.removeItem(key);
+          setMessage(COPY.transferSent);
+          await onChanged();
+        } else {
+          window.localStorage.removeItem(key);
+        }
+      } catch {
+        window.localStorage.removeItem(key);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [key, onChanged]);
+
+  useEffect(() => {
+    if (phase !== "pending" || !attempt) return;
+    const check = async () => {
+      try {
+        const current = await api<MembershipTransferAttemptResponse>(
+          `/api/membership/transfers/${attempt.id}`,
+        );
+        if (current.state === "CONFIRMED") {
+          window.localStorage.removeItem(key);
+          setAttempt(current);
+          setPhase(null);
+          setMessage(COPY.transferSent);
+          await onChanged();
+        } else if (current.state === "REJECTED") {
+          window.localStorage.removeItem(key);
+          setAttempt(current);
+          setPhase("rejected");
+          setMessage(COPY.transferRejected);
+        }
+      } catch {
+        setMessage(COPY.accessVerificationFailed);
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [attempt, key, onChanged, phase]);
+
+  async function resell(event: FormEvent) {
+    event.preventDefault();
+    if (phase === "signing" || phase === "confirming") return;
+    const issues: string[] = [];
+    if (!isKaspaTestnetAddress(recipient) || recipient === wallet)
+      issues.push(COPY.transferInvalidRecipient);
+    if (parseKasToSompi(salePrice) === null)
+      issues.push(COPY.transferInvalidAmount);
+    if (issues.length) {
+      setMessage(issues.join(" "));
+      return;
+    }
+    setMessage(null);
+    setPhase("preparing");
+    try {
+      const proposed = await api<MembershipTransferAttemptResponse>(
+        `/api/membership/memberships/${membership.id}/transfers/propose`,
+        {
+          method: "POST",
+          body: JSON.stringify({ recipient, saleAmount: salePrice }),
+        },
+      );
+      setAttempt(proposed);
+      setPhase("signing");
+      const sellerTake = (
+        BigInt(proposed.saleAmountSompi) - BigInt(proposed.creatorRoyaltySompi)
+      ).toString();
+      setMessage(
+        COPY.transferSignPrompt.replace("{seller}", formatKas(sellerTake)),
+      );
+      const signed = await signPreparedPayment(proposed.transaction!);
+      window.localStorage.setItem(key, proposed.id);
+      setPhase("confirming");
+      setMessage(COPY.transferConfirming);
+      const result = await api<MembershipTransferAttemptResponse>(
+        `/api/membership/transfers/${proposed.id}/finalize`,
+        { method: "POST", body: JSON.stringify({ signedTransaction: signed }) },
+      );
+      setAttempt(result);
+      if (result.state === "PENDING") {
+        setPhase("pending");
+        setMessage(COPY.transferPending);
+      } else if (result.state === "REJECTED") {
+        window.localStorage.removeItem(key);
+        setPhase("rejected");
+        setMessage(COPY.transferRejected);
+      } else {
+        window.localStorage.removeItem(key);
+        setPhase(null);
+        setMessage(COPY.transferSent);
+        await onChanged();
+      }
+    } catch (caught) {
+      const text =
+        caught instanceof WalletError
+          ? caught.message
+          : caught instanceof Error
+            ? caught.message
+            : COPY.transferRejected;
+      setMessage(text);
+      if (text === COPY.transferPending) setPhase("pending");
+      else {
+        window.localStorage.removeItem(key);
+        setPhase("rejected");
+      }
+    }
+  }
+
+  if (!open)
+    return (
+      <button
+        className="secondary transfer-toggle"
+        onClick={() => setOpen(true)}
+      >
+        {COPY.transferTitle}
+      </button>
+    );
+
+  const busy =
+    phase === "preparing" ||
+    phase === "signing" ||
+    phase === "confirming" ||
+    phase === "pending";
+  const actionLabel =
+    phase === "preparing"
+      ? "Preparing transfer..."
+      : phase === "signing"
+        ? COPY.transferSigning
+        : phase === "confirming"
+          ? COPY.transferConfirming
+          : phase === "pending"
+            ? COPY.transferPending
+            : COPY.transferTitle;
+
+  return (
+    <form className="transfer-panel" onSubmit={(event) => void resell(event)}>
+      <p className="transfer-intro">{COPY.transferIntro}</p>
+      <label>
+        {COPY.transferRecipientLabel}
+        <input
+          value={recipient}
+          autoComplete="off"
+          spellCheck={false}
+          disabled={busy}
+          placeholder={COPY.transferRecipientHint}
+          onChange={(event) => setRecipient(event.target.value)}
+        />
+      </label>
+      <label className="price-field">
+        {COPY.transferSaleLabel}
+        <span className="unit">
+          <KaspaMark />
+          <span className="sr-only">KAS</span>
+        </span>
+        <input
+          inputMode="decimal"
+          value={salePrice}
+          disabled={busy}
+          onChange={(event) => setSalePrice(event.target.value)}
+        />
+      </label>
+      <p className="transfer-note">
+        10% goes to the creator · {remainingLabel} of access left.
+      </p>
+      {message && (
+        <p className="feedback" role="status">
+          {message}
+        </p>
+      )}
+      <button className="primary" disabled={busy}>
+        {actionLabel}
+      </button>
+    </form>
+  );
 }
 
 export function PostPage({

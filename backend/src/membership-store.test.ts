@@ -96,7 +96,7 @@ describe.each([
     ).toBeNull();
   });
 
-  it("confirms a transfer attempt and marks membership as transferred", async () => {
+  it("confirms a transfer attempt and transfers membership ownership", async () => {
     await seedOffer(store);
     const membership = testMembership();
     await store.createMembership(membership);
@@ -115,7 +115,9 @@ describe.each([
       signedTransactionId: "tx-confirmed",
     });
     const updatedMembership = await store.getMembership(membership.id);
-    expect(updatedMembership!.state).toBe("TRANSFERRED");
+    expect(updatedMembership!.owner).toBe(attempt.buyer);
+    expect(updatedMembership!.state).toBe("ACTIVE");
+    expect(updatedMembership!.validUntil).toBe(membership.validUntil);
   });
 
   it("pendingMembershipTransferAttempts returns only PENDING", async () => {

@@ -322,6 +322,80 @@ export async function reconcilePendingMembershipMints(
   return attempts.length;
 }
 
+export async function reconcilePendingMembershipTransfers(
+  store: Store,
+  gateway: CovenantGateway,
+  now = Date.now(),
+): Promise<number> {
+  let attempts;
+  try {
+    attempts = await store.pendingMembershipTransferAttempts();
+  } catch (error) {
+    logEvent(
+      "membership_transfer_reconciliation_load_failed",
+      safeError(error),
+    );
+    return 0;
+  }
+  for (const attempt of attempts) {
+    if (!attempt.signedTransactionId) continue;
+    try {
+      const submission = await gateway.status(attempt.signedTransactionId);
+      const checkedAt = now;
+      if (submission.isAccepted === true) {
+        await store.confirmMembershipTransferAttempt(attempt.id, "PENDING", {
+          transactionId: attempt.signedTransactionId,
+          confirmedAt: checkedAt,
+        });
+      } else if (submission.isAccepted === false) {
+        await store.compareAndSetMembershipTransferAttempt(
+          attempt.id,
+          "PENDING",
+          {
+            state: "REJECTED",
+            rejection: submission.rejection ?? "TRANSACTION_REJECTED",
+            lastCheckedAt: checkedAt,
+            reconciliationAttempts: attempt.reconciliationAttempts + 1,
+            updatedAt: checkedAt,
+          },
+        );
+      } else {
+        await store.compareAndSetMembershipTransferAttempt(
+          attempt.id,
+          "PENDING",
+          {
+            lastCheckedAt: checkedAt,
+            reconciliationAttempts: attempt.reconciliationAttempts + 1,
+            updatedAt: checkedAt,
+          },
+        );
+      }
+    } catch (error) {
+      logEvent("membership_transfer_reconciliation_failed", {
+        transferId: attempt.id,
+        ...safeError(error),
+      });
+      try {
+        await store.compareAndSetMembershipTransferAttempt(
+          attempt.id,
+          "PENDING",
+          {
+            lastCheckedAt: now,
+            reconciliationAttempts: attempt.reconciliationAttempts + 1,
+            updatedAt: now,
+          },
+        );
+      } catch (updateError) {
+        logEvent("membership_transfer_reconciliation_update_failed", {
+          transferId: attempt.id,
+          ...safeError(updateError),
+        });
+      }
+    }
+  }
+  return attempts.length;
+}
+
 export async function expireExpiredMemberships(
   store: Store,
   now = Date.now(),

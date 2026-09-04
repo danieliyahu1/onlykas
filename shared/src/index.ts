@@ -80,6 +80,27 @@ export const COPY = {
   membershipExpiredOn: "Expired {date}.",
   membershipPriceMismatch:
     "The prepared payment does not match the offer price. Try again.",
+  transferTitle: "Resell your membership",
+  transferIntro:
+    "Pass your remaining access to another wallet. The creator keeps 10% of the sale and you keep the rest.",
+  transferRecipientLabel: "Recipient",
+  transferRecipientHint: "Which wallet gets your remaining access?",
+  transferSaleLabel: "Sale price",
+  transferSignPrompt:
+    "Sign the transfer in Kasware. The creator receives 10% and you receive {seller} KAS. This cannot be reversed.",
+  transferSigning: "Waiting for your signature...",
+  transferConfirming: "Confirming your transfer...",
+  transferPending: "Transfer pending. Do not resubmit.",
+  transferSent: "Membership transferred.",
+  transferRejected:
+    "Transaction rejected. The membership was not transferred. Try again.",
+  transferInvalidRecipient: "Enter a complete Kaspa testnet address.",
+  transferInvalidAmount: "Enter a sale price greater than zero.",
+  transferExpired: "This membership has expired and cannot be resold.",
+  transferNotHolder: "Only the current holder can resell this membership.",
+  transferUnavailable:
+    "Membership transfers are temporarily unavailable. Try again.",
+  transferNotFound: "This transfer could not be found.",
 } as const;
 
 export const MEDIA_TYPES = [
@@ -207,6 +228,28 @@ export interface MembershipMintAttemptResponse {
   covenantId: string;
   priceSompi: string;
   state: MembershipMintAttemptState;
+  transaction?: string;
+  fingerprint?: string;
+  transactionId: string | null;
+  rejection: string | null;
+  submittedAt: number | null;
+  lastCheckedAt: number | null;
+  reconciliationAttempts: number;
+  membership: MembershipResponse | null;
+}
+
+export type MembershipTransferAttemptState =
+  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
+
+export interface MembershipTransferAttemptResponse {
+  id: string;
+  membershipId: string;
+  seller: string;
+  buyer: string;
+  saleAmountSompi: string;
+  creatorRoyaltySompi: string;
+  creatorPayoutAddress: string;
+  state: MembershipTransferAttemptState;
   transaction?: string;
   fingerprint?: string;
   transactionId: string | null;

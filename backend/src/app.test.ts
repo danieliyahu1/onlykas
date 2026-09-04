@@ -14,6 +14,7 @@ import { TestStorage } from "./test-storage.js";
 import {
   processNextUpload,
   reconcilePendingMembershipMints,
+  reconcilePendingMembershipTransfers,
 } from "./worker.js";
 
 const origin = "https://onlykas.test";
@@ -826,6 +827,324 @@ describe("membership minting API", () => {
       .expect(503);
     expect(propose.body.error).toBe("MEMBERSHIP_UNAVAILABLE");
     expect(propose.body.message).toBe(COPY.membershipUnavailable);
+  });
+});
+
+describe("membership transfer API", () => {
+  const seller = `kaspatest:${"s".repeat(60)}`;
+  const buyer = `kaspatest:${"b".repeat(60)}`;
+
+  function transferGateway(
+    overrides: Partial<CovenantGateway> = {},
+  ): CovenantGateway {
+    return {
+      prepareDeploy: async () => {
+        throw new Error("unused");
+      },
+      submitDeploy: async () => {
+        throw new Error("unused");
+      },
+      mint: async () => {
+        throw new Error("unused");
+      },
+      transfer: async (_membership, _buyer, saleAmountSompi) => ({
+        transaction: JSON.stringify({
+          id: "0".repeat(64),
+          version: 0,
+          inputs: [],
+          outputs: [
+            {
+              value: "1",
+              scriptPublicKey: "000020" + "c".repeat(64) + "ac",
+              covenant: {
+                type: "KCC-0020",
+                payload: JSON.stringify({ type: "TRANSFER" }),
+              },
+            },
+          ],
+          subnetworkId: "0".repeat(40),
+          lockTime: "0",
+          gas: "0",
+          storageMass: "20000",
+          payload: "",
+        }),
+        fingerprint: "transfer-fingerprint",
+        saleAmountSompi,
+        creatorRoyaltySompi: (BigInt(saleAmountSompi) / 10n).toString(),
+        seller,
+        buyer: _buyer,
+      }),
+      submit: async () => ({
+        isAccepted: true,
+        transactionId: "f".repeat(64),
+        rejection: null,
+        acceptedAt: null,
+      }),
+      submitMint: async () => {
+        throw new Error("unused");
+      },
+      status: async (transactionId: string) => ({
+        isAccepted: true,
+        transactionId,
+        rejection: null,
+        acceptedAt: null,
+      }),
+      ...overrides,
+    };
+  }
+
+  async function seedActiveMembership(
+    store: MemoryStore,
+    owner = seller,
+    membershipId = "membership-1",
+    validUntil = Date.now() + 86400_000,
+    state: "ACTIVE" | "EXPIRED" = "ACTIVE",
+  ) {
+    await store.saveCovenant({
+      id: "covenant-1",
+      templateJson: '{"type":"KCC-0020","amount":1}',
+      templateFingerprint: "a".repeat(64),
+      amount: "1",
+      durationMs: 86400_000,
+      creatorRoyaltyBps: 1000,
+      createdAt: 1,
+    });
+    await store.createMembershipOffer({
+      id: "offer-1",
+      creator,
+      covenantId: "covenant-1",
+      priceSompi: "100",
+      description: "A day of access",
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    await store.createMembership({
+      id: membershipId,
+      offerId: "offer-1",
+      owner,
+      creator,
+      covenantId: "covenant-1",
+      createdTxId: null,
+      validUntil,
+      state,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+  }
+
+  it("proposes, finalizes, and serves a transfer, then hands ownership to the buyer", async () => {
+    const store = new MemoryStore();
+    await seedActiveMembership(store);
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: transferGateway(),
+    });
+    const sellerAgent = request.agent(app);
+    await authenticate(sellerAgent, seller);
+
+    const proposed = await sellerAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient: buyer, saleAmount: "5" })
+      .expect(201);
+    expect(proposed.body).toMatchObject({
+      state: "PREPARED",
+      membershipId: "membership-1",
+      seller,
+      buyer,
+      saleAmountSompi: "500000000",
+      creatorRoyaltySompi: "50000000",
+      creatorPayoutAddress: creator,
+      transaction: expect.any(String),
+      fingerprint: "transfer-fingerprint",
+      membership: null,
+    });
+
+    const finalized = await sellerAgent
+      .post(`/api/membership/transfers/${proposed.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(200);
+    expect(finalized.body).toMatchObject({
+      state: "CONFIRMED",
+      transactionId: "f".repeat(64),
+      membership: {
+        id: "membership-1",
+        owner: buyer,
+        creator,
+        state: "ACTIVE",
+      },
+    });
+    expect(finalized.body.message).toBe(COPY.transferSent);
+
+    const recovered = await sellerAgent
+      .get(`/api/membership/transfers/${proposed.body.id}`)
+      .expect(200);
+    expect(recovered.body.state).toBe("CONFIRMED");
+    expect(recovered.body.membership.owner).toBe(buyer);
+
+    const buyersView = await store.getMembership("membership-1");
+    expect(buyersView!.owner).toBe(buyer);
+    expect(buyersView!.state).toBe("ACTIVE");
+    expect(buyersView!.validUntil).toBeGreaterThan(Date.now());
+  });
+
+  it("rejects a transfer when the caller is not the holder", async () => {
+    const store = new MemoryStore();
+    await seedActiveMembership(store);
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: transferGateway(),
+    });
+    const outsiderAgent = request.agent(app);
+    await authenticate(outsiderAgent, outsider);
+
+    const res = await outsiderAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient: buyer, saleAmount: "5" })
+      .expect(403);
+    expect(res.body.error).toBe("TRANSFER_NOT_HOLDER");
+    expect(res.body.message).toBe(COPY.transferNotHolder);
+  });
+
+  it("rejects a transfer of an expired membership", async () => {
+    const store = new MemoryStore();
+    await seedActiveMembership(
+      store,
+      seller,
+      "membership-1",
+      Date.now() - 1000,
+      "EXPIRED",
+    );
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: transferGateway(),
+    });
+    const sellerAgent = request.agent(app);
+    await authenticate(sellerAgent, seller);
+
+    const res = await sellerAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient: buyer, saleAmount: "5" })
+      .expect(409);
+    expect(res.body.error).toBe("TRANSFER_EXPIRED");
+    expect(res.body.message).toBe(COPY.transferExpired);
+  });
+
+  it("rejects an invalid recipient and a non-positive amount", async () => {
+    const store = new MemoryStore();
+    await seedActiveMembership(store);
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: transferGateway(),
+    });
+    const sellerAgent = request.agent(app);
+    await authenticate(sellerAgent, seller);
+
+    const badRecipient = await sellerAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient: "not-an-address", saleAmount: "5" })
+      .expect(422);
+    expect(badRecipient.body.error).toBe("TRANSFER_INVALID_RECIPIENT");
+
+    const self = await sellerAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient: seller, saleAmount: "5" })
+      .expect(422);
+    expect(self.body.error).toBe("TRANSFER_INVALID_RECIPIENT");
+
+    const badAmount = await sellerAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient: buyer, saleAmount: "0" })
+      .expect(422);
+    expect(badAmount.body.error).toBe("TRANSFER_INVALID_AMOUNT");
+  });
+
+  it("leaves an undecided transfer pending until the worker confirms it", async () => {
+    const store = new MemoryStore();
+    await seedActiveMembership(store);
+    const gateway = transferGateway({
+      submit: async () => ({
+        isAccepted: null,
+        transactionId: "g".repeat(64),
+        rejection: null,
+        acceptedAt: null,
+      }),
+      status: async (transactionId: string) => ({
+        isAccepted: true,
+        transactionId,
+        rejection: null,
+        acceptedAt: 5_000,
+      }),
+    });
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: gateway,
+    });
+    const sellerAgent = request.agent(app);
+    await authenticate(sellerAgent, seller);
+
+    const proposed = await sellerAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient: buyer, saleAmount: "5" })
+      .expect(201);
+    const pending = await sellerAgent
+      .post(`/api/membership/transfers/${proposed.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(202);
+    expect(pending.body).toMatchObject({
+      state: "PENDING",
+      transactionId: "g".repeat(64),
+      membership: null,
+    });
+    expect(pending.body.message).toBe(COPY.transferPending);
+
+    expect(await reconcilePendingMembershipTransfers(store, gateway, 20)).toBe(
+      1,
+    );
+    const confirmed = await sellerAgent
+      .get(`/api/membership/transfers/${proposed.body.id}`)
+      .expect(200);
+    expect(confirmed.body.state).toBe("CONFIRMED");
+    expect(confirmed.body.membership).toMatchObject({
+      id: "membership-1",
+      owner: buyer,
+      state: "ACTIVE",
+    });
+  });
+
+  it("is unavailable without a covenant gateway", async () => {
+    const store = new MemoryStore();
+    await seedActiveMembership(store);
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+    });
+    const sellerAgent = request.agent(app);
+    await authenticate(sellerAgent, seller);
+
+    const res = await sellerAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient: buyer, saleAmount: "5" })
+      .expect(503);
+    expect(res.body.error).toBe("TRANSFER_UNAVAILABLE");
+    expect(res.body.message).toBe(COPY.transferUnavailable);
   });
 });
 
