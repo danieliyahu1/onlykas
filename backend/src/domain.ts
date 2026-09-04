@@ -154,6 +154,37 @@ export interface Store {
   ): Promise<PaymentAttempt | null>;
   createPurchase(purchase: Purchase): Promise<boolean>;
   hasPurchase(postId: string, buyer: string): Promise<boolean>;
+  getCovenant(id: string): Promise<MembershipCovenant | null>;
+  saveCovenant(covenant: MembershipCovenant): Promise<void>;
+  createMembershipOffer(offer: MembershipOffer): Promise<void>;
+  getMembershipOffer(id: string): Promise<MembershipOffer | null>;
+  creatorMembershipOffers(
+    creator: string,
+  ): Promise<MembershipOffer[]>;
+  createMembership(membership: Membership): Promise<void>;
+  getMembership(id: string): Promise<Membership | null>;
+  ownerMemberships(owner: string): Promise<Membership[]>;
+  activeMembershipForPost(
+    postId: string,
+    viewer: string,
+  ): Promise<boolean>;
+  createMembershipTransferAttempt(
+    attempt: MembershipTransferAttempt,
+  ): Promise<void>;
+  getMembershipTransferAttempt(
+    id: string,
+  ): Promise<MembershipTransferAttempt | null>;
+  pendingMembershipTransferAttempts(): Promise<MembershipTransferAttempt[]>;
+  compareAndSetMembershipTransferAttempt(
+    id: string,
+    expectedState: MembershipTransferAttemptState,
+    update: MembershipTransferAttemptUpdate,
+  ): Promise<MembershipTransferAttempt | null>;
+  confirmMembershipTransferAttempt(
+    id: string,
+    expectedState: MembershipTransferAttemptState,
+    membershipUpdate: { transactionId: string; confirmedAt: number },
+  ): Promise<MembershipTransferAttempt | null>;
 }
 
 export type CommitPublicationResult =
@@ -190,3 +221,111 @@ export interface WalletVerifier {
     address: string,
   ): Promise<boolean>;
 }
+
+export interface MembershipCovenant {
+  id: string;
+  templateJson: string;
+  templateFingerprint: string;
+  amount: string;
+  durationMs: number;
+  creatorRoyaltyBps: number;
+  createdAt: number;
+}
+
+export interface MembershipOffer {
+  id: string;
+  creator: string;
+  covenantId: string;
+  priceSompi: string;
+  description: string;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type MembershipState = "ACTIVE" | "EXPIRED" | "TRANSFERRED";
+
+export interface Membership {
+  id: string;
+  offerId: string;
+  owner: string;
+  creator: string;
+  covenantId: string;
+  createdTxId: string | null;
+  validUntil: number;
+  state: MembershipState;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type MembershipTransferAttemptState =
+  | "PREPARED"
+  | "PENDING"
+  | "CONFIRMED"
+  | "REJECTED";
+
+export interface MembershipTransferAttempt {
+  id: string;
+  membershipId: string;
+  seller: string;
+  buyer: string;
+  saleAmountSompi: string;
+  creatorRoyaltySompi: string;
+  creatorPayoutAddress: string;
+  preparedTransaction: string;
+  fingerprint: string;
+  signedTransactionId: string | null;
+  state: MembershipTransferAttemptState;
+  rejection: string | null;
+  submittedAt: number | null;
+  lastCheckedAt: number | null;
+  reconciliationAttempts: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PreparedMembershipTransfer {
+  transaction: string;
+  fingerprint: string;
+  saleAmountSompi: string;
+  creatorRoyaltySompi: string;
+  seller: string;
+  buyer: string;
+}
+
+export interface MembershipTransferSubmission {
+  isAccepted: boolean | null;
+  transactionId: string | null;
+  rejection: string | null;
+}
+
+export interface CovenantGateway {
+  deploy(covenant: MembershipCovenant): Promise<{ txId: string }>;
+  mint(
+    offer: MembershipOffer,
+    buyer: string,
+  ): Promise<PreparedMembershipTransfer>;
+  transfer(
+    membership: Membership,
+    buyer: string,
+    saleAmountSompi: string,
+  ): Promise<PreparedMembershipTransfer>;
+  submit(
+    prepared: PreparedMembershipTransfer,
+    signedTransaction: string,
+  ): Promise<MembershipTransferSubmission>;
+  status(transactionId: string): Promise<MembershipTransferSubmission>;
+}
+
+export type MembershipTransferAttemptUpdate = Partial<
+  Pick<
+    MembershipTransferAttempt,
+    | "signedTransactionId"
+    | "state"
+    | "rejection"
+    | "submittedAt"
+    | "lastCheckedAt"
+    | "reconciliationAttempts"
+    | "updatedAt"
+  >
+>;

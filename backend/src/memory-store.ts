@@ -1,5 +1,11 @@
 import type {
   Challenge,
+  Membership,
+  MembershipCovenant,
+  MembershipOffer,
+  MembershipTransferAttempt,
+  MembershipTransferAttemptState,
+  MembershipTransferAttemptUpdate,
   PaymentAttempt,
   PaymentAttemptState,
   PaymentAttemptUpdate,
@@ -19,6 +25,13 @@ export class MemoryStore implements Store {
   readonly paymentAttempts = new Map<string, PaymentAttempt>();
   readonly purchases = new Map<string, Purchase>();
   readonly profiles = new Map<string, Profile>();
+  readonly covenants = new Map<string, MembershipCovenant>();
+  readonly membershipOffers = new Map<string, MembershipOffer>();
+  readonly memberships = new Map<string, Membership>();
+  readonly membershipTransferAttempts = new Map<
+    string,
+    MembershipTransferAttempt
+  >();
 
   async initialize(): Promise<void> {}
   async createChallenge(challenge: Challenge): Promise<void> {
@@ -218,5 +231,113 @@ export class MemoryStore implements Store {
   }
   async hasPurchase(postId: string, buyer: string): Promise<boolean> {
     return this.purchases.has(`${postId}:${buyer}`);
+  }
+  async getCovenant(id: string): Promise<MembershipCovenant | null> {
+    const covenant = this.covenants.get(id);
+    return covenant ? structuredClone(covenant) : null;
+  }
+  async saveCovenant(covenant: MembershipCovenant): Promise<void> {
+    if (!this.covenants.has(covenant.id))
+      this.covenants.set(covenant.id, structuredClone(covenant));
+  }
+  async createMembershipOffer(offer: MembershipOffer): Promise<void> {
+    this.membershipOffers.set(offer.id, structuredClone(offer));
+  }
+  async getMembershipOffer(id: string): Promise<MembershipOffer | null> {
+    const offer = this.membershipOffers.get(id);
+    return offer ? structuredClone(offer) : null;
+  }
+  async creatorMembershipOffers(
+    creator: string,
+  ): Promise<MembershipOffer[]> {
+    return [...this.membershipOffers.values()]
+      .filter((offer) => offer.creator === creator && offer.isActive)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((offer) => structuredClone(offer));
+  }
+  async createMembership(membership: Membership): Promise<void> {
+    this.memberships.set(membership.id, structuredClone(membership));
+  }
+  async getMembership(id: string): Promise<Membership | null> {
+    const membership = this.memberships.get(id);
+    return membership ? structuredClone(membership) : null;
+  }
+  async ownerMemberships(owner: string): Promise<Membership[]> {
+    return [...this.memberships.values()]
+      .filter(
+        (membership) =>
+          membership.owner === owner && membership.state !== "TRANSFERRED",
+      )
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map((membership) => structuredClone(membership));
+  }
+  async activeMembershipForPost(
+    postId: string,
+    viewer: string,
+  ): Promise<boolean> {
+    const now = Date.now();
+    return [...this.memberships.values()].some(
+      (membership) =>
+        membership.owner === viewer &&
+        membership.state === "ACTIVE" &&
+        membership.validUntil > now,
+    );
+  }
+  async createMembershipTransferAttempt(
+    attempt: MembershipTransferAttempt,
+  ): Promise<void> {
+    this.membershipTransferAttempts.set(
+      attempt.id,
+      structuredClone(attempt),
+    );
+  }
+  async getMembershipTransferAttempt(
+    id: string,
+  ): Promise<MembershipTransferAttempt | null> {
+    const value = this.membershipTransferAttempts.get(id);
+    return value ? structuredClone(value) : null;
+  }
+  async pendingMembershipTransferAttempts(): Promise<MembershipTransferAttempt[]> {
+    return [...this.membershipTransferAttempts.values()]
+      .filter((attempt) => attempt.state === "PENDING")
+      .map((attempt) => structuredClone(attempt));
+  }
+  async compareAndSetMembershipTransferAttempt(
+    id: string,
+    expectedState: MembershipTransferAttemptState,
+    update: MembershipTransferAttemptUpdate,
+  ): Promise<MembershipTransferAttempt | null> {
+    const current = this.membershipTransferAttempts.get(id);
+    if (!current || current.state !== expectedState) return null;
+    const updated = { ...current, ...update };
+    this.membershipTransferAttempts.set(id, structuredClone(updated));
+    return structuredClone(updated);
+  }
+  async confirmMembershipTransferAttempt(
+    id: string,
+    expectedState: MembershipTransferAttemptState,
+    membershipUpdate: { transactionId: string; confirmedAt: number },
+  ): Promise<MembershipTransferAttempt | null> {
+    const attempt = this.membershipTransferAttempts.get(id);
+    if (!attempt || attempt.state !== expectedState) return null;
+    const confirmed = {
+      ...attempt,
+      signedTransactionId: membershipUpdate.transactionId,
+      submittedAt: attempt.submittedAt ?? membershipUpdate.confirmedAt,
+      lastCheckedAt:
+        expectedState === "PENDING"
+          ? membershipUpdate.confirmedAt
+          : attempt.lastCheckedAt,
+      reconciliationAttempts:
+        attempt.reconciliationAttempts + (expectedState === "PENDING" ? 1 : 0),
+      state: "CONFIRMED" as const,
+    };
+    this.membershipTransferAttempts.set(id, structuredClone(confirmed));
+    const membership = this.memberships.get(attempt.membershipId);
+    if (membership) {
+      membership.state = "TRANSFERRED";
+      membership.updatedAt = membershipUpdate.confirmedAt;
+    }
+    return structuredClone(confirmed);
   }
 }

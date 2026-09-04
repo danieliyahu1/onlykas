@@ -1,6 +1,13 @@
 import { createClient, type Client, type InValue } from "@libsql/client";
 import type {
   Challenge,
+  Membership,
+  MembershipCovenant,
+  MembershipOffer,
+  MembershipState,
+  MembershipTransferAttempt,
+  MembershipTransferAttemptState,
+  MembershipTransferAttemptUpdate,
   PaymentAttempt,
   PaymentAttemptState,
   PaymentAttemptUpdate,
@@ -33,6 +40,13 @@ export class LibsqlStore implements Store {
         `CREATE INDEX IF NOT EXISTS posts_creator_date ON posts (creator, published_at DESC)`,
         `CREATE INDEX IF NOT EXISTS uploads_work ON uploads (state, updated_at)`,
         `CREATE INDEX IF NOT EXISTS uploads_expiry ON uploads (expires_at)`,
+        `CREATE TABLE IF NOT EXISTS membership_covenants (id TEXT PRIMARY KEY, template_json TEXT NOT NULL, template_fingerprint TEXT NOT NULL UNIQUE, amount TEXT NOT NULL, duration_ms INTEGER NOT NULL, creator_royalty_bps INTEGER NOT NULL, created_at INTEGER NOT NULL)`,
+        `CREATE TABLE IF NOT EXISTS membership_offers (id TEXT PRIMARY KEY, creator TEXT NOT NULL, covenant_id TEXT NOT NULL REFERENCES membership_covenants(id), price_sompi TEXT NOT NULL, description TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+        `CREATE INDEX IF NOT EXISTS membership_offers_creator ON membership_offers (creator, is_active)`,
+        `CREATE TABLE IF NOT EXISTS memberships (id TEXT PRIMARY KEY, offer_id TEXT NOT NULL REFERENCES membership_offers(id), owner TEXT NOT NULL, creator TEXT NOT NULL, covenant_id TEXT NOT NULL REFERENCES membership_covenants(id), created_tx_id TEXT, valid_until INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'ACTIVE', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
+        `CREATE INDEX IF NOT EXISTS memberships_owner ON memberships (owner, state)`,
+        `CREATE INDEX IF NOT EXISTS memberships_offer ON memberships (offer_id, state)`,
+        `CREATE TABLE IF NOT EXISTS membership_transfer_attempts (id TEXT PRIMARY KEY, membership_id TEXT NOT NULL REFERENCES memberships(id), seller TEXT NOT NULL, buyer TEXT NOT NULL, sale_amount_sompi TEXT NOT NULL, creator_royalty_sompi TEXT NOT NULL, creator_payout_address TEXT NOT NULL, prepared_transaction TEXT NOT NULL, fingerprint TEXT NOT NULL, signed_transaction_id TEXT, state TEXT NOT NULL, rejection TEXT, submitted_at INTEGER, last_checked_at INTEGER, reconciliation_attempts INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)`,
       ],
       "write",
     );
@@ -368,6 +382,199 @@ export class LibsqlStore implements Store {
     });
     return Boolean(result.rows[0]);
   }
+  async getCovenant(id: string): Promise<MembershipCovenant | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_covenants WHERE id=?`,
+      args: [id],
+    });
+    return result.rows[0] ? covenantFromRow(result.rows[0]) : null;
+  }
+  async saveCovenant(covenant: MembershipCovenant): Promise<void> {
+    await this.client.execute({
+      sql: `INSERT OR IGNORE INTO membership_covenants VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        covenant.id,
+        covenant.templateJson,
+        covenant.templateFingerprint,
+        covenant.amount,
+        covenant.durationMs,
+        covenant.creatorRoyaltyBps,
+        covenant.createdAt,
+      ],
+    });
+  }
+  async createMembershipOffer(offer: MembershipOffer): Promise<void> {
+    await this.client.execute({
+      sql: `INSERT INTO membership_offers VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        offer.id,
+        offer.creator,
+        offer.covenantId,
+        offer.priceSompi,
+        offer.description,
+        offer.isActive ? 1 : 0,
+        offer.createdAt,
+        offer.updatedAt,
+      ],
+    });
+  }
+  async getMembershipOffer(id: string): Promise<MembershipOffer | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_offers WHERE id=?`,
+      args: [id],
+    });
+    return result.rows[0] ? membershipOfferFromRow(result.rows[0]) : null;
+  }
+  async creatorMembershipOffers(
+    creator: string,
+  ): Promise<MembershipOffer[]> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_offers WHERE creator=? AND is_active=1 ORDER BY created_at DESC`,
+      args: [creator],
+    });
+    return result.rows.map(membershipOfferFromRow);
+  }
+  async createMembership(membership: Membership): Promise<void> {
+    await this.client.execute({
+      sql: `INSERT INTO memberships VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        membership.id,
+        membership.offerId,
+        membership.owner,
+        membership.creator,
+        membership.covenantId,
+        membership.createdTxId,
+        membership.validUntil,
+        membership.state,
+        membership.createdAt,
+        membership.updatedAt,
+      ],
+    });
+  }
+  async getMembership(id: string): Promise<Membership | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM memberships WHERE id=?`,
+      args: [id],
+    });
+    return result.rows[0] ? membershipFromRow(result.rows[0]) : null;
+  }
+  async ownerMemberships(owner: string): Promise<Membership[]> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM memberships WHERE owner=? AND state != 'TRANSFERRED' ORDER BY created_at DESC`,
+      args: [owner],
+    });
+    return result.rows.map(membershipFromRow);
+  }
+  async activeMembershipForPost(
+    postId: string,
+    viewer: string,
+  ): Promise<boolean> {
+    const result = await this.client.execute({
+      sql: `SELECT 1 FROM memberships m JOIN membership_offers o ON m.offer_id = o.id WHERE m.owner=? AND m.state='ACTIVE' AND m.valid_until > ? AND o.covenant_id = (SELECT covenant_id FROM posts WHERE id=?)`,
+      args: [viewer, Date.now(), postId],
+    });
+    return Boolean(result.rows[0]);
+  }
+  async createMembershipTransferAttempt(
+    attempt: MembershipTransferAttempt,
+  ): Promise<void> {
+    await this.client.execute({
+      sql: `INSERT INTO membership_transfer_attempts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        attempt.id,
+        attempt.membershipId,
+        attempt.seller,
+        attempt.buyer,
+        attempt.saleAmountSompi,
+        attempt.creatorRoyaltySompi,
+        attempt.creatorPayoutAddress,
+        attempt.preparedTransaction,
+        attempt.fingerprint,
+        attempt.signedTransactionId,
+        attempt.state,
+        attempt.rejection,
+        attempt.submittedAt,
+        attempt.lastCheckedAt,
+        attempt.reconciliationAttempts,
+        attempt.createdAt,
+        attempt.updatedAt,
+      ],
+    });
+  }
+  async getMembershipTransferAttempt(
+    id: string,
+  ): Promise<MembershipTransferAttempt | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_transfer_attempts WHERE id=?`,
+      args: [id],
+    });
+    return result.rows[0]
+      ? membershipTransferAttemptFromRow(result.rows[0])
+      : null;
+  }
+  async pendingMembershipTransferAttempts(): Promise<MembershipTransferAttempt[]> {
+    const result = await this.client.execute(
+      `SELECT * FROM membership_transfer_attempts WHERE state='PENDING' ORDER BY updated_at`,
+    );
+    return result.rows.map(membershipTransferAttemptFromRow);
+  }
+  async compareAndSetMembershipTransferAttempt(
+    id: string,
+    expectedState: MembershipTransferAttemptState,
+    update: MembershipTransferAttemptUpdate,
+  ): Promise<MembershipTransferAttempt | null> {
+    const fields = Object.keys(update) as (keyof MembershipTransferAttemptUpdate)[];
+    if (!fields.length) return this.getMembershipTransferAttempt(id);
+    const names: Record<string, string> = {
+      signedTransactionId: "signed_transaction_id",
+      state: "state",
+      rejection: "rejection",
+      submittedAt: "submitted_at",
+      lastCheckedAt: "last_checked_at",
+      reconciliationAttempts: "reconciliation_attempts",
+      updatedAt: "updated_at",
+    };
+    const values = fields.map((field) => update[field]);
+    const result = await this.client.execute({
+      sql: `UPDATE membership_transfer_attempts SET ${fields.map((field) => `${names[field]}=?`).join(",")} WHERE id=? AND state=?`,
+      args: [...values, id, expectedState] as InValue[],
+    });
+    return result.rowsAffected
+      ? this.getMembershipTransferAttempt(id)
+      : null;
+  }
+  async confirmMembershipTransferAttempt(
+    id: string,
+    expectedState: MembershipTransferAttemptState,
+    membershipUpdate: { transactionId: string; confirmedAt: number },
+  ): Promise<MembershipTransferAttempt | null> {
+    try {
+      const results = await this.client.batch(
+        [
+          {
+            sql: `UPDATE membership_transfer_attempts SET signed_transaction_id=?, state='CONFIRMED', submitted_at=COALESCE(submitted_at, ?), last_checked_at=CASE WHEN state='PENDING' THEN ? ELSE last_checked_at END, reconciliation_attempts=reconciliation_attempts + CASE WHEN state='PENDING' THEN 1 ELSE 0 END, updated_at=? WHERE id=? AND state=?`,
+            args: [
+              membershipUpdate.transactionId,
+              membershipUpdate.confirmedAt,
+              membershipUpdate.confirmedAt,
+              membershipUpdate.confirmedAt,
+              id,
+              expectedState,
+            ],
+          },
+          {
+            sql: `UPDATE memberships SET state='TRANSFERRED', updated_at=? WHERE id=(SELECT membership_id FROM membership_transfer_attempts WHERE id=? AND state='CONFIRMED')`,
+            args: [membershipUpdate.confirmedAt, id],
+          },
+        ],
+        "write",
+      );
+      if (!results[0] || !results[0].rowsAffected) return null;
+      return this.getMembershipTransferAttempt(id);
+    } catch {
+      return null;
+    }
+  }
 }
 
 function uploadInsert(upload: Upload): { sql: string; args: InValue[] } {
@@ -478,4 +685,66 @@ function number(value: unknown): number {
 }
 function nullableNumber(value: unknown): number | null {
   return value === null ? null : number(value);
+}
+function covenantFromRow(row: Record<string, unknown>): MembershipCovenant {
+  return {
+    id: text(row.id),
+    templateJson: text(row.template_json),
+    templateFingerprint: text(row.template_fingerprint),
+    amount: text(row.amount),
+    durationMs: number(row.duration_ms),
+    creatorRoyaltyBps: number(row.creator_royalty_bps),
+    createdAt: number(row.created_at),
+  };
+}
+function membershipOfferFromRow(
+  row: Record<string, unknown>,
+): MembershipOffer {
+  return {
+    id: text(row.id),
+    creator: text(row.creator),
+    covenantId: text(row.covenant_id),
+    priceSompi: text(row.price_sompi),
+    description: text(row.description),
+    isActive: Boolean(row.is_active),
+    createdAt: number(row.created_at),
+    updatedAt: number(row.updated_at),
+  };
+}
+function membershipFromRow(row: Record<string, unknown>): Membership {
+  return {
+    id: text(row.id),
+    offerId: text(row.offer_id),
+    owner: text(row.owner),
+    creator: text(row.creator),
+    covenantId: text(row.covenant_id),
+    createdTxId: nullableText(row.created_tx_id),
+    validUntil: number(row.valid_until),
+    state: text(row.state) as MembershipState,
+    createdAt: number(row.created_at),
+    updatedAt: number(row.updated_at),
+  };
+}
+function membershipTransferAttemptFromRow(
+  row: Record<string, unknown>,
+): MembershipTransferAttempt {
+  return {
+    id: text(row.id),
+    membershipId: text(row.membership_id),
+    seller: text(row.seller),
+    buyer: text(row.buyer),
+    saleAmountSompi: text(row.sale_amount_sompi),
+    creatorRoyaltySompi: text(row.creator_royalty_sompi),
+    creatorPayoutAddress: text(row.creator_payout_address),
+    preparedTransaction: text(row.prepared_transaction),
+    fingerprint: text(row.fingerprint),
+    signedTransactionId: nullableText(row.signed_transaction_id),
+    state: text(row.state) as MembershipTransferAttempt["state"],
+    rejection: nullableText(row.rejection),
+    submittedAt: nullableNumber(row.submitted_at),
+    lastCheckedAt: nullableNumber(row.last_checked_at),
+    reconciliationAttempts: number(row.reconciliation_attempts),
+    createdAt: number(row.created_at),
+    updatedAt: number(row.updated_at),
+  };
 }
