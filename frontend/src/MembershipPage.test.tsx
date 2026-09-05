@@ -153,6 +153,45 @@ describe("creator membership offer experience", () => {
     );
   });
 
+  it("does not get stuck polling when the wallet rejects the deploy signature", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ offers: [] }).mockResolvedValueOnce({
+      id: "deploy-1",
+      creator: address,
+      covenantId: "covenant-1",
+      priceSompi: "150000000",
+      description: "A day of access.",
+      state: "PREPARED",
+      transaction: '{"inputs":[{}]}',
+      fingerprint: "fingerprint",
+      transactionId: null,
+      rejection: null,
+      offer: null,
+    });
+    vi.mocked(signPreparedPayment).mockRejectedValueOnce(
+      new Error(
+        `${COPY.transactionRejected} (missing field \`authorizingInput\`)`,
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.clear(screen.getByLabelText(/Price/));
+    await user.type(screen.getByLabelText(/Price/), "1.5");
+    await user.click(screen.getByRole("button", { name: /^publish offer/i }));
+
+    expect(
+      await screen.findByText(
+        `${COPY.transactionRejected} (missing field \`authorizingInput\`)`,
+      ),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /^publish offer/i }),
+      ).toBeEnabled(),
+    );
+    expect(screen.queryByText(COPY.offerDeployPending)).not.toBeInTheDocument();
+  });
+
   it("reports validation errors without calling the network", async () => {
     const user = userEvent.setup();
     renderPage();

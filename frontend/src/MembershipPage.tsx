@@ -40,7 +40,7 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
 
   useEffect(() => {
     if (!address || deploy?.state === "CONFIRMED") return;
-    if (!deploy || !["PREPARED", "PENDING"].includes(deploy.state)) return;
+    if (!deploy || deploy.state !== "PENDING") return;
     setPolling(true);
     const id = deploy.id;
     let cancelled = false;

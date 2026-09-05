@@ -36,8 +36,9 @@ export async function signPreparedPayment(
         signInputs: inputs.map((_, index) => ({ index, sighashType: 1 })),
       },
     });
-  } catch {
-    throw new WalletError(COPY.transactionRejected);
+  } catch (caught) {
+    const detail = caught instanceof Error ? ` (${caught.message})` : "";
+    throw new WalletError(`${COPY.transactionRejected}${detail}`);
   }
 }
 

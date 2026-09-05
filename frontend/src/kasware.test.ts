@@ -1,5 +1,5 @@
 import { COPY, NETWORK } from "@onlykas/shared";
-import { api, authenticate } from "./kasware.js";
+import { api, authenticate, signPreparedPayment } from "./kasware.js";
 
 const address = `kaspatest:${"q".repeat(60)}`;
 
@@ -44,6 +44,25 @@ describe("Kasware authentication", () => {
     });
     expect(wallet.requestAccounts).not.toHaveBeenCalled();
     fetchMock.mockRestore();
+  });
+
+  it("surfaces the underlying wallet error when signing a prepared transaction fails", async () => {
+    window.kasware = {
+      getAccounts: vi.fn(),
+      requestAccounts: vi.fn(),
+      getNetwork: vi.fn(),
+      switchNetwork: vi.fn(),
+      getPublicKey: vi.fn(),
+      signMessage: vi.fn(),
+      signPskt: vi.fn(async () => {
+        throw new Error("missing field `authorizingInput`");
+      }),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    await expect(signPreparedPayment('{"inputs":[{}]}')).rejects.toMatchObject({
+      message: `${COPY.transactionRejected} (missing field \`authorizingInput\`)`,
+    });
   });
 
   it("uses exact cancellation copy and creates no backend challenge", async () => {
