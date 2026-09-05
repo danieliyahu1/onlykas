@@ -613,6 +613,12 @@ button:disabled {
 .global-error {
   color: #ff826f;
 }
+.feedback.warning {
+  color: #ffd479;
+}
+.feedback.warning:not(:empty) {
+  border-left: 3px solid #ffce5c;
+}
 .feedback.error:not(:empty) {
   border-left: 3px solid #ff8a70;
   background: #211614;

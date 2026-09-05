@@ -57,6 +57,7 @@ import {
 import { publishPost } from "./publish-post.js";
 import { createMembershipCovenant } from "./covenant.js";
 import { buildMintedMembership } from "./membership.js";
+import { canonicalMembershipCovenantId } from "./verifier.js";
 
 const sessionCookie = "onlykas_session";
 const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
@@ -79,7 +80,6 @@ const apiMessages: Record<string, string> = {
   PAYMENT_UNAVAILABLE: "Payments are temporarily unavailable. Try again.",
   SERVICE_UNAVAILABLE: "OnlyKas is temporarily unavailable. Try again.",
   MEMBERSHIP_UNAVAILABLE: COPY.membershipUnavailable,
-  ALREADY_DEPLOYED: "You already have a live membership offer.",
   DEPLOY_NOT_FOUND: "This membership offer could not be found.",
   OFFER_UNAVAILABLE: "This membership offer is no longer available.",
   MINT_NOT_FOUND: "This membership could not be found.",
@@ -858,16 +858,29 @@ export function createApp(dependencies: AppDependencies) {
           .status(400)
           .json({ error: "INVALID_OFFER", message: issues[0] });
       }
-      const liveOffers =
-        await dependencies.store.creatorMembershipOffers(creator);
-      if (liveOffers.length) {
-        logger("membership_offer_deploy_rejected", {
-          requestId: request.requestId,
-          creator,
-          code: "ALREADY_DEPLOYED",
-          liveOfferCount: liveOffers.length,
-        });
-        return apiError(response, 409, "ALREADY_DEPLOYED");
+      const verifier = dependencies.membershipVerifier;
+      let membershipExists = false;
+      if (verifier) {
+        try {
+          const checks = await verifier.verifyAddress(creator);
+          membershipExists = checks.some(
+            (check) =>
+              check.kind === "deploy" &&
+              check.covenantId === canonicalMembershipCovenantId(),
+          );
+          if (membershipExists) {
+            logger("membership_offer_deploy_exists_warned", {
+              requestId: request.requestId,
+              creator,
+            });
+          }
+        } catch (error) {
+          logger("membership_offer_deploy_verify_failed", {
+            requestId: request.requestId,
+            creator,
+            ...safeError(error),
+          });
+        }
       }
       logger("membership_offer_deploy_started", {
         requestId: request.requestId,
@@ -875,17 +888,56 @@ export function createApp(dependencies: AppDependencies) {
       });
       const priceSompi = parseKasToSompi(body.price)!.toString();
       const description = normalizePostText(body.description);
+      const previous =
+        await dependencies.store.latestMembershipOfferDeploy(creator);
+      if (previous?.state === "REJECTED") {
+        logger("membership_offer_deploy_previous_failed", {
+          requestId: request.requestId,
+          creator,
+          deployId: previous.id,
+          rejection: previous.rejection,
+        });
+      }
       const existing =
         await dependencies.store.unresolvedMembershipOfferDeploy(creator);
-      if (existing && validPreparedDeploy(existing, priceSompi, description)) {
+      if (existing?.state === "PENDING") {
+        logger("membership_offer_deploy_rejected", {
+          requestId: request.requestId,
+          creator,
+          code: "ALREADY_PENDING",
+          deployId: existing.id,
+        });
+        return response.status(409).json({
+          ...membershipDeployResponse(existing, null),
+          message: COPY.offerDeployPending,
+        });
+      }
+      const superseded =
+        existing !== null &&
+        previous !== null &&
+        previous.state === "REJECTED" &&
+        previous.id !== existing.id;
+      if (
+        existing?.state === "PREPARED" &&
+        validPreparedDeploy(existing, priceSompi, description) &&
+        !superseded
+      ) {
         logger("membership_offer_deploy_reused", {
           requestId: request.requestId,
           creator,
           deployId: existing.id,
         });
-        return response.json(membershipDeployResponse(existing, null));
+        return response.json(
+          withMembershipExists(
+            previousRejectionResponse(
+              membershipDeployResponse(existing, null),
+              previous,
+            ),
+            membershipExists,
+          ),
+        );
       }
-      if (existing) {
+      if (existing?.state === "PREPARED") {
         logger("membership_deploy_stale_rejected", {
           requestId: request.requestId,
           creator,
@@ -950,7 +1002,17 @@ export function createApp(dependencies: AppDependencies) {
         creator,
         priceSompi: deploy.priceSompi,
       });
-      response.status(201).json(membershipDeployResponse(deploy, null));
+      response
+        .status(201)
+        .json(
+          withMembershipExists(
+            previousRejectionResponse(
+              membershipDeployResponse(deploy, null),
+              previous,
+            ),
+            membershipExists,
+          ),
+        );
     }),
   );
 
@@ -2173,6 +2235,20 @@ function membershipDeployResponse(
     response.fingerprint = deploy.fingerprint;
   }
   return response;
+}
+function previousRejectionResponse(
+  response: MembershipDeployResponse,
+  previous: MembershipOfferDeploy | null,
+): MembershipDeployResponse {
+  return previous?.state === "REJECTED"
+    ? { ...response, previousRejection: previous.rejection }
+    : response;
+}
+function withMembershipExists(
+  response: MembershipDeployResponse,
+  membershipExists: boolean,
+): MembershipDeployResponse {
+  return membershipExists ? { ...response, membershipExists: true } : response;
 }
 function validPreparedDeploy(
   deploy: MembershipOfferDeploy,

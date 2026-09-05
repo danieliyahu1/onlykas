@@ -492,6 +492,15 @@ export class LibsqlStore implements Store {
     });
     return result.rows[0] ? membershipOfferDeployFromRow(result.rows[0]) : null;
   }
+  async latestMembershipOfferDeploy(
+    creator: string,
+  ): Promise<MembershipOfferDeploy | null> {
+    const result = await this.client.execute({
+      sql: `SELECT * FROM membership_offer_deploys WHERE creator=? ORDER BY created_at DESC LIMIT 1`,
+      args: [creator],
+    });
+    return result.rows[0] ? membershipOfferDeployFromRow(result.rows[0]) : null;
+  }
   async pendingMembershipOfferDeploys(): Promise<MembershipOfferDeploy[]> {
     const result = await this.client.execute({
       sql: `SELECT * FROM membership_offer_deploys WHERE state='PENDING' ORDER BY updated_at`,

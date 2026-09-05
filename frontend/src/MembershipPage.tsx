@@ -30,6 +30,7 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
   const [description, setDescription] = useState("A day of access.");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<DeployError | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [deploy, setDeploy] = useState<MembershipDeployResponse | null>(null);
   const [polling, setPolling] = useState(false);
@@ -103,6 +104,7 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
     }
     setBusy(true);
     setFailure(null);
+    setNotice(null);
     try {
       if (!address) {
         if (!(await signIn())) return;
@@ -121,6 +123,9 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
         state: proposed.state,
       });
       setDeploy(proposed);
+      if (proposed.membershipExists) {
+        setNotice(COPY.membershipAlreadyExists);
+      }
       if (proposed.state === "CONFIRMED") {
         setStatus(COPY.offerLive);
         await reloadOffers();
@@ -224,9 +229,15 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
 
           <div
             aria-live="polite"
-            className={failure ? "feedback error" : "feedback"}
+            className={
+              failure
+                ? "feedback error"
+                : notice
+                  ? "feedback warning"
+                  : "feedback"
+            }
           >
-            {failure?.message ?? status}
+            {failure?.message ?? notice ?? status}
           </div>
           <button className="primary publish-action" disabled={busy || polling}>
             {actionLabel}

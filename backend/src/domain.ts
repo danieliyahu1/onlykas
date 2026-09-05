@@ -164,6 +164,9 @@ export interface Store {
   unresolvedMembershipOfferDeploy(
     creator: string,
   ): Promise<MembershipOfferDeploy | null>;
+  latestMembershipOfferDeploy(
+    creator: string,
+  ): Promise<MembershipOfferDeploy | null>;
   pendingMembershipOfferDeploys(): Promise<MembershipOfferDeploy[]>;
   compareAndSetMembershipOfferDeploy(
     id: string,

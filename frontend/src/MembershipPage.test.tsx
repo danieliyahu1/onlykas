@@ -110,6 +110,49 @@ describe("creator membership offer experience", () => {
     );
   });
 
+  it("warns that a membership exists but still sends the transaction", async () => {
+    vi.mocked(api)
+      .mockResolvedValueOnce({ offers: [] })
+      .mockResolvedValueOnce({
+        id: "deploy-1",
+        creator: address,
+        covenantId: "covenant-1",
+        priceSompi: "150000000",
+        description: "A day of access.",
+        state: "PREPARED",
+        transaction: '{"inputs":[{}]}',
+        fingerprint: "fingerprint",
+        transactionId: null,
+        rejection: null,
+        offer: null,
+        membershipExists: true,
+      })
+      .mockResolvedValueOnce(confirmedDeploy("deploy-1", "150000000"))
+      .mockResolvedValueOnce({
+        offers: [confirmedDeploy("deploy-1", "150000000").offer],
+      });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.clear(screen.getByLabelText(/Price/));
+    await user.type(screen.getByLabelText(/Price/), "1.5");
+    await user.click(screen.getByRole("button", { name: /^publish offer/i }));
+
+    expect(await screen.findByText(COPY.membershipAlreadyExists)).toBeVisible();
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith(
+        "/api/membership/deploys/deploy-1/finalize",
+        {
+          method: "POST",
+          body: JSON.stringify({ signedTransaction: "signed-by-wallet" }),
+        },
+      ),
+    );
+    expect((await screen.findAllByText(COPY.offerLive)).length).toBeGreaterThan(
+      0,
+    );
+  });
+
   it("reports validation errors without calling the network", async () => {
     const user = userEvent.setup();
     renderPage();

@@ -279,6 +279,14 @@ export class MemoryStore implements Store {
     const deploy = this.unresolvedOpenDeploy(creator);
     return deploy ? structuredClone(deploy) : null;
   }
+  async latestMembershipOfferDeploy(
+    creator: string,
+  ): Promise<MembershipOfferDeploy | null> {
+    const deploy = [...this.membershipOfferDeploys.values()]
+      .filter((entry) => entry.creator === creator)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    return deploy ? structuredClone(deploy) : null;
+  }
   async pendingMembershipOfferDeploys(): Promise<MembershipOfferDeploy[]> {
     return [...this.membershipOfferDeploys.values()]
       .filter((deploy) => deploy.state === "PENDING")

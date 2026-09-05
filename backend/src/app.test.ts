@@ -5,6 +5,7 @@ import { createApp } from "./app.js";
 import type {
   CovenantGateway,
   PaymentGateway,
+  MembershipOfferDeploy,
   Post,
   Upload,
 } from "./domain.js";
@@ -386,6 +387,33 @@ describe("membership offer deployment API", () => {
     };
   }
 
+  function seedDeploy(
+    store: MemoryStore,
+    overrides: Partial<MembershipOfferDeploy> = {},
+  ): MembershipOfferDeploy {
+    const deploy: MembershipOfferDeploy = {
+      id: `deploy-${Math.random().toString(36).slice(2)}`,
+      creator,
+      priceSompi: "100000000",
+      description: "Backstage",
+      covenantId: "covenant-seeded",
+      payoutPk: "a".repeat(64),
+      preparedTransaction: JSON.stringify({ id: "0".repeat(64) }),
+      fingerprint: "fingerprint",
+      signedTransactionId: null,
+      state: "PREPARED",
+      rejection: null,
+      submittedAt: null,
+      lastCheckedAt: null,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      ...overrides,
+    };
+    store.membershipOfferDeploys.set(deploy.id, structuredClone(deploy));
+    return deploy;
+  }
+
   it("deploys a live membership offer from a signed transaction", async () => {
     const store = new MemoryStore();
     const app = createApp({
@@ -448,14 +476,15 @@ describe("membership offer deployment API", () => {
       isActive: true,
     });
 
-    await creatorAgent
+    const second = await creatorAgent
       .post("/api/membership/offers/propose")
       .send({
         price: "2",
         description: "A different offer",
         payoutPk: "a".repeat(64),
       })
-      .expect(409);
+      .expect(201);
+    expect(second.body.id).not.toBe(proposed.body.id);
   });
 
   it("reuses an unchanged proposal and refuses to deploy without a gateway", async () => {
@@ -487,7 +516,266 @@ describe("membership offer deployment API", () => {
       })
       .expect(200);
     expect(reused.body.id).toBe(first.body.id);
+  });
 
+  it("surfaces a previous failed attempt and supersedes its stale preparation", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    const superseded = seedDeploy(store, {
+      id: "deploy-superseded",
+      priceSompi: "100000000",
+      description: "Backstage",
+      state: "PREPARED",
+      createdAt: 1,
+    });
+    seedDeploy(store, {
+      id: "deploy-failed",
+      priceSompi: "100000000",
+      description: "Backstage",
+      state: "REJECTED",
+      rejection: "INSUFFICIENT_FUNDS",
+      createdAt: 2,
+    });
+
+    const fresh = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    expect(fresh.body.id).not.toBe(superseded.id);
+    expect(fresh.body.previousRejection).toBe("INSUFFICIENT_FUNDS");
+    const archived = await store.getMembershipOfferDeploy(superseded.id);
+    expect(archived?.state).toBe("REJECTED");
+    expect(archived?.rejection).toBe("STALE_PREPARATION");
+  });
+
+  it("surfaces a previous failed attempt on a fresh proposal", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    seedDeploy(store, {
+      id: "deploy-failed-only",
+      state: "REJECTED",
+      rejection: "UTXO_OWNER_MISMATCH",
+    });
+
+    const fresh = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    expect(fresh.body.previousRejection).toBe("UTXO_OWNER_MISMATCH");
+  });
+
+  it("blocks a new proposal while a deploy is pending on-chain", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    seedDeploy(store, {
+      id: "deploy-pending",
+      state: "PENDING",
+      signedTransactionId: "b".repeat(64),
+    });
+
+    const same = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(409);
+    expect(same.body.state).toBe("PENDING");
+    expect(same.body.message).toBe(COPY.offerDeployPending);
+
+    const changed = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "2",
+        description: "A different offer",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(409);
+    expect(changed.body.id).toBe("deploy-pending");
+    expect(changed.body.state).toBe("PENDING");
+  });
+
+  it("warns when the membership covenant is already deployed on-chain", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+      membershipVerifier: {
+        verifyAddress: async () => [
+          {
+            transactionId: "0".repeat(64),
+            outputIndex: 0,
+            covenantId: canonicalMembershipCovenantId(),
+            kind: "deploy",
+            tokenType: null,
+            owner: null,
+            createdAt: null,
+            validUntil: null,
+            status: "NOT_MEMBERSHIP",
+          },
+        ],
+        verifyUtxo: async () => {
+          throw new Error("unused");
+        },
+      },
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    const proposed = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    expect(proposed.body.membershipExists).toBe(true);
+    expect(proposed.body.state).toBe("PREPARED");
+    expect(proposed.body.transaction).toBeDefined();
+  });
+
+  it("allows proposing when a different covenant is deployed on-chain", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+      membershipVerifier: {
+        verifyAddress: async () => [
+          {
+            transactionId: "0".repeat(64),
+            outputIndex: 0,
+            covenantId: "covenant-some-other-template",
+            kind: "deploy",
+            tokenType: null,
+            owner: null,
+            createdAt: null,
+            validUntil: null,
+            status: "NOT_MEMBERSHIP",
+          },
+        ],
+        verifyUtxo: async () => {
+          throw new Error("unused");
+        },
+      },
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    const proposed = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    expect(proposed.body.state).toBe("PREPARED");
+  });
+
+  it("allows proposing when no covenant is deployed on-chain", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+      membershipVerifier: {
+        verifyAddress: async () => [],
+        verifyUtxo: async () => {
+          throw new Error("unused");
+        },
+      },
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    const proposed = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    expect(proposed.body.state).toBe("PREPARED");
+  });
+
+  it("reuses an unchanged proposal without a previous failure", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    seedDeploy(store, {
+      id: "deploy-open",
+      priceSompi: "100000000",
+      description: "Backstage",
+      state: "PREPARED",
+    });
+
+    const reused = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(200);
+    expect(reused.body.id).toBe("deploy-open");
+    expect(reused.body.previousRejection).toBeUndefined();
+  });
+
+  it("refuses to deploy without a gateway", async () => {
     const noGateway = createApp({
       store: new MemoryStore(),
       storage: new TestStorage(),

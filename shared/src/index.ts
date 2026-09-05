@@ -56,6 +56,8 @@ export const COPY = {
     "Membership offer is deploying. Your price and description are fixed. Do not submit again.",
   offerLive: "Your membership offer is live.",
   offerPublishFailed: "The membership offer could not be published. Try again.",
+  membershipAlreadyExists:
+    "A membership already exists for this account. We'll send the transaction anyway.",
   offerMembershipTitle: "Membership",
   offerMembershipIntro: "Offer one day of access for a fixed price.",
   offerDescriptionLabel: "What supporters get",
@@ -202,6 +204,8 @@ export interface MembershipDeployResponse {
   transactionId: string | null;
   rejection: string | null;
   offer: MembershipOfferResponse | null;
+  previousRejection?: string | null;
+  membershipExists?: boolean;
 }
 
 export type MembershipState = "ACTIVE" | "EXPIRED" | "TRANSFERRED";
