@@ -12,7 +12,12 @@ import type {
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
 import { TestStorage } from "./test-storage.js";
-import { MEMBERSHIP_DURATION_MS } from "./covenant.js";
+import { KaspaCovenantGateway } from "./covenant-gateway.js";
+import {
+  MEMBERSHIP_DURATION_MS,
+  buildMembershipCovenantTemplate,
+  fingerprintTemplate,
+} from "./covenant.js";
 import {
   canonicalMembershipCovenantId,
   KaspaMembershipVerifier,
@@ -348,7 +353,9 @@ describe("membership offer deployment API", () => {
               scriptPublicKey: "0000" + "20" + "b".repeat(64) + "ac",
               covenant: {
                 type: "KCC-0020",
-                payload: JSON.stringify({ type: "DEPLOY_COVENANT" }),
+                authorizingInput: 0,
+                covenantId: "covenant-1",
+                payload: { type: "DEPLOY_COVENANT" },
               },
             },
           ],
@@ -1438,6 +1445,226 @@ describe("membership transfer API", () => {
       .expect(503);
     expect(res.body.error).toBe("TRANSFER_UNAVAILABLE");
     expect(res.body.message).toBe(COPY.transferUnavailable);
+  });
+});
+
+describe("membership covenant format through the real gateway", () => {
+  const validAddress = `kaspatest:${"q".repeat(61)}`;
+  const recipient = `kaspatest:${"s".repeat(61)}`;
+
+  afterEach(() => vi.restoreAllMocks());
+
+  function mockGatewayFetch() {
+    const parentId = "b".repeat(64);
+    const txid = "c".repeat(64);
+    const scriptTail = `20${"00".repeat(32)}ac`;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/utxos"))
+        return new Response(
+          JSON.stringify([
+            {
+              outpoint: { transactionId: parentId, index: 0 },
+              utxoEntry: {
+                amount: "1000000000",
+                scriptPublicKey: { scriptPublicKey: scriptTail },
+                blockDaaScore: "1",
+                isCoinbase: false,
+              },
+            },
+          ]),
+        );
+      if (url.endsWith("/info/fee-estimate"))
+        return new Response(
+          JSON.stringify({
+            normalBuckets: [{ feerate: 0.01 }],
+            priorityBucket: { feerate: 0.02 },
+          }),
+        );
+      if (url.endsWith(`/transactions/${parentId}`))
+        return new Response(
+          JSON.stringify({
+            outputs: [{ amount: 1000000000, script_public_key: scriptTail }],
+          }),
+        );
+      if (url.endsWith("/transactions") && init?.method === "POST")
+        return new Response(JSON.stringify({ transactionId: txid }));
+      if (url.endsWith(`/transactions/${txid}`))
+        return new Response(
+          JSON.stringify({ is_accepted: true, block_time: 1_720_000_000 }),
+        );
+      throw new Error(`unexpected URL ${url}`);
+    });
+  }
+
+  async function seedMembershipStore(store: MemoryStore) {
+    await store.saveCovenant({
+      id: "covenant-1",
+      templateJson: '{"type":"KCC-0020","amount":1}',
+      templateFingerprint: "a".repeat(64),
+      amount: "1",
+      durationMs: 86400_000,
+      creatorRoyaltyBps: 1000,
+      createdAt: 1,
+    });
+    await store.createMembershipOffer({
+      id: "offer-1",
+      creator: validAddress,
+      covenantId: "covenant-1",
+      priceSompi: "100",
+      description: "A day of access",
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    await store.createMembership({
+      id: "membership-1",
+      offerId: "offer-1",
+      owner: validAddress,
+      creator: validAddress,
+      covenantId: "covenant-1",
+      createdTxId: null,
+      validUntil: Date.now() + 86400_000,
+      state: "ACTIVE",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+  }
+
+  function testApp() {
+    return createApp({
+      store: new MemoryStore(),
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: new KaspaCovenantGateway("https://kaspa.test"),
+    });
+  }
+
+  it("proposes and finalizes a deploy whose covenant output Kasware can parse", async () => {
+    mockGatewayFetch();
+    const app = testApp();
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, validAddress);
+
+    const proposed = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1.5",
+        description: "A day of access",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    expect(proposed.body.state).toBe("PREPARED");
+
+    const transaction = JSON.parse(proposed.body.transaction);
+    const covenant = transaction.outputs[0].covenant;
+    expect(covenant).toMatchObject({
+      type: "KCC-0020",
+      authorizingInput: 0,
+    });
+    expect(covenant.covenantId).toMatch(/^[0-9a-f]{64}$/);
+    expect(typeof covenant.payload).toBe("object");
+    expect(covenant.payload).toMatchObject({
+      type: "DEPLOY_COVENANT",
+      deployer: validAddress,
+      payoutPk: "a".repeat(64),
+    });
+    expect(covenant.covenantId).toBe(covenant.payload.templateFingerprint);
+
+    const original = JSON.parse(proposed.body.transaction);
+    const signed = {
+      ...original,
+      inputs: original.inputs.map((input: { signatureScript?: string }) => ({
+        ...input,
+        signatureScript: "aa01",
+      })),
+    };
+    const finalized = await creatorAgent
+      .post(`/api/membership/deploys/${proposed.body.id}/finalize`)
+      .send({ signedTransaction: JSON.stringify(signed) })
+      .expect(200);
+    expect(finalized.body).toMatchObject({
+      state: "CONFIRMED",
+      transactionId: "c".repeat(64),
+    });
+    expect(finalized.body.message).toBe(COPY.offerLive);
+  });
+
+  it("proposes a mint whose covenant output Kasware can parse", async () => {
+    const store = new MemoryStore();
+    await seedMembershipStore(store);
+    mockGatewayFetch();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: new KaspaCovenantGateway("https://kaspa.test"),
+    });
+    const buyerAgent = request.agent(app);
+    await authenticate(buyerAgent, validAddress);
+
+    const proposed = await buyerAgent
+      .post("/api/membership/offers/offer-1/mints/propose")
+      .expect(201);
+    expect(proposed.body.state).toBe("PREPARED");
+
+    const transaction = JSON.parse(proposed.body.transaction);
+    const covenant = transaction.outputs[0].covenant;
+    expect(covenant).toMatchObject({
+      type: "KCC-0020",
+      authorizingInput: 0,
+    });
+    expect(covenant.covenantId).toBe(
+      fingerprintTemplate(buildMembershipCovenantTemplate()),
+    );
+    expect(typeof covenant.payload).toBe("object");
+    expect(covenant.payload).toMatchObject({
+      type: "MINT",
+      owner: validAddress,
+      offerId: "offer-1",
+      creator: validAddress,
+    });
+  });
+
+  it("proposes a transfer whose covenant output Kasware can parse", async () => {
+    const store = new MemoryStore();
+    await seedMembershipStore(store);
+    mockGatewayFetch();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: new KaspaCovenantGateway("https://kaspa.test"),
+    });
+    const sellerAgent = request.agent(app);
+    await authenticate(sellerAgent, validAddress);
+
+    const proposed = await sellerAgent
+      .post("/api/membership/memberships/membership-1/transfers/propose")
+      .send({ recipient, saleAmount: "5" })
+      .expect(201);
+    expect(proposed.body.state).toBe("PREPARED");
+
+    const transaction = JSON.parse(proposed.body.transaction);
+    const covenant = transaction.outputs[0].covenant;
+    expect(covenant).toMatchObject({
+      type: "KCC-0020",
+      authorizingInput: 0,
+    });
+    expect(covenant.covenantId).toBe(
+      fingerprintTemplate(buildMembershipCovenantTemplate()),
+    );
+    expect(typeof covenant.payload).toBe("object");
+    expect(covenant.payload).toMatchObject({
+      type: "TRANSFER",
+      membershipId: "membership-1",
+      owner: recipient,
+    });
+    expect(transaction.outputs[0].value).toBe("50000000");
+    expect(transaction.outputs[1].covenant).toBeNull();
   });
 });
 

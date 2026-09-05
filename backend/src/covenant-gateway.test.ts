@@ -1,7 +1,58 @@
 import { createHash } from "node:crypto";
 import { KaspaCovenantGateway } from "./covenant-gateway.js";
-import { createMembershipCovenant, computeCreatorRoyalty } from "./covenant.js";
-import type { MembershipOffer } from "./domain.js";
+import {
+  buildMembershipCovenantTemplate,
+  computeCreatorRoyalty,
+  createMembershipCovenant,
+  fingerprintTemplate,
+} from "./covenant.js";
+import type { Membership, MembershipOffer } from "./domain.js";
+
+function testMembership(overrides: Partial<Membership> = {}): Membership {
+  return {
+    id: "membership-1",
+    offerId: "offer-1",
+    owner: `kaspatest:${"q".repeat(61)}`,
+    creator: `kaspatest:${"q".repeat(61)}`,
+    covenantId: "covenant-1",
+    createdTxId: null,
+    validUntil: 1_725_686_400_000,
+    state: "ACTIVE",
+    createdAt: 1_725_600_000_000,
+    updatedAt: 1_725_600_000_000,
+    ...overrides,
+  };
+}
+
+function utxoResponse(script: string) {
+  return [
+    {
+      outpoint: { transactionId: "b".repeat(64), index: 0 },
+      utxoEntry: {
+        amount: "2000",
+        scriptPublicKey: { scriptPublicKey: script },
+        blockDaaScore: "1",
+        isCoinbase: false,
+      },
+    },
+  ];
+}
+
+function mockFundingFetch(script: string) {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.endsWith("/utxos"))
+      return new Response(JSON.stringify(utxoResponse(script)));
+    if (url.endsWith("/info/fee-estimate"))
+      return new Response(
+        JSON.stringify({
+          normalBuckets: [{ feerate: 0.01 }],
+          priorityBucket: { feerate: 0.02 },
+        }),
+      );
+    throw new Error(`unexpected URL ${url}`);
+  });
+}
 
 function baseTransaction(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -356,9 +407,13 @@ describe("Kaspa covenant gateway", () => {
     });
     expect(transaction.outputs[0]).toMatchObject({
       value: covenant.amount,
-      covenant: { type: "KCC-0020" },
+      covenant: {
+        type: "KCC-0020",
+        authorizingInput: 0,
+        covenantId: covenant.templateFingerprint,
+      },
     });
-    expect(JSON.parse(transaction.outputs[0].covenant.payload)).toEqual({
+    expect(transaction.outputs[0].covenant.payload).toEqual({
       type: "DEPLOY_COVENANT",
       templateFingerprint: covenant.templateFingerprint,
       template: covenant.templateJson,
@@ -368,6 +423,59 @@ describe("Kaspa covenant gateway", () => {
     expect(prepared.fingerprint).toBe(
       createHash("sha256").update(prepared.transaction).digest("hex"),
     );
+  });
+
+  it("prepares a mint with a Kasware-parseable covenant output", async () => {
+    const buyer = `kaspatest:${"q".repeat(61)}`;
+    const offer = testOffer({ creator: buyer, priceSompi: "100" });
+    const script = `20${"00".repeat(32)}ac`;
+    mockFundingFetch(script);
+
+    const prepared = await new KaspaCovenantGateway("https://kaspa.test").mint(
+      offer,
+      buyer,
+    );
+
+    const transaction = JSON.parse(prepared.transaction);
+    expect(transaction.outputs[0].covenant).toMatchObject({
+      type: "KCC-0020",
+      authorizingInput: 0,
+      covenantId: fingerprintTemplate(buildMembershipCovenantTemplate()),
+    });
+    expect(transaction.outputs[0].covenant.payload).toEqual({
+      type: "MINT",
+      owner: buyer,
+      offerId: offer.id,
+      creator: offer.creator,
+      created_at: expect.any(Number),
+      valid_until: expect.any(Number),
+    });
+  });
+
+  it("prepares a transfer with a Kasware-parseable covenant output", async () => {
+    const seller = `kaspatest:${"q".repeat(61)}`;
+    const buyer = `kaspatest:${"s".repeat(61)}`;
+    const membership = testMembership({ owner: seller });
+    const script = `20${"00".repeat(32)}ac`;
+    mockFundingFetch(script);
+
+    const prepared = await new KaspaCovenantGateway(
+      "https://kaspa.test",
+    ).transfer(membership, buyer, "100");
+
+    const transaction = JSON.parse(prepared.transaction);
+    expect(transaction.outputs[0].covenant).toMatchObject({
+      type: "KCC-0020",
+      authorizingInput: 0,
+      covenantId: fingerprintTemplate(buildMembershipCovenantTemplate()),
+    });
+    expect(transaction.outputs[0].covenant.payload).toEqual({
+      type: "TRANSFER",
+      membershipId: membership.id,
+      owner: buyer,
+      created_at: membership.createdAt,
+      valid_until: membership.validUntil,
+    });
   });
 
   it("deploy rejects template fingerprint mismatch before funding", async () => {

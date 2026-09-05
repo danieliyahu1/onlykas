@@ -10,6 +10,7 @@ import type {
   PreparedMembershipTransfer,
 } from "./domain.js";
 import {
+  buildMembershipCovenantTemplate,
   computeCreatorRoyalty,
   fingerprintTemplate,
   verifyRoyaltySplit,
@@ -60,13 +61,13 @@ export class KaspaCovenantGateway implements CovenantGateway {
       )
     )
       throw new Error("UTXO_OWNER_MISMATCH");
-    const payload = JSON.stringify({
+    const payload = {
       type: "DEPLOY_COVENANT",
       templateFingerprint: covenant.templateFingerprint,
       template: covenant.templateJson,
       payoutPk,
       deployer,
-    });
+    };
     const outputs: {
       value: string;
       scriptPublicKey: string;
@@ -77,6 +78,8 @@ export class KaspaCovenantGateway implements CovenantGateway {
         scriptPublicKey: deployerScript,
         covenant: {
           type: "KCC-0020",
+          authorizingInput: 0,
+          covenantId: covenant.templateFingerprint,
           payload,
         },
       },
@@ -166,6 +169,8 @@ export class KaspaCovenantGateway implements CovenantGateway {
         scriptPublicKey: scriptFor(offer.creator),
         covenant: {
           type: "KCC-0020",
+          authorizingInput: 0,
+          covenantId: membershipCovenantIdHex(),
           payload: covenantPayload,
         },
       },
@@ -272,6 +277,8 @@ export class KaspaCovenantGateway implements CovenantGateway {
         scriptPublicKey: scriptFor(membership.creator),
         covenant: {
           type: "KCC-0020",
+          authorizingInput: 0,
+          covenantId: membershipCovenantIdHex(),
           payload: covenantPayload,
         },
       },
@@ -529,6 +536,10 @@ function scriptFor(address: string): string {
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function membershipCovenantIdHex(): string {
+  return fingerprintTemplate(buildMembershipCovenantTemplate());
 }
 
 function blockTimeToMs(blockTime: number | undefined): number | null {
