@@ -51,6 +51,9 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
         if (cancelled) return;
         setDeploy(current);
         if (current.state === "CONFIRMED") {
+          console.info("[OnlyKas membership] deploy confirmed via polling", {
+            deployId: current.id,
+          });
           setStatus(COPY.offerLive);
           setPolling(false);
           await reloadOffers();
@@ -86,8 +89,15 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
   async function publishOffer(event: FormEvent) {
     event.preventDefault();
     if (busy || polling) return;
+    console.info("[OnlyKas membership] deploy offered", {
+      priceKas,
+      description,
+    });
     const issues = validateMembershipOffer(priceKas, description);
     if (issues.length) {
+      console.info("[OnlyKas membership] deploy offer invalid", {
+        reason: issues.join(" "),
+      });
       setFailure({ code: null, message: issues.join(" ") });
       return;
     }
@@ -106,6 +116,10 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
           body: JSON.stringify({ price: priceKas, description, payoutPk }),
         },
       );
+      console.info("[OnlyKas membership] deploy proposed", {
+        deployId: proposed.id,
+        state: proposed.state,
+      });
       setDeploy(proposed);
       if (proposed.state === "CONFIRMED") {
         setStatus(COPY.offerLive);
@@ -116,6 +130,9 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
       const signedTransaction = await signPreparedPayment(
         proposed.transaction!,
       );
+      console.info("[OnlyKas membership] deploy signed", {
+        deployId: proposed.id,
+      });
       setStatus(COPY.offeringDeploy);
       const finalized = await api<MembershipDeployResponse>(
         `/api/membership/deploys/${proposed.id}/finalize`,
@@ -124,6 +141,11 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
           body: JSON.stringify({ signedTransaction }),
         },
       );
+      console.info("[OnlyKas membership] deploy finalized", {
+        deployId: finalized.id,
+        state: finalized.state,
+        rejection: finalized.rejection ?? null,
+      });
       setDeploy(finalized);
       if (finalized.state === "CONFIRMED") {
         setStatus(COPY.offerLive);
@@ -135,6 +157,11 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
       }
     } catch (caught) {
       const apiFailure = caught instanceof ApiError ? caught : null;
+      console.error("[OnlyKas membership] deploy failed", {
+        code: apiFailure?.code ?? null,
+        message:
+          caught instanceof Error ? caught.message : COPY.offerPublishFailed,
+      });
       setFailure({
         code: apiFailure?.code ?? null,
         message:

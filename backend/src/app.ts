@@ -847,13 +847,28 @@ export function createApp(dependencies: AppDependencies) {
         })
         .parse(request.body);
       const issues = validateMembershipOffer(body.price, body.description);
-      if (issues.length)
+      if (issues.length) {
+        logger("membership_offer_deploy_rejected", {
+          requestId: request.requestId,
+          creator,
+          code: "INVALID_OFFER",
+          message: issues[0],
+        });
         return response
           .status(400)
           .json({ error: "INVALID_OFFER", message: issues[0] });
+      }
       const liveOffers =
         await dependencies.store.creatorMembershipOffers(creator);
-      if (liveOffers.length) return apiError(response, 409, "ALREADY_DEPLOYED");
+      if (liveOffers.length) {
+        logger("membership_offer_deploy_rejected", {
+          requestId: request.requestId,
+          creator,
+          code: "ALREADY_DEPLOYED",
+          liveOfferCount: liveOffers.length,
+        });
+        return apiError(response, 409, "ALREADY_DEPLOYED");
+      }
       logger("membership_offer_deploy_started", {
         requestId: request.requestId,
         creator,
@@ -862,9 +877,20 @@ export function createApp(dependencies: AppDependencies) {
       const description = normalizePostText(body.description);
       const existing =
         await dependencies.store.unresolvedMembershipOfferDeploy(creator);
-      if (existing && validPreparedDeploy(existing, priceSompi, description))
+      if (existing && validPreparedDeploy(existing, priceSompi, description)) {
+        logger("membership_offer_deploy_reused", {
+          requestId: request.requestId,
+          creator,
+          deployId: existing.id,
+        });
         return response.json(membershipDeployResponse(existing, null));
-      if (existing)
+      }
+      if (existing) {
+        logger("membership_deploy_stale_rejected", {
+          requestId: request.requestId,
+          creator,
+          deployId: existing.id,
+        });
         await dependencies.store.compareAndSetMembershipOfferDeploy(
           existing.id,
           "PREPARED",
@@ -874,6 +900,7 @@ export function createApp(dependencies: AppDependencies) {
             updatedAt: now(),
           },
         );
+      }
       const covenant = createMembershipCovenant();
       await dependencies.store.saveCovenant(covenant);
       let prepared;
@@ -884,11 +911,17 @@ export function createApp(dependencies: AppDependencies) {
           body.payoutPk,
         );
       } catch (error) {
-        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS") {
+          logger("membership_deploy_insufficient_funds", {
+            requestId: request.requestId,
+            creator,
+            covenantId: covenant.id,
+          });
           return response.status(422).json({
             error: "INSUFFICIENT_FUNDS",
             message: COPY.insufficientFunds,
           });
+        }
         throw error;
       }
       const deploy: MembershipOfferDeploy = {
@@ -937,17 +970,31 @@ export function createApp(dependencies: AppDependencies) {
         deployId: routeParam(request, "id"),
         creator,
       });
-      if (!deploy || deploy.creator !== creator)
+      if (!deploy || deploy.creator !== creator) {
+        logger("membership_deploy_finalize_rejected", {
+          requestId: request.requestId,
+          deployId: routeParam(request, "id"),
+          creator,
+          code: "DEPLOY_NOT_FOUND",
+        });
         return apiError(response, 404, "DEPLOY_NOT_FOUND");
+      }
       if (deploy.state === "CONFIRMED") {
         const offer = await dependencies.store.getMembershipOffer(deploy.id);
         return response.json(membershipDeployResponse(deploy, offer));
       }
-      if (deploy.state === "PENDING")
+      if (deploy.state === "PENDING") {
+        logger("membership_deploy_finalize_rejected", {
+          requestId: request.requestId,
+          deployId: deploy.id,
+          creator,
+          code: "ALREADY_PENDING",
+        });
         return response.status(409).json({
           ...membershipDeployResponse(deploy, null),
           message: COPY.offerDeployPending,
         });
+      }
       const body = z
         .object({ signedTransaction: z.string().min(1) })
         .parse(request.body);
@@ -984,6 +1031,13 @@ export function createApp(dependencies: AppDependencies) {
               updatedAt: now(),
             },
           );
+        logger("membership_deploy_finalize_rejected", {
+          requestId: request.requestId,
+          deployId: deploy.id,
+          creator,
+          state: failedState,
+          rejection: pending?.rejection ?? null,
+        });
         return response.status(validationFailure ? 422 : 202).json({
           ...membershipDeployResponse(pending ?? deploy, null),
           message: validationFailure
@@ -1012,6 +1066,12 @@ export function createApp(dependencies: AppDependencies) {
           const current = (await dependencies.store.getMembershipOfferDeploy(
             deploy.id,
           ))!;
+          logger("membership_deploy_finalize_rejected", {
+            requestId: request.requestId,
+            deployId: deploy.id,
+            creator,
+            code: "CONCURRENT_CONFIRMATION",
+          });
           return response.status(409).json({
             ...membershipDeployResponse(current, null),
             message: COPY.offerDeployPending,
@@ -1044,6 +1104,12 @@ export function createApp(dependencies: AppDependencies) {
         const current = (await dependencies.store.getMembershipOfferDeploy(
           deploy.id,
         ))!;
+        logger("membership_deploy_finalize_rejected", {
+          requestId: request.requestId,
+          deployId: deploy.id,
+          creator,
+          code: "CONCURRENT_CONFIRMATION",
+        });
         return response.status(409).json({
           ...membershipDeployResponse(current, null),
           message: COPY.offerDeployPending,
@@ -1136,8 +1202,15 @@ export function createApp(dependencies: AppDependencies) {
       const offer = await dependencies.store.getMembershipOffer(
         routeParam(request, "id"),
       );
-      if (!offer || !offer.isActive)
+      if (!offer || !offer.isActive) {
+        logger("membership_mint_rejected", {
+          requestId: request.requestId,
+          offerId: routeParam(request, "id"),
+          buyer: request.walletSession!.address,
+          code: "OFFER_UNAVAILABLE",
+        });
         return apiError(response, 404, "OFFER_UNAVAILABLE");
+      }
       if (!(await dependencies.store.getCovenant(offer.covenantId)))
         throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
       const buyer = request.walletSession!.address;
@@ -1145,14 +1218,35 @@ export function createApp(dependencies: AppDependencies) {
         offer.id,
         buyer,
       );
-      if (existing?.state === "PENDING")
+      if (existing?.state === "PENDING") {
+        logger("membership_mint_rejected", {
+          requestId: request.requestId,
+          offerId: offer.id,
+          buyer,
+          mintId: existing.id,
+          code: "ALREADY_PENDING",
+        });
         return response.status(409).json({
           ...mintResponse(existing, null),
           message: COPY.membershipPending,
         });
-      if (existing && validPreparedMint(existing, offer))
+      }
+      if (existing && validPreparedMint(existing, offer)) {
+        logger("membership_mint_reused", {
+          requestId: request.requestId,
+          offerId: offer.id,
+          buyer,
+          mintId: existing.id,
+        });
         return response.json(mintResponse(existing, null));
-      if (existing)
+      }
+      if (existing) {
+        logger("membership_mint_stale_rejected", {
+          requestId: request.requestId,
+          offerId: offer.id,
+          buyer,
+          mintId: existing.id,
+        });
         await dependencies.store.compareAndSetMembershipMintAttempt(
           existing.id,
           "PREPARED",
@@ -1162,6 +1256,7 @@ export function createApp(dependencies: AppDependencies) {
             updatedAt: now(),
           },
         );
+      }
       logger("membership_mint_started", {
         requestId: request.requestId,
         offerId: offer.id,
@@ -1171,19 +1266,32 @@ export function createApp(dependencies: AppDependencies) {
       try {
         prepared = await dependencies.covenantGateway.mint(offer, buyer);
       } catch (error) {
-        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS") {
+          logger("membership_mint_insufficient_funds", {
+            requestId: request.requestId,
+            offerId: offer.id,
+            buyer,
+          });
           return response.status(422).json({
             error: "INSUFFICIENT_FUNDS",
             message: COPY.insufficientFunds,
           });
+        }
         throw error;
       }
       if (
         prepared.saleAmountSompi !== offer.priceSompi ||
         prepared.buyer !== buyer ||
         prepared.seller !== offer.creator
-      )
+      ) {
+        logger("membership_mint_rejected", {
+          requestId: request.requestId,
+          offerId: offer.id,
+          buyer,
+          code: "MINT_PRICE_MISMATCH",
+        });
         return apiError(response, 400, "MINT_PRICE_MISMATCH");
+      }
       const attempt: MembershipMintAttempt = {
         id: randomUUID(),
         offerId: offer.id,
@@ -1230,17 +1338,31 @@ export function createApp(dependencies: AppDependencies) {
         mintId: routeParam(request, "id"),
         buyer,
       });
-      if (!attempt || attempt.buyer !== buyer)
+      if (!attempt || attempt.buyer !== buyer) {
+        logger("membership_mint_finalize_rejected", {
+          requestId: request.requestId,
+          mintId: routeParam(request, "id"),
+          buyer,
+          code: "MINT_NOT_FOUND",
+        });
         return apiError(response, 404, "MINT_NOT_FOUND");
+      }
       if (attempt.state === "CONFIRMED") {
         const membership = await dependencies.store.getMembership(attempt.id);
         return response.json(mintResponse(attempt, membership));
       }
-      if (attempt.state === "PENDING")
+      if (attempt.state === "PENDING") {
+        logger("membership_mint_finalize_rejected", {
+          requestId: request.requestId,
+          mintId: attempt.id,
+          buyer,
+          code: "ALREADY_PENDING",
+        });
         return response.status(409).json({
           ...mintResponse(attempt, null),
           message: COPY.membershipPending,
         });
+      }
       const body = z
         .object({ signedTransaction: z.string().min(1) })
         .parse(request.body);
@@ -1280,6 +1402,13 @@ export function createApp(dependencies: AppDependencies) {
               updatedAt: now(),
             },
           );
+        logger("membership_mint_finalize_rejected", {
+          requestId: request.requestId,
+          mintId: attempt.id,
+          buyer,
+          state: failedState,
+          rejection: pending?.rejection ?? null,
+        });
         return response.status(validationFailure ? 422 : 202).json({
           ...mintResponse(pending ?? attempt, null),
           message: validationFailure
@@ -1307,6 +1436,12 @@ export function createApp(dependencies: AppDependencies) {
             current.state === "CONFIRMED"
               ? await dependencies.store.getMembership(current.id)
               : null;
+          logger("membership_mint_finalize_rejected", {
+            requestId: request.requestId,
+            mintId: attempt.id,
+            buyer,
+            code: "CONCURRENT_CONFIRMATION",
+          });
           return response.status(409).json({
             ...mintResponse(current, membership),
             message: COPY.membershipPending,
@@ -1344,6 +1479,12 @@ export function createApp(dependencies: AppDependencies) {
           current.state === "CONFIRMED"
             ? await dependencies.store.getMembership(current.id)
             : null;
+        logger("membership_mint_finalize_rejected", {
+          requestId: request.requestId,
+          mintId: attempt.id,
+          buyer,
+          code: "CONCURRENT_CONFIRMATION",
+        });
         return response.status(409).json({
           ...mintResponse(current, membership),
           message: COPY.membershipPending,
@@ -1396,11 +1537,34 @@ export function createApp(dependencies: AppDependencies) {
       const membership = await dependencies.store.getMembership(
         routeParam(request, "id"),
       );
-      if (!membership) return apiError(response, 404, "MINT_NOT_FOUND");
-      if (membership.owner !== seller)
+      if (!membership) {
+        logger("membership_transfer_rejected", {
+          requestId: request.requestId,
+          membershipId: routeParam(request, "id"),
+          seller,
+          code: "MINT_NOT_FOUND",
+        });
+        return apiError(response, 404, "MINT_NOT_FOUND");
+      }
+      if (membership.owner !== seller) {
+        logger("membership_transfer_rejected", {
+          requestId: request.requestId,
+          membershipId: membership.id,
+          seller,
+          code: "TRANSFER_NOT_HOLDER",
+        });
         return apiError(response, 403, "TRANSFER_NOT_HOLDER");
-      if (membership.state !== "ACTIVE" || membership.validUntil <= now())
+      }
+      if (membership.state !== "ACTIVE" || membership.validUntil <= now()) {
+        logger("membership_transfer_rejected", {
+          requestId: request.requestId,
+          membershipId: membership.id,
+          seller,
+          code: "TRANSFER_EXPIRED",
+          state: membership.state,
+        });
         return apiError(response, 409, "TRANSFER_EXPIRED");
+      }
       const body = z
         .object({
           recipient: z.string().min(1),
@@ -1408,13 +1572,34 @@ export function createApp(dependencies: AppDependencies) {
         })
         .parse(request.body);
       const saleAmountSompi = parseKasToSompi(body.saleAmount);
-      if (saleAmountSompi === null || saleAmountSompi <= 0n)
+      if (saleAmountSompi === null || saleAmountSompi <= 0n) {
+        logger("membership_transfer_rejected", {
+          requestId: request.requestId,
+          membershipId: membership.id,
+          seller,
+          code: "TRANSFER_INVALID_AMOUNT",
+          saleAmount: body.saleAmount,
+        });
         return apiError(response, 422, "TRANSFER_INVALID_AMOUNT");
+      }
       if (!addressPattern.test(body.recipient)) {
+        logger("membership_transfer_rejected", {
+          requestId: request.requestId,
+          membershipId: membership.id,
+          seller,
+          code: "TRANSFER_INVALID_RECIPIENT",
+        });
         return apiError(response, 422, "TRANSFER_INVALID_RECIPIENT");
       }
-      if (body.recipient === seller)
+      if (body.recipient === seller) {
+        logger("membership_transfer_rejected", {
+          requestId: request.requestId,
+          membershipId: membership.id,
+          seller,
+          code: "SELF_TRANSFER",
+        });
         return apiError(response, 422, "TRANSFER_INVALID_RECIPIENT");
+      }
       logger("membership_transfer_started", {
         requestId: request.requestId,
         membershipId: membership.id,
@@ -1429,8 +1614,15 @@ export function createApp(dependencies: AppDependencies) {
           saleAmountSompi.toString(),
         );
       } catch (error) {
-        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS") {
+          logger("membership_transfer_rejected", {
+            requestId: request.requestId,
+            membershipId: membership.id,
+            seller,
+            code: "INSUFFICIENT_FUNDS",
+          });
           throw new HttpError(422, "TRANSFER_INVALID_AMOUNT");
+        }
         throw error;
       }
       const attempt: MembershipTransferAttempt = {
@@ -1482,19 +1674,33 @@ export function createApp(dependencies: AppDependencies) {
         transferId: routeParam(request, "id"),
         seller,
       });
-      if (!attempt || attempt.seller !== seller)
+      if (!attempt || attempt.seller !== seller) {
+        logger("membership_transfer_finalize_rejected", {
+          requestId: request.requestId,
+          transferId: routeParam(request, "id"),
+          seller,
+          code: "TRANSFER_NOT_FOUND",
+        });
         return apiError(response, 404, "TRANSFER_NOT_FOUND");
+      }
       if (attempt.state === "CONFIRMED") {
         const current = await dependencies.store.getMembership(
           attempt.membershipId,
         );
         return response.json(transferResponse(attempt, current));
       }
-      if (attempt.state === "PENDING")
+      if (attempt.state === "PENDING") {
+        logger("membership_transfer_finalize_rejected", {
+          requestId: request.requestId,
+          transferId: attempt.id,
+          seller,
+          code: "ALREADY_PENDING",
+        });
         return response.status(409).json({
           ...transferResponse(attempt, null),
           message: COPY.transferPending,
         });
+      }
       const body = z
         .object({ signedTransaction: z.string().min(1) })
         .parse(request.body);
@@ -1538,6 +1744,13 @@ export function createApp(dependencies: AppDependencies) {
               updatedAt: now(),
             },
           );
+        logger("membership_transfer_finalize_rejected", {
+          requestId: request.requestId,
+          transferId: attempt.id,
+          seller,
+          state: failedState,
+          rejection: pending?.rejection ?? null,
+        });
         return response.status(validationFailure ? 422 : 202).json({
           ...transferResponse(pending ?? attempt, null),
           message: validationFailure
@@ -1560,6 +1773,12 @@ export function createApp(dependencies: AppDependencies) {
             (await dependencies.store.getMembershipTransferAttempt(
               attempt.id,
             ))!;
+          logger("membership_transfer_finalize_rejected", {
+            requestId: request.requestId,
+            transferId: attempt.id,
+            seller,
+            code: "CONCURRENT_CONFIRMATION",
+          });
           return response.status(409).json({
             ...transferResponse(current, null),
             message: COPY.transferPending,
@@ -1595,6 +1814,12 @@ export function createApp(dependencies: AppDependencies) {
         const current = (await dependencies.store.getMembershipTransferAttempt(
           attempt.id,
         ))!;
+        logger("membership_transfer_finalize_rejected", {
+          requestId: request.requestId,
+          transferId: attempt.id,
+          seller,
+          code: "CONCURRENT_CONFIRMATION",
+        });
         return response.status(409).json({
           ...transferResponse(current, null),
           message: COPY.transferPending,
@@ -1648,10 +1873,21 @@ export function createApp(dependencies: AppDependencies) {
       if (owner === "invalid")
         return apiError(response, 400, "INVALID_ADDRESS");
       const memberships = await verifier.verifyAddress(address, owner);
+      const valid = memberships.some(
+        (membership) => membership.status === "VALID",
+      );
+      logger("membership_verify_address", {
+        requestId: request.requestId,
+        address,
+        owner: owner ?? null,
+        count: memberships.length,
+        valid,
+        statuses: memberships.map((membership) => membership.status),
+      });
       response.json({
         address,
         verifiedAt: new Date(now()).toISOString(),
-        valid: memberships.some((membership) => membership.status === "VALID"),
+        valid,
         memberships,
       } satisfies MembershipAddressVerificationResponse);
     }),
@@ -1676,6 +1912,14 @@ export function createApp(dependencies: AppDependencies) {
         outputIndex,
         owner,
       );
+      logger("membership_verify_utxo", {
+        requestId: request.requestId,
+        transactionId,
+        outputIndex,
+        owner: owner ?? null,
+        status: membership.status,
+        kind: membership.kind,
+      });
       response.json(membership);
     }),
   );

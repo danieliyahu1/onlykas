@@ -150,6 +150,10 @@ function MembershipPanel({
           `/api/membership/mints/${savedId}`,
         );
         if (!active) return;
+        console.info("[OnlyKas membership] mint recovered", {
+          mintId: savedId,
+          state: recovered.state,
+        });
         setAttempt(recovered);
         if (recovered.state === "PENDING") {
           setPhase("pending");
@@ -177,12 +181,18 @@ function MembershipPanel({
           `/api/membership/mints/${attempt.id}`,
         );
         if (current.state === "CONFIRMED") {
+          console.info("[OnlyKas membership] mint confirmed via polling", {
+            mintId: attempt.id,
+          });
           window.localStorage.removeItem(key);
           setAttempt(current);
           setPhase(null);
           setMessage(COPY.membershipLive);
           await loadMemberships();
         } else if (current.state === "REJECTED") {
+          console.info("[OnlyKas membership] mint rejected via polling", {
+            mintId: attempt.id,
+          });
           window.localStorage.removeItem(key);
           setAttempt(current);
           setPhase("rejected");
@@ -208,6 +218,10 @@ function MembershipPanel({
   async function pay() {
     const buyer = wallet ?? (await signIn());
     if (!buyer || !offer) return;
+    console.info("[OnlyKas membership] mint started", {
+      offerId: offer.id,
+      buyer: shorten(buyer),
+    });
     setMessage(null);
     setPhase("preparing");
     try {
@@ -215,12 +229,21 @@ function MembershipPanel({
         `/api/membership/offers/${offer.id}/mints/propose`,
         { method: "POST" },
       );
+      console.info("[OnlyKas membership] mint proposed", {
+        mintId: proposed.id,
+        state: proposed.state,
+        priceSompi: proposed.priceSompi,
+      });
       setAttempt(proposed);
       setPhase("signing");
       setMessage(
         COPY.membershipPrompt.replace("{price}", formatKas(offer.priceSompi)),
       );
       const signed = await signPreparedPayment(proposed.transaction!);
+      console.info("[OnlyKas membership] mint signed", {
+        mintId: proposed.id,
+        buyer: shorten(buyer),
+      });
       window.localStorage.setItem(
         membershipStorageKey(offer.id, buyer),
         proposed.id,
@@ -231,6 +254,11 @@ function MembershipPanel({
         `/api/membership/mints/${proposed.id}/finalize`,
         { method: "POST", body: JSON.stringify({ signedTransaction: signed }) },
       );
+      console.info("[OnlyKas membership] mint finalized", {
+        mintId: result.id,
+        state: result.state,
+        rejection: result.rejection ?? null,
+      });
       setAttempt(result);
       if (result.state === "PENDING") {
         setPhase("pending");
@@ -252,6 +280,11 @@ function MembershipPanel({
           : caught instanceof Error
             ? caught.message
             : COPY.membershipRejected;
+      console.error("[OnlyKas membership] mint failed", {
+        offerId: offer.id,
+        buyer: shorten(buyer),
+        message: text,
+      });
       setMessage(text);
       if (text === COPY.membershipPending) setPhase("pending");
       else {
@@ -375,6 +408,10 @@ function TransferPanel({
           `/api/membership/transfers/${savedId}`,
         );
         if (!active) return;
+        console.info("[OnlyKas membership] transfer recovered", {
+          transferId: savedId,
+          state: recovered.state,
+        });
         setAttempt(recovered);
         if (recovered.state === "PENDING") {
           setOpen(true);
@@ -404,12 +441,18 @@ function TransferPanel({
           `/api/membership/transfers/${attempt.id}`,
         );
         if (current.state === "CONFIRMED") {
+          console.info("[OnlyKas membership] transfer confirmed via polling", {
+            transferId: attempt.id,
+          });
           window.localStorage.removeItem(key);
           setAttempt(current);
           setPhase(null);
           setMessage(COPY.transferSent);
           await onChanged();
         } else if (current.state === "REJECTED") {
+          console.info("[OnlyKas membership] transfer rejected via polling", {
+            transferId: attempt.id,
+          });
           window.localStorage.removeItem(key);
           setAttempt(current);
           setPhase("rejected");
@@ -427,12 +470,21 @@ function TransferPanel({
   async function resell(event: FormEvent) {
     event.preventDefault();
     if (phase === "signing" || phase === "confirming") return;
+    console.info("[OnlyKas membership] transfer started", {
+      membershipId: membership.id,
+      recipient: shorten(recipient),
+      salePrice,
+    });
     const issues: string[] = [];
     if (!isKaspaTestnetAddress(recipient) || recipient === wallet)
       issues.push(COPY.transferInvalidRecipient);
     if (parseKasToSompi(salePrice) === null)
       issues.push(COPY.transferInvalidAmount);
     if (issues.length) {
+      console.info("[OnlyKas membership] transfer invalid", {
+        membershipId: membership.id,
+        reason: issues.join(" "),
+      });
       setMessage(issues.join(" "));
       return;
     }
@@ -446,6 +498,12 @@ function TransferPanel({
           body: JSON.stringify({ recipient, saleAmount: salePrice }),
         },
       );
+      console.info("[OnlyKas membership] transfer proposed", {
+        transferId: proposed.id,
+        state: proposed.state,
+        saleAmountSompi: proposed.saleAmountSompi,
+        creatorRoyaltySompi: proposed.creatorRoyaltySompi,
+      });
       setAttempt(proposed);
       setPhase("signing");
       const sellerTake = (
@@ -455,6 +513,9 @@ function TransferPanel({
         COPY.transferSignPrompt.replace("{seller}", formatKas(sellerTake)),
       );
       const signed = await signPreparedPayment(proposed.transaction!);
+      console.info("[OnlyKas membership] transfer signed", {
+        transferId: proposed.id,
+      });
       window.localStorage.setItem(key, proposed.id);
       setPhase("confirming");
       setMessage(COPY.transferConfirming);
@@ -462,6 +523,11 @@ function TransferPanel({
         `/api/membership/transfers/${proposed.id}/finalize`,
         { method: "POST", body: JSON.stringify({ signedTransaction: signed }) },
       );
+      console.info("[OnlyKas membership] transfer finalized", {
+        transferId: result.id,
+        state: result.state,
+        rejection: result.rejection ?? null,
+      });
       setAttempt(result);
       if (result.state === "PENDING") {
         setPhase("pending");
@@ -483,6 +549,10 @@ function TransferPanel({
           : caught instanceof Error
             ? caught.message
             : COPY.transferRejected;
+      console.error("[OnlyKas membership] transfer failed", {
+        membershipId: membership.id,
+        message: text,
+      });
       setMessage(text);
       if (text === COPY.transferPending) setPhase("pending");
       else {

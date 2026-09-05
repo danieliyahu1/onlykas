@@ -219,6 +219,11 @@ export async function reconcilePendingMembershipDeploys(
           offer,
           deploy.signedTransactionId,
         );
+        logEvent("membership_deploy_reconciled", {
+          deployId: deploy.id,
+          result: "CONFIRMED",
+          transactionId: deploy.signedTransactionId,
+        });
       } else if (submission.isAccepted === false) {
         await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
           state: "REJECTED",
@@ -227,11 +232,21 @@ export async function reconcilePendingMembershipDeploys(
           reconciliationAttempts: deploy.reconciliationAttempts + 1,
           updatedAt: checkedAt,
         });
+        logEvent("membership_deploy_reconciled", {
+          deployId: deploy.id,
+          result: "REJECTED",
+          rejection: submission.rejection ?? "TRANSACTION_REJECTED",
+        });
       } else {
         await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
           lastCheckedAt: checkedAt,
           reconciliationAttempts: deploy.reconciliationAttempts + 1,
           updatedAt: checkedAt,
+        });
+        logEvent("membership_deploy_reconciled", {
+          deployId: deploy.id,
+          result: "PENDING",
+          reconciliationAttempts: deploy.reconciliationAttempts + 1,
         });
       }
     } catch (error) {
@@ -285,6 +300,11 @@ export async function reconcilePendingMembershipMints(
           "PENDING",
           membership,
         );
+        logEvent("membership_mint_reconciled", {
+          mintId: attempt.id,
+          result: "CONFIRMED",
+          transactionId: attempt.signedTransactionId,
+        });
       } else if (submission.isAccepted === false) {
         await store.compareAndSetMembershipMintAttempt(attempt.id, "PENDING", {
           state: "REJECTED",
@@ -293,11 +313,21 @@ export async function reconcilePendingMembershipMints(
           reconciliationAttempts: attempt.reconciliationAttempts + 1,
           updatedAt: checkedAt,
         });
+        logEvent("membership_mint_reconciled", {
+          mintId: attempt.id,
+          result: "REJECTED",
+          rejection: submission.rejection ?? "TRANSACTION_REJECTED",
+        });
       } else {
         await store.compareAndSetMembershipMintAttempt(attempt.id, "PENDING", {
           lastCheckedAt: checkedAt,
           reconciliationAttempts: attempt.reconciliationAttempts + 1,
           updatedAt: checkedAt,
+        });
+        logEvent("membership_mint_reconciled", {
+          mintId: attempt.id,
+          result: "PENDING",
+          reconciliationAttempts: attempt.reconciliationAttempts + 1,
         });
       }
     } catch (error) {
@@ -347,6 +377,11 @@ export async function reconcilePendingMembershipTransfers(
           transactionId: attempt.signedTransactionId,
           confirmedAt: checkedAt,
         });
+        logEvent("membership_transfer_reconciled", {
+          transferId: attempt.id,
+          result: "CONFIRMED",
+          transactionId: attempt.signedTransactionId,
+        });
       } else if (submission.isAccepted === false) {
         await store.compareAndSetMembershipTransferAttempt(
           attempt.id,
@@ -359,6 +394,11 @@ export async function reconcilePendingMembershipTransfers(
             updatedAt: checkedAt,
           },
         );
+        logEvent("membership_transfer_reconciled", {
+          transferId: attempt.id,
+          result: "REJECTED",
+          rejection: submission.rejection ?? "TRANSACTION_REJECTED",
+        });
       } else {
         await store.compareAndSetMembershipTransferAttempt(
           attempt.id,
@@ -369,6 +409,11 @@ export async function reconcilePendingMembershipTransfers(
             updatedAt: checkedAt,
           },
         );
+        logEvent("membership_transfer_reconciled", {
+          transferId: attempt.id,
+          result: "PENDING",
+          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+        });
       }
     } catch (error) {
       logEvent("membership_transfer_reconciliation_failed", {
@@ -401,7 +446,9 @@ export async function expireExpiredMemberships(
   now = Date.now(),
 ): Promise<number> {
   try {
-    return await store.expireMemberships(now);
+    const expired = await store.expireMemberships(now);
+    if (expired > 0) logEvent("membership_expired", { count: expired });
+    return expired;
   } catch (error) {
     logEvent("membership_expiry_failed", safeError(error));
     return 0;
