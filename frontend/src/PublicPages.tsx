@@ -295,7 +295,7 @@ function MembershipPanel({
   }
   const busyLabel =
     phase === "preparing"
-      ? "Preparing payment..."
+      ? "Getting things ready..."
       : phase === "signing"
         ? COPY.membershipSigning
         : phase === "confirming"
@@ -308,11 +308,26 @@ function MembershipPanel({
     : lapsed
       ? `${COPY.membershipExpired} ${COPY.membershipExpiredOn.replace("{date}", formatDate(lapsed.validUntil))}`
       : null;
+  const note = live
+    ? COPY.membershipNoteMember
+    : lapsed
+      ? COPY.membershipNoteLapsed
+      : COPY.membershipNoteOpen;
   return (
-    <aside className="membership-panel">
-      <p className="eyebrow">MEMBERSHIP</p>
+    <aside
+      className={`membership-panel ${live ? "is-member" : lapsed ? "is-lapsed" : "is-open"}`}
+    >
+      <div className="membership-head">
+        <p className="eyebrow">Join the circle</p>
+        {live && <span className="member-pill">Member</span>}
+      </div>
       <p className="offer-description">{offer.description}</p>
-      {statusBanner ? <p className="feedback success">{statusBanner}</p> : null}
+      {note && <p className="membership-note">{note}</p>}
+      {statusBanner ? (
+        <p className="feedback success inline" role="status">
+          {statusBanner}
+        </p>
+      ) : null}
       {message && (
         <p className="feedback" role="status">
           {message}
@@ -341,7 +356,7 @@ function MembershipPanel({
         }
       >
         {busyLabel ??
-          (live ? (
+          (live || lapsed ? (
             <>
               {COPY.renewMembershipFor.replace("{price}", price)}{" "}
               <Icon name="arrow-right" />
@@ -579,7 +594,7 @@ function TransferPanel({
     phase === "pending";
   const actionLabel =
     phase === "preparing"
-      ? "Preparing transfer..."
+      ? "Getting things ready..."
       : phase === "signing"
         ? COPY.transferSigning
         : phase === "confirming"

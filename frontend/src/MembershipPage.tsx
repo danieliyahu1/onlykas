@@ -246,18 +246,21 @@ export function MembershipPage({ address, signIn, signingIn }: Props) {
       </form>
 
       {offers.length > 0 && (
-        <ul className="offer-list">
+        <section className="offer-list" aria-label="Your live membership">
           {offers.map((offer) => (
-            <li key={offer.id}>
-              <span className="offer-price">
-                <KaspaMark />
-                {Number(offer.priceSompi) / 100_000_000} KAS
-              </span>
-              <span className="offer-description">{offer.description}</span>
-              <code className="offer-covenant">{offer.covenantId}</code>
-            </li>
+            <article className="offer-card" key={offer.id}>
+              <span className="offer-card-dot" aria-hidden="true" />
+              <div>
+                <p className="offer-card-title">{offer.description}</p>
+                <p className="offer-card-meta">
+                  <KaspaMark />
+                  {Number(offer.priceSompi) / 100_000_000} KAS · one day of
+                  access
+                </p>
+              </div>
+            </article>
           ))}
-        </ul>
+        </section>
       )}
     </section>
   );
