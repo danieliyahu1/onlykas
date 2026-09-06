@@ -609,10 +609,13 @@ describe("membership offer deployment API", () => {
     const creatorAgent = request.agent(app);
     await authenticate(creatorAgent, creator);
 
+    const now = Date.now();
     seedDeploy(store, {
       id: "deploy-pending",
       state: "PENDING",
       signedTransactionId: "b".repeat(64),
+      createdAt: now,
+      updatedAt: now,
     });
 
     const same = await creatorAgent
@@ -636,6 +639,40 @@ describe("membership offer deployment API", () => {
       .expect(409);
     expect(changed.body.id).toBe("deploy-pending");
     expect(changed.body.state).toBe("PENDING");
+  });
+
+  it("supersedes a stale pending deploy whose transaction was dropped", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: new TestStorage(),
+      publicOrigin: origin,
+      walletVerifier: { verify: async () => true },
+      covenantGateway: covenantGateway(),
+    });
+    const creatorAgent = request.agent(app);
+    await authenticate(creatorAgent, creator);
+
+    seedDeploy(store, {
+      id: "deploy-stale",
+      state: "PENDING",
+      signedTransactionId: "b".repeat(64),
+      createdAt: 1,
+      updatedAt: 1,
+    });
+
+    const fresh = await creatorAgent
+      .post("/api/membership/offers/propose")
+      .send({
+        price: "1",
+        description: "Backstage",
+        payoutPk: "a".repeat(64),
+      })
+      .expect(201);
+    expect(fresh.body.state).toBe("PREPARED");
+    const archived = await store.getMembershipOfferDeploy("deploy-stale");
+    expect(archived?.state).toBe("REJECTED");
+    expect(archived?.rejection).toBe("STALE_PENDING");
   });
 
   it("warns when the membership covenant is already deployed on-chain", async () => {
@@ -1579,6 +1616,22 @@ describe("membership covenant format through the real gateway", () => {
         ...input,
         signatureScript: "aa01",
       })),
+      outputs: original.outputs.map(
+        (output: {
+          value: string;
+          scriptPublicKey: string;
+          covenant: { authorizingInput: number; covenantId: string } | null;
+        }) => ({
+          value: output.value,
+          scriptPublicKey: output.scriptPublicKey,
+          covenant: output.covenant
+            ? {
+                authorizingInput: output.covenant.authorizingInput,
+                covenantId: output.covenant.covenantId,
+              }
+            : null,
+        }),
+      ),
     };
     const finalized = await creatorAgent
       .post(`/api/membership/deploys/${proposed.body.id}/finalize`)

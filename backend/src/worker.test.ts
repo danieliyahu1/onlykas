@@ -299,6 +299,74 @@ describe("media jobs", () => {
       (await store.getMembershipOfferDeploy("rejected"))?.lastCheckedAt,
     ).toBe(20);
   });
+
+  it("rejects a stale pending deploy whose transaction vanished and keeps a fresh one pending", async () => {
+    const store = new MemoryStore();
+    for (const deploy of [
+      {
+        id: "stale",
+        creator: "creator-a",
+        updatedAt: 1,
+      },
+      {
+        id: "fresh",
+        creator: "creator-b",
+        updatedAt: 10,
+      },
+    ]) {
+      await store.createMembershipOfferDeploy({
+        id: deploy.id,
+        creator: deploy.creator,
+        priceSompi: "100",
+        description: "A day of access",
+        covenantId: "covenant-1",
+        payoutPk: "payout-pk",
+        preparedTransaction: "prepared",
+        fingerprint: "fingerprint",
+        signedTransactionId: "c".repeat(64),
+        state: "PENDING",
+        rejection: null,
+        submittedAt: 10,
+        lastCheckedAt: null,
+        reconciliationAttempts: 0,
+        createdAt: 1,
+        updatedAt: deploy.updatedAt,
+      });
+    }
+    const gateway = {
+      prepareDeploy: async () => {
+        throw new Error("must not prepare");
+      },
+      submitDeploy: async () => {
+        throw new Error("must not submit");
+      },
+      mint: async () => {
+        throw new Error("must not mint");
+      },
+      transfer: async () => {
+        throw new Error("must not transfer");
+      },
+      submit: async () => {
+        throw new Error("must not submit");
+      },
+      submitMint: async () => {
+        throw new Error("must not submit");
+      },
+      status: async () => {
+        throw new Error("Kaspa request failed: 404 Transaction not found");
+      },
+    };
+
+    expect(await reconcilePendingMembershipDeploys(store, gateway, 20, 15)).toBe(
+      2,
+    );
+    const stale = await store.getMembershipOfferDeploy("stale");
+    expect(stale?.state).toBe("REJECTED");
+    expect(stale?.rejection).toBe("STALE_PENDING");
+    const fresh = await store.getMembershipOfferDeploy("fresh");
+    expect(fresh?.state).toBe("PENDING");
+    expect(fresh?.reconciliationAttempts).toBe(1);
+  });
 });
 
 describe("membership mint reconciliation", () => {

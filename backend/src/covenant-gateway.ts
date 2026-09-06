@@ -10,6 +10,7 @@ import type {
   PreparedMembershipTransfer,
 } from "./domain.js";
 import {
+  MEMBERSHIP_CELL_SOMPI,
   buildMembershipCovenantTemplate,
   computeCreatorRoyalty,
   fingerprintTemplate,
@@ -126,7 +127,11 @@ export class KaspaCovenantGateway implements CovenantGateway {
     offer: MembershipOffer,
     buyer: string,
   ): Promise<PreparedMembershipTransfer> {
-    const amount = BigInt(offer.priceSompi);
+    const price = BigInt(offer.priceSompi);
+    const cellValue =
+      price > BigInt(MEMBERSHIP_CELL_SOMPI)
+        ? price
+        : BigInt(MEMBERSHIP_CELL_SOMPI);
     const createdAt = Date.now();
     const validUntil = createdAt + 24 * 60 * 60 * 1_000;
     const [utxos, feeEstimate] = await Promise.all([
@@ -147,10 +152,10 @@ export class KaspaCovenantGateway implements CovenantGateway {
       selected.push(utxo);
       total += BigInt(utxo.utxoEntry.amount);
       const fee = estimatedFee(selected.length, rate);
-      if (total >= amount + fee) break;
+      if (total >= cellValue + fee) break;
     }
     const fee = estimatedFee(selected.length, rate);
-    if (total < amount + fee) throw new Error("INSUFFICIENT_FUNDS");
+    if (total < cellValue + fee) throw new Error("INSUFFICIENT_FUNDS");
     const covenantPayload = {
       type: "MINT",
       owner: buyer,
@@ -165,7 +170,7 @@ export class KaspaCovenantGateway implements CovenantGateway {
       covenant: Record<string, unknown> | null;
     }[] = [
       {
-        value: "1",
+        value: cellValue.toString(),
         scriptPublicKey: scriptFor(offer.creator),
         covenant: {
           type: "KCC-0020",
@@ -184,7 +189,7 @@ export class KaspaCovenantGateway implements CovenantGateway {
       )
     )
       throw new Error("UTXO_OWNER_MISMATCH");
-    const change = total - amount - fee;
+    const change = total - cellValue - fee;
     if (change > 0n)
       outputs.push({
         value: change.toString(),
@@ -629,7 +634,6 @@ function sameTransaction(
 ): boolean {
   const keys = [
     "version",
-    "outputs",
     "subnetworkId",
     "lockTime",
     "gas",
@@ -659,9 +663,25 @@ function sameTransaction(
         },
       };
     });
+  const normalizeOutputs = (value: unknown) =>
+    (value as Record<string, unknown>[]).map((output) => {
+      const covenant = output.covenant as Record<string, unknown> | null;
+      return {
+        value: String(output.value ?? output.amount ?? "0"),
+        scriptPublicKey: String(output.scriptPublicKey),
+        covenant: covenant
+          ? {
+              authorizingInput: covenant.authorizingInput,
+              covenantId: covenant.covenantId,
+            }
+          : null,
+      };
+    });
   return (
     JSON.stringify(normalizeInputs(original.inputs)) ===
-    JSON.stringify(normalizeInputs(signed.inputs))
+      JSON.stringify(normalizeInputs(signed.inputs)) &&
+    JSON.stringify(normalizeOutputs(original.outputs)) ===
+      JSON.stringify(normalizeOutputs(signed.outputs))
   );
 }
 

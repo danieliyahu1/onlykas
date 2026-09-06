@@ -10,6 +10,7 @@ import type {
 } from "./domain.js";
 import { MediaValidationError, verifyMediaFile } from "./media.js";
 import { buildMintedMembership } from "./membership.js";
+import { MEMBERSHIP_DEPLOY_STALE_MS } from "./covenant.js";
 import { logEvent, safeError, type EventLogger } from "./observability.js";
 
 export async function processNextUpload(
@@ -189,6 +190,7 @@ export async function reconcilePendingMembershipDeploys(
   store: Store,
   gateway: CovenantGateway,
   now = Date.now(),
+  staleAfterMs = MEMBERSHIP_DEPLOY_STALE_MS,
 ): Promise<number> {
   let deploys;
   try {
@@ -237,6 +239,20 @@ export async function reconcilePendingMembershipDeploys(
           result: "REJECTED",
           rejection: submission.rejection ?? "TRANSACTION_REJECTED",
         });
+      } else if (checkedAt - deploy.updatedAt >= staleAfterMs) {
+        await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
+          state: "REJECTED",
+          rejection: "STALE_PENDING",
+          lastCheckedAt: checkedAt,
+          reconciliationAttempts: deploy.reconciliationAttempts + 1,
+          updatedAt: checkedAt,
+        });
+        logEvent("membership_deploy_reconciled", {
+          deployId: deploy.id,
+          result: "REJECTED",
+          rejection: "STALE_PENDING",
+          reconciliationAttempts: deploy.reconciliationAttempts + 1,
+        });
       } else {
         await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
           lastCheckedAt: checkedAt,
@@ -255,11 +271,27 @@ export async function reconcilePendingMembershipDeploys(
         ...safeError(error),
       });
       try {
-        await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
-          lastCheckedAt: now,
-          reconciliationAttempts: deploy.reconciliationAttempts + 1,
-          updatedAt: now,
-        });
+        if (now - deploy.updatedAt >= staleAfterMs) {
+          await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
+            state: "REJECTED",
+            rejection: "STALE_PENDING",
+            lastCheckedAt: now,
+            reconciliationAttempts: deploy.reconciliationAttempts + 1,
+            updatedAt: now,
+          });
+          logEvent("membership_deploy_reconciled", {
+            deployId: deploy.id,
+            result: "REJECTED",
+            rejection: "STALE_PENDING",
+            reconciliationAttempts: deploy.reconciliationAttempts + 1,
+          });
+        } else {
+          await store.compareAndSetMembershipOfferDeploy(deploy.id, "PENDING", {
+            lastCheckedAt: now,
+            reconciliationAttempts: deploy.reconciliationAttempts + 1,
+            updatedAt: now,
+          });
+        }
       } catch (updateError) {
         logEvent("membership_deploy_reconciliation_update_failed", {
           deployId: deploy.id,

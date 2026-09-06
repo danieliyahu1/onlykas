@@ -4,6 +4,8 @@ import type { MembershipCovenant, MembershipOffer } from "./domain.js";
 const MEMBERSHIP_ROYALTY_BPS = 1000;
 export const MEMBERSHIP_DURATION_MS = 24 * 60 * 60 * 1_000;
 export const MEMBERSHIP_COVENANT_PREFIX = "covenant-";
+export const MEMBERSHIP_CELL_SOMPI = 10_000_000;
+export const MEMBERSHIP_DEPLOY_STALE_MS = 5 * 60 * 1_000;
 
 export function buildMembershipCovenantTemplate(
   creatorRoyaltyBps = MEMBERSHIP_ROYALTY_BPS,
@@ -44,7 +46,7 @@ export function createMembershipCovenant(
     id: `${MEMBERSHIP_COVENANT_PREFIX}${fingerprintTemplate(templateJson).slice(0, 16)}`,
     templateJson,
     templateFingerprint: fingerprintTemplate(templateJson),
-    amount: "1",
+    amount: String(MEMBERSHIP_CELL_SOMPI),
     durationMs,
     creatorRoyaltyBps,
     createdAt: Date.now(),

@@ -55,7 +55,10 @@ import {
   type EventLogger,
 } from "./observability.js";
 import { publishPost } from "./publish-post.js";
-import { createMembershipCovenant } from "./covenant.js";
+import {
+  MEMBERSHIP_DEPLOY_STALE_MS,
+  createMembershipCovenant,
+} from "./covenant.js";
 import { buildMintedMembership } from "./membership.js";
 import { canonicalMembershipCovenantId } from "./verifier.js";
 
@@ -901,16 +904,33 @@ export function createApp(dependencies: AppDependencies) {
       const existing =
         await dependencies.store.unresolvedMembershipOfferDeploy(creator);
       if (existing?.state === "PENDING") {
-        logger("membership_offer_deploy_rejected", {
-          requestId: request.requestId,
-          creator,
-          code: "ALREADY_PENDING",
-          deployId: existing.id,
-        });
-        return response.status(409).json({
-          ...membershipDeployResponse(existing, null),
-          message: COPY.offerDeployPending,
-        });
+        if (now() - existing.updatedAt >= MEMBERSHIP_DEPLOY_STALE_MS) {
+          logger("membership_deploy_stale_pending_rejected", {
+            requestId: request.requestId,
+            creator,
+            deployId: existing.id,
+          });
+          await dependencies.store.compareAndSetMembershipOfferDeploy(
+            existing.id,
+            "PENDING",
+            {
+              state: "REJECTED",
+              rejection: "STALE_PENDING",
+              updatedAt: now(),
+            },
+          );
+        } else {
+          logger("membership_offer_deploy_rejected", {
+            requestId: request.requestId,
+            creator,
+            code: "ALREADY_PENDING",
+            deployId: existing.id,
+          });
+          return response.status(409).json({
+            ...membershipDeployResponse(existing, null),
+            message: COPY.offerDeployPending,
+          });
+        }
       }
       const superseded =
         existing !== null &&
