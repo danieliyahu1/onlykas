@@ -225,7 +225,7 @@ describe("media jobs", () => {
       submit: async () => {
         throw new Error("must not submit");
       },
-      status: async (transactionId: string) => {
+      status: async () => {
         statusCalls += 1;
         throw new Error("Kaspa request failed: 404 Transaction not found");
       },
