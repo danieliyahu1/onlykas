@@ -55,7 +55,7 @@ export interface Post {
 }
 
 export type PaymentAttemptState =
-  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
+  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED" | "TIMED_OUT";
 export interface PaymentAttempt {
   id: string;
   postId: string;

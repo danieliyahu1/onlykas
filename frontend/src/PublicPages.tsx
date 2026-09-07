@@ -17,7 +17,13 @@ import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
 type PaymentState =
-  "preparing" | "signing" | "confirming" | "pending" | "rejected" | "confirmed";
+  | "preparing"
+  | "signing"
+  | "confirming"
+  | "pending"
+  | "rejected"
+  | "timedOut"
+  | "confirmed";
 type Payment = {
   id: string;
   transaction?: string;
@@ -701,6 +707,10 @@ export function PostPage({
           window.localStorage.removeItem(key);
           setPaymentState("confirmed");
           setPost((value) => (value ? { ...value, canView: true } : value));
+        } else if (recovered.state === "TIMED_OUT") {
+          window.localStorage.removeItem(key);
+          setPaymentState("timedOut");
+          setMessage(COPY.paymentTimedOut);
         } else {
           window.localStorage.removeItem(key);
         }
@@ -729,6 +739,11 @@ export function PostPage({
           setPayment(current);
           setPaymentState("rejected");
           setMessage(COPY.transactionRejected);
+        } else if (current.state === "TIMED_OUT") {
+          window.localStorage.removeItem(key);
+          setPayment(current);
+          setPaymentState("timedOut");
+          setMessage(COPY.paymentTimedOut);
         }
       } catch {
         setMessage(COPY.accessVerificationFailed);
@@ -798,6 +813,12 @@ export function PostPage({
         );
         setPaymentState("rejected");
         setMessage(COPY.transactionRejected);
+      } else if (state === "TIMED_OUT") {
+        window.localStorage.removeItem(
+          paymentStorageKey(currentPost.id, buyer),
+        );
+        setPaymentState("timedOut");
+        setMessage(COPY.paymentTimedOut);
       } else {
         window.localStorage.removeItem(
           paymentStorageKey(currentPost.id, buyer),
@@ -871,6 +892,8 @@ export function PostPage({
           ) : paymentState === "pending" ? (
             "Payment confirming..."
           ) : paymentState === "rejected" ? (
+            "Try again"
+          ) : paymentState === "timedOut" ? (
             "Try again"
           ) : (
             <>

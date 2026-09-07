@@ -702,55 +702,15 @@ export function createApp(dependencies: AppDependencies) {
       const body = z
         .object({ signedTransaction: z.string().min(1) })
         .parse(request.body);
-      let submission;
-      try {
-        submission = await dependencies.paymentGateway.submit(
-          {
-            transaction: attempt.preparedTransaction,
-            fingerprint: attempt.fingerprint,
-            amountSompi: attempt.amountSompi,
-            creator: attempt.creator,
-          },
-          body.signedTransaction,
-        );
-      } catch (error) {
-        const validationFailure =
-          error instanceof Error &&
-          ["INVALID_INPUT", "INPUT_CHANGED", "UTXO_OWNER_MISMATCH"].includes(
-            error.message,
-          );
-        const failedState = validationFailure ? "REJECTED" : "PENDING";
-        const failedMessage = validationFailure
-          ? error instanceof Error
-            ? error.message
-            : "TRANSACTION_REJECTED"
-          : null;
-        const pending: PaymentAttempt = {
-          ...attempt,
-          state: failedState,
-          rejection: failedMessage,
-          signedTransactionId: null,
-          submittedAt: validationFailure ? null : now(),
-          updatedAt: now(),
-        };
-        await dependencies.store.compareAndSetPaymentAttempt(
-          attempt.id,
-          "PREPARED",
-          {
-            state: pending.state,
-            rejection: pending.rejection,
-            signedTransactionId: pending.signedTransactionId,
-            submittedAt: pending.submittedAt,
-            updatedAt: pending.updatedAt,
-          },
-        );
-        return response.status(validationFailure ? 422 : 202).json({
-          ...paymentResponse(pending),
-          message: validationFailure
-            ? COPY.transactionRejected
-            : COPY.purchasePending,
-        });
-      }
+      const submission = await dependencies.paymentGateway.submit(
+        {
+          transaction: attempt.preparedTransaction,
+          fingerprint: attempt.fingerprint,
+          amountSompi: attempt.amountSompi,
+          creator: attempt.creator,
+        },
+        body.signedTransaction,
+      );
       if (submission.isAccepted === true && submission.transactionId) {
         const updated = await dependencies.store.confirmPaymentAttempt(
           attempt.id,

@@ -11,4 +11,5 @@ data:
   R2_BUCKET: onlykas-production
   KASPA_NODE_URL: https://api-tn10.kaspa.org
   MEDIA_JOB_INTERVAL_MS: "5000"
+  PAYMENT_RECONCILIATION_INTERVAL_MS: "3000"
   MEDIA_JOB_STALE_MS: "300000"

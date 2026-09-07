@@ -44,6 +44,7 @@ export const COPY = {
   transactionRejected:
     "Transaction rejected. No access was granted. Try again.",
   purchasePending: "Purchase pending. Do not pay again.",
+  paymentTimedOut: "We couldn't confirm the payment. Check the transaction and try again.",
   accessVerificationFailed: "OnlyKas can't verify access right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
   invalidCreatorAddress: "Enter a complete Kaspa testnet address.",

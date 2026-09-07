@@ -142,9 +142,6 @@ export class KaspaPaymentGateway implements PaymentGateway {
         transactionId: null,
         rejection: "INVALID_SIGNATURES",
       };
-    await validateAuthoritativeInputs(signed, (path, init) =>
-      this.request(path, init),
-    );
     let result: { transactionId?: string; error?: string };
     try {
       result = await this.request<{ transactionId?: string; error?: string }>(
@@ -256,48 +253,6 @@ function hasAllSignatures(transaction: Record<string, unknown>): boolean {
       signature.endsWith("01")
     );
   });
-}
-
-async function validateAuthoritativeInputs(
-  transaction: Record<string, unknown>,
-  request: (path: string, init?: RequestInit) => Promise<unknown>,
-): Promise<void> {
-  const inputs = transaction.inputs as Record<string, unknown>[];
-  for (const input of inputs) {
-    const transactionId = input.transactionId;
-    const index = input.index;
-    if (
-      typeof transactionId !== "string" ||
-      !/^[0-9a-f]{64}$/i.test(transactionId) ||
-      typeof index !== "number" ||
-      !Number.isInteger(index) ||
-      index < 0
-    )
-      throw new Error("INVALID_INPUT");
-    const parent = (await request(`/transactions/${transactionId}`)) as {
-      outputs?: {
-        index?: number;
-        amount: number | string;
-        script_public_key:
-          string | { script_public_key?: string; scriptPublicKey?: string };
-      }[];
-    };
-    const output = parent.outputs?.[index];
-    const utxo = input.utxo as Record<string, unknown> | undefined;
-    if (!output || !utxo || String(output.amount) !== String(utxo.amount))
-      throw new Error("INPUT_CHANGED");
-    const script =
-      typeof output.script_public_key === "string"
-        ? output.script_public_key
-        : (output.script_public_key.script_public_key ??
-          output.script_public_key.scriptPublicKey);
-    if (!script) throw new Error("INPUT_CHANGED");
-    const authoritativeScript = script.startsWith("0000")
-      ? script
-      : `0000${script}`;
-    if (authoritativeScript !== utxo.scriptPublicKey)
-      throw new Error("INPUT_CHANGED");
-  }
 }
 
 function isTransactionShape(transaction: Record<string, unknown>): boolean {

@@ -26,6 +26,7 @@ import {
   processNextUpload,
   reconcilePendingMembershipMints,
   reconcilePendingMembershipTransfers,
+  reconcilePendingPayments,
 } from "./worker.js";
 
 const origin = "https://onlykas.test";
@@ -156,6 +157,108 @@ describe("creator publication API", () => {
         error: "ALREADY_UNLOCKED",
         message: "This post is already unlocked.",
       });
+  });
+
+  it("leaves a payment prepared when broadcast transport fails", async () => {
+    const store = new MemoryStore();
+    const storage = new TestStorage();
+    const post: Post = {
+      id: "retry-post",
+      creator,
+      title: "Paid release",
+      caption: "Private media",
+      priceSompi: "100",
+      mediaType: "image/png",
+      mediaSize: 4,
+      mediaDigest: "digest",
+      mediaKey: "final/digest",
+      publishedAt: 1_000,
+    };
+    const upload: Upload = {
+      id: "retry-upload",
+      creator,
+      stagingKey: "staging/retry-upload",
+      multipartId: "multipart",
+      state: "VERIFIED",
+      hintedType: "image/png",
+      hintedSize: 4,
+      expiresAt: 2_000,
+      updatedAt: 1_000,
+      error: null,
+      digest: "digest",
+      mediaType: "image/png",
+      mediaSize: 4,
+      finalKey: "final/digest",
+      parts: [],
+    };
+    await store.createUpload(upload);
+    await store.commitPublication(upload.id, creator, post);
+    storage.objects.set(post.mediaKey, {
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      contentType: post.mediaType,
+    });
+    let submitCalls = 0;
+    let statusCalls = 0;
+    const gateway: PaymentGateway = {
+      prepare: async () => ({
+        transaction: JSON.stringify({
+          outputs: [{ scriptPublicKey: "000020" }],
+        }),
+        fingerprint: "fingerprint",
+        amountSompi: post.priceSompi,
+        creator: post.creator,
+      }),
+      submit: async () => {
+        submitCalls += 1;
+        if (submitCalls === 1)
+          throw new Error(
+            'Kaspa request failed: 404 {"detail":"Transaction not found"}',
+          );
+        return {
+          isAccepted: true,
+          transactionId: "a".repeat(64),
+          rejection: null,
+        };
+      },
+      status: async (transactionId) => {
+        statusCalls += 1;
+        return { isAccepted: true, transactionId, rejection: null };
+      },
+    };
+    const app = createApp({
+      store,
+      storage,
+      publicOrigin: origin,
+      paymentGateway: gateway,
+      walletVerifier: { verify: async () => true },
+    });
+    const buyerAgent = request.agent(app);
+    await authenticate(buyerAgent, outsider);
+
+    const prepared = await buyerAgent
+      .post(`/api/posts/${post.id}/payments/prepare`)
+      .expect(201);
+    const failed = await buyerAgent
+      .post(`/api/payments/${prepared.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(503);
+
+    expect(await reconcilePendingPayments(store, gateway, 2_000)).toBe(0);
+    expect(statusCalls).toBe(0);
+    const attempt = await store.getPaymentAttempt(prepared.body.id as string);
+    expect(failed.body).toHaveProperty("error");
+    expect(attempt?.state).toBe("PREPARED");
+    expect(await store.hasPurchase(post.id, outsider)).toBe(false);
+
+    const confirmed = await buyerAgent
+      .post(`/api/payments/${prepared.body.id}/finalize`)
+      .send({ signedTransaction: "signed-by-wallet" })
+      .expect(200);
+    expect(confirmed.body).toMatchObject({ state: "CONFIRMED" });
+    expect(await store.hasPurchase(post.id, outsider)).toBe(true);
+
+    const postView = await buyerAgent.get(`/api/posts/${post.id}`).expect(200);
+    expect(postView.body.canView).toBe(true);
   });
 
   it("authenticates, verifies private media, publishes immutably, and serves only its creator", async () => {

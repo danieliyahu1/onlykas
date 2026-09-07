@@ -13,6 +13,8 @@ import { buildMintedMembership } from "./membership.js";
 import { MEMBERSHIP_DEPLOY_STALE_MS } from "./covenant.js";
 import { logEvent, safeError, type EventLogger } from "./observability.js";
 
+export const PAYMENT_RECONCILIATION_MAX_ATTEMPTS = 3;
+
 export async function processNextUpload(
   store: Store,
   storage: ObjectStorage,
@@ -142,6 +144,7 @@ export async function reconcilePendingPayments(
     try {
       const submission = await gateway.status(attempt.signedTransactionId);
       const checkedAt = now;
+      const reconciliationAttempts = attempt.reconciliationAttempts + 1;
       if (submission.isAccepted === true) {
         await store.confirmPaymentAttempt(attempt.id, "PENDING", {
           postId: attempt.postId,
@@ -154,13 +157,21 @@ export async function reconcilePendingPayments(
           state: "REJECTED",
           rejection: submission.rejection ?? "TRANSACTION_REJECTED",
           lastCheckedAt: checkedAt,
-          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          reconciliationAttempts,
           updatedAt: checkedAt,
         });
       } else {
         await store.compareAndSetPaymentAttempt(attempt.id, "PENDING", {
+          state:
+            reconciliationAttempts >= PAYMENT_RECONCILIATION_MAX_ATTEMPTS
+              ? "TIMED_OUT"
+              : "PENDING",
+          rejection:
+            reconciliationAttempts >= PAYMENT_RECONCILIATION_MAX_ATTEMPTS
+              ? "CONFIRMATION_TIMEOUT"
+              : null,
           lastCheckedAt: checkedAt,
-          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          reconciliationAttempts,
           updatedAt: checkedAt,
         });
       }
@@ -170,9 +181,18 @@ export async function reconcilePendingPayments(
         ...safeError(error),
       });
       try {
+        const reconciliationAttempts = attempt.reconciliationAttempts + 1;
         await store.compareAndSetPaymentAttempt(attempt.id, "PENDING", {
+          state:
+            reconciliationAttempts >= PAYMENT_RECONCILIATION_MAX_ATTEMPTS
+              ? "TIMED_OUT"
+              : "PENDING",
+          rejection:
+            reconciliationAttempts >= PAYMENT_RECONCILIATION_MAX_ATTEMPTS
+              ? "CONFIRMATION_TIMEOUT"
+              : null,
           lastCheckedAt: now,
-          reconciliationAttempts: attempt.reconciliationAttempts + 1,
+          reconciliationAttempts,
           updatedAt: now,
         });
       } catch (updateError) {

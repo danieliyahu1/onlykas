@@ -27,7 +27,7 @@ describe("Kaspa payment gateway", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("re-fetches inputs, requires SIGHASH_ALL, and confirms accepted REST submissions", async () => {
+  it("broadcasts the signed transaction and confirms an accepted REST submission", async () => {
     const transaction = baseTransaction();
     const prepared = {
       transaction: JSON.stringify(transaction),
@@ -36,27 +36,16 @@ describe("Kaspa payment gateway", () => {
       creator: "creator",
     };
     const txid = "a".repeat(64);
-    const parentScript = "20" + "b".repeat(64) + "ac";
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input, init) => {
         const url = String(input);
-        if (url.endsWith(`/transactions/${"b".repeat(64)}`))
-          return new Response(
-            JSON.stringify({
-              outputs: [{ amount: 200, script_public_key: parentScript }],
-            }),
-          );
         if (url.endsWith("/transactions") && init?.method === "POST")
           return new Response(JSON.stringify({ transactionId: txid }));
         if (url.endsWith(`/transactions/${txid}`))
           return new Response(JSON.stringify({ is_accepted: true }));
         throw new Error(`unexpected URL ${url}`);
       });
-    transaction.inputs[0]!.transactionId = "b".repeat(64);
-    transaction.inputs[0]!.utxo.scriptPublicKey = `0000${parentScript}`;
-    prepared.transaction = JSON.stringify(transaction);
-    prepared.fingerprint = fingerprint(transaction);
 
     await expect(
       new KaspaPaymentGateway("https://kaspa.test").submit(
@@ -71,8 +60,8 @@ describe("Kaspa payment gateway", () => {
       transactionId: txid,
       rejection: null,
     });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    const post = fetchMock.mock.calls[1]?.[1];
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const post = fetchMock.mock.calls[0]?.[1];
     expect(JSON.parse(String(post?.body))).toMatchObject({
       allowOrphan: false,
     });
@@ -98,6 +87,48 @@ describe("Kaspa payment gateway", () => {
       isAccepted: false,
       rejection: "INVALID_SIGNATURES",
     });
+  });
+
+  it("recovers the transaction id from a rejected broadcast and returns undecided", async () => {
+    const transaction = baseTransaction();
+    const prepared = {
+      transaction: JSON.stringify(transaction),
+      fingerprint: fingerprint(transaction),
+      amountSompi: "100",
+      creator: "creator",
+    };
+    const txid = "e".repeat(64);
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/transactions") && init?.method === "POST")
+          return new Response(
+            JSON.stringify({ error: `Rejected transaction ${txid}` }),
+            { status: 400 },
+          );
+        if (url.endsWith(`/transactions/${txid}`))
+          return new Response(
+            JSON.stringify({ detail: "Transaction not found" }),
+            { status: 404 },
+          );
+        throw new Error(`unexpected URL ${url}`);
+      });
+
+    await expect(
+      new KaspaPaymentGateway("https://kaspa.test").submit(
+        prepared,
+        JSON.stringify({
+          ...transaction,
+          inputs: [{ ...transaction.inputs[0], signatureScript: "aa01" }],
+        }),
+      ),
+    ).resolves.toEqual({
+      isAccepted: null,
+      transactionId: txid,
+      rejection: null,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

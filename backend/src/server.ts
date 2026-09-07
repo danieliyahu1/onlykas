@@ -58,12 +58,6 @@ setInterval(() => {
   void cleanupExpiredUploads(store, storage).catch((error) =>
     logEvent("media_cleanup_unhandled_error", safeError(error)),
   );
-  void reconcilePendingPayments(
-    store,
-    new KaspaPaymentGateway(environment.KASPA_NODE_URL),
-  ).catch((error) =>
-    logEvent("payment_reconciliation_unhandled_error", safeError(error)),
-  );
   void reconcilePendingMembershipDeploys(
     store,
     new KaspaCovenantGateway(environment.KASPA_NODE_URL),
@@ -95,3 +89,12 @@ setInterval(() => {
     logEvent("membership_expiry_unhandled_error", safeError(error)),
   );
 }, environment.MEDIA_JOB_INTERVAL_MS).unref();
+
+setInterval(() => {
+  void reconcilePendingPayments(
+    store,
+    new KaspaPaymentGateway(environment.KASPA_NODE_URL),
+  ).catch((error) =>
+    logEvent("payment_reconciliation_unhandled_error", safeError(error)),
+  );
+}, environment.PAYMENT_RECONCILIATION_INTERVAL_MS).unref();

@@ -157,6 +157,97 @@ describe("media jobs", () => {
     expect((await store.getPaymentAttempt("attempt"))?.state).toBe("CONFIRMED");
   });
 
+  it("skips pending payments that carry no signed transaction id", async () => {
+    const store = new MemoryStore();
+    await store.createPaymentAttempt({
+      id: "attempt-unsigned",
+      postId: "post",
+      buyer: "buyer",
+      amountSompi: "100",
+      creator: "creator",
+      preparedTransaction: "prepared",
+      fingerprint: "fingerprint",
+      signedTransactionId: null,
+      state: "PENDING",
+      rejection: null,
+      submittedAt: 10,
+      lastCheckedAt: null,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 10,
+    });
+    let statusCalls = 0;
+    const gateway = {
+      prepare: async () => {
+        throw new Error("must not prepare");
+      },
+      submit: async () => {
+        throw new Error("must not submit");
+      },
+      status: async (transactionId: string) => {
+        statusCalls += 1;
+        return { isAccepted: true, transactionId, rejection: null };
+      },
+    };
+
+    expect(await reconcilePendingPayments(store, gateway, 20)).toBe(1);
+    expect(statusCalls).toBe(0);
+    expect((await store.getPaymentAttempt("attempt-unsigned"))?.state).toBe(
+      "PENDING",
+    );
+    expect(await store.hasPurchase("post", "buyer")).toBe(false);
+  });
+
+  it("times out an unconfirmed payment after three status retries", async () => {
+    const store = new MemoryStore();
+    await store.createPaymentAttempt({
+      id: "attempt-timeout",
+      postId: "post",
+      buyer: "buyer",
+      amountSompi: "100",
+      creator: "creator",
+      preparedTransaction: "prepared",
+      fingerprint: "fingerprint",
+      signedTransactionId: "a".repeat(64),
+      state: "PENDING",
+      rejection: null,
+      submittedAt: 10,
+      lastCheckedAt: null,
+      reconciliationAttempts: 0,
+      createdAt: 1,
+      updatedAt: 10,
+    });
+    let statusCalls = 0;
+    const gateway = {
+      prepare: async () => {
+        throw new Error("must not prepare");
+      },
+      submit: async () => {
+        throw new Error("must not submit");
+      },
+      status: async (transactionId: string) => {
+        statusCalls += 1;
+        throw new Error("Kaspa request failed: 404 Transaction not found");
+      },
+    };
+
+    expect(await reconcilePendingPayments(store, gateway, 3_000)).toBe(1);
+    expect((await store.getPaymentAttempt("attempt-timeout"))?.state).toBe(
+      "PENDING",
+    );
+    expect(await reconcilePendingPayments(store, gateway, 6_000)).toBe(1);
+    expect((await store.getPaymentAttempt("attempt-timeout"))?.state).toBe(
+      "PENDING",
+    );
+    expect(await reconcilePendingPayments(store, gateway, 9_000)).toBe(1);
+    const attempt = await store.getPaymentAttempt("attempt-timeout");
+    expect(statusCalls).toBe(3);
+    expect(attempt?.state).toBe("TIMED_OUT");
+    expect(attempt?.rejection).toBe("CONFIRMATION_TIMEOUT");
+    expect(attempt?.reconciliationAttempts).toBe(3);
+    expect(await store.hasPurchase("post", "buyer")).toBe(false);
+  });
+
   it("confirms an accepted membership offer deploy and records the offer", async () => {
     const store = new MemoryStore();
     await store.createMembershipOfferDeploy({
