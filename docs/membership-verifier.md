@@ -1,130 +1,88 @@
 # On-chain membership verification
 
-OnlyKas memberships live on the Kaspa chain as KCC-0020 covenant UTXOs. This
-document describes how the covenant-id convention (OQ-4) works and how the
-verifier builds an independent, public status from chain data alone — no
-OnlyKas records are consulted.
+OnlyKas memberships are SilverScript covenant UTXOs on Kaspa testnet-10. The
+verifier determines membership from chain data alone. Database membership rows
+and descriptive transaction fields are not authorization sources.
 
-## OQ-4 covenant-id convention
+## Discovery
 
-A membership covenant is identified by the prefix `covenant-` followed by the
-first 16 hex characters of the SHA-256 of its canonical template JSON:
+Mint transactions create a 1,000-sompi P2PK output for the member. This output
+is a discovery pointer, not the membership token itself.
 
-```
-covenant-id = "covenant-" + sha256(templateJson).slice(0, 16)
-```
+For each unspent output returned by `GET /addresses/{member}/utxos`, the
+verifier loads its creation transaction and requires the pointer output to:
 
-- The canonical template is produced by `buildMembershipCovenantTemplate()`
-  in `backend/src/covenant.ts` (type `KCC-0020`, `version: 1`, `amount: 1`,
-  `creatorRoyaltyBps`, `durationMs`, and the `mint`/`transfer` field sets).
-- `canonicalMembershipCovenantId()` returns the id for the unchanged
-  template; `membershipCovenantId(templateJson)` computes it for any template.
-- A deploy covenant is recognized when its payload is
-  `DEPLOY_COVENANT` with a `template` whose fingerprint matches its
-  `templateFingerprint` field. The verifier then reports
-  `covenantId: membershipCovenantId(deploy.template)` and
-  `status: NOT_MEMBERSHIP` with `kind: "deploy"` — a deployed (non-canonical)
-  template is therefore never treated as a membership.
+- contain exactly 1,000 sompi;
+- use the scanned member address's P2PK script;
+- share a transaction with a valid membership covenant output.
 
-## Token recognition rules
+The returned `MembershipCheck.outputIndex` identifies the covenant output, not
+the discovery output.
 
-A membership token is recognized only when all of the following hold; anything
-else is `NOT_MEMBERSHIP`:
+## Covenant validation
 
-- covenant `type` is `KCC-0020`;
-- payload `type` is `MINT` or `TRANSFER`;
-- payload `owner` is a non-empty string;
-- payload `created_at` and `valid_until` are finite numeric values
-  (milliseconds, as numbers or numeric strings);
-- `valid_until - created_at === MEMBERSHIP_DURATION_MS` (24 h).
+A membership is recognized only when all of these checks pass:
 
-The owner, `offerId`, `creator`, and `membershipId` (for transfers) are read
-from the payload. The payload may be an object or a JSON string; both are
-accepted.
+- the transaction has version `1`;
+- its hex payload decodes to JSON with protocol `onlykas-membership-v1`;
+- the payload reveals `memberRedeemScript`;
+- the redeem script matches the compiled SilverScript template and decodes to
+  non-minter state;
+- hashing that redeem script produces the covenant output's P2SH script;
+- the output contains exactly 10,000,000 sompi;
+- the output has a consensus covenant ID, matching `expectedCovenantId` when
+  one is supplied;
+- the output is authorized by covenant input `0`;
+- the owner public key in covenant state derives the reported testnet-10
+  address;
+- the creator public key in state matches the creator whose offer is checked;
+- the transaction pays exactly 1 KAS to that creator and creates the member's
+  1,000-sompi discovery pointer;
+- the covenant output still appears in the UTXO set for its P2SH address.
+
+The last check prevents a spent token from remaining valid when an unrelated
+discovery output still exists.
 
 ## Status semantics
 
-Each checked UTXO yields one `MembershipCheck` with a status:
+The verifier reads `virtualDaaScore` from `GET /info/blockdag` and compares it
+with the expiry committed in covenant state.
 
-| Status           | Meaning                                                                       |
-| ---------------- | ----------------------------------------------------------------------------- |
-| `VALID`          | token recognized, `expectedOwner` matches (if given), and `valid_until > now` |
-| `EXPIRED`        | token recognized but `valid_until <= now`                                     |
-| `OWNER_MISMATCH` | token recognized and unexpired, but `owner !== expectedOwner`                 |
-| `NOT_MEMBERSHIP` | covenant is missing, not `KCC-0020`, or fails recognition                     |
+| Status | Meaning |
+| --- | --- |
+| `VALID` | The covenant is recognized, unspent, owned by the expected address when supplied, and its expiry DAA is in the future. |
+| `EXPIRED` | The covenant is recognized and unspent, but current DAA is at or beyond its expiry. |
+| `OWNER_MISMATCH` | The covenant is recognized and unspent, but its state owner differs from `expectedOwner`. |
+| `NOT_MEMBERSHIP` | Any discovery, template, script, amount, covenant ID, lifetime, or unspent check fails. |
 
-Precedence: `OWNER_MISMATCH` is reported before `EXPIRED` when both apply. An
-address scan is `valid` when at least one scanned UTXO is `VALID`.
-
-## Source of truth
-
-The verifier reads only Kaspa chain data:
-
-- address scan — `GET /addresses/{address}/utxos`;
-- covenant lookup — prefer `utxoEntry.covenant` when present, otherwise the
-  UTXO's creation transaction `GET /transactions/{transactionId}` and its
-  `outputs[outputIndex].covenant`;
-- `now` is captured per request (default `Date.now`).
+`createdAt` and `validUntil` remain ISO strings for the existing API. They are
+display estimates derived from the committed expiry, fixed 864,000-DAA
+membership duration, current wall clock, and current DAA difference;
+authorization uses DAA values only.
 
 ## HTTP API
 
 Both endpoints are public and unauthenticated.
 
-### Address scan
-
-```
+```text
 GET /api/verify/membership/address/:address[?owner=<kaspatest:...>]
-```
-
-`owner` (optional) asserts membership belongs to a specific address.
-
-```json
-{
-  "address": "kaspatest:qqqq...",
-  "verifiedAt": "2026-09-04T00:00:00.000Z",
-  "valid": true,
-  "memberships": [
-    {
-      "transactionId": "0f3c...",
-      "outputIndex": 0,
-      "covenantId": "covenant-a1b2c3d4e5f60718",
-      "kind": "token",
-      "tokenType": "MINT",
-      "owner": "kaspatest:qqqq...",
-      "createdAt": "2026-09-03T00:00:00.000Z",
-      "validUntil": "2026-09-04T00:00:00.000Z",
-      "status": "VALID"
-    }
-  ]
-}
-```
-
-### Single UTXO
-
-```
 GET /api/verify/membership/utxo/:transactionId/:outputIndex[?owner=<kaspatest:...>]
 ```
 
-Returns a single `MembershipCheck`. `transactionId` must be 64 hex
-characters and `outputIndex` a non-negative integer.
+The address endpoint returns every checked pointer candidate and sets `valid`
+when at least one result is `VALID`. The UTXO endpoint checks the specified
+covenant output directly.
 
-Errors: `400 INVALID_ADDRESS` / `400 INVALID_REQUEST` for bad parameters,
-`503 VERIFY_UNAVAILABLE` when the server has no verifier wired.
+Errors are `400 INVALID_ADDRESS`, `400 INVALID_REQUEST`, or
+`503 VERIFY_UNAVAILABLE` when no verifier is configured.
 
 ## CLI
 
+```text
+pnpm --filter @onlykas/backend verify:membership address <kaspatest:address> [--owner <address>] [--node <url>]
+pnpm --filter @onlykas/backend verify:membership utxo <transactionId> <outputIndex> [--owner <address>] [--node <url>]
 ```
-pnpm --filter backend verify:membership address <kaspatest:address> [--owner <address>] [--node <url>]
-pnpm --filter backend verify:membership utxo <transactionId> <outputIndex> [--owner <address>] [--node <url>]
-```
 
-Runs `runVerifierCli` (`backend/src/verifier-cli.ts`) against the default
-testnet node (`https://api-tn10.kaspa.org`) unless `--node` overrides it, and
-prints the same JSON shapes described above.
-
-## Server wiring
-
-`backend/src/server.ts` constructs
-`new KaspaMembershipVerifier(environment.KASPA_NODE_URL)` and injects it as
-`membershipVerifier` into `createApp`. The verifier is independent of the
-covenant gateway used for minting and transfers; it is safe for public use.
+The default node is `https://api-tn10.kaspa.org`. `backend/src/server.ts`
+constructs `KaspaMembershipVerifier` using `KASPA_NODE_URL` and injects it into
+the application.

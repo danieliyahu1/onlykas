@@ -32,7 +32,8 @@
     "playwright_*": "allow",
     "playwright-extension_*": "allow",
     "plane_*": "allow",
-    "icons8mcp_*": "allow"
+    "icons8mcp_*": "allow",
+	"turso_*": "allow"
   },
   "mcp": {
 	  "playwright": {

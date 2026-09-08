@@ -32,6 +32,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.883.0
         version: 3.1121.0
+      '@kluster/kaspa-wasm':
+        specifier: 2.0.1
+        version: 2.0.1
       '@libsql/client':
         specifier: ^0.15.15
         version: 0.15.15
@@ -737,6 +740,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@kluster/kaspa-wasm@2.0.1':
+    resolution: {integrity: sha512-ENOyZaMurTIAT8hNt/D61DT9pLEd57ZW0pAhiD3aEQR1jI0YICHLyzdtCBnpp8wrfHDeabvn48G+ALdGj/1rrQ==}
 
   '@libsql/client@0.15.15':
     resolution: {integrity: sha512-twC0hQxPNHPKfeOv3sNT6u2pturQjLcI+CnpTM0SjRpocEGgfiZ7DWKXLNnsothjyJmDqEsBQJ5ztq9Wlu470w==}
@@ -3078,6 +3084,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@kluster/kaspa-wasm@2.0.1': {}
 
   '@libsql/client@0.15.15':
     dependencies:

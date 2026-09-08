@@ -21,9 +21,9 @@ test("creator entry point becomes ready after choosing media", async ({
   await expect(
     page.getByRole("img", { name: /selected image preview/i }),
   ).toBeVisible();
-  await expect(page.getByText(/supporters view for 1/i)).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Edit details" }),
-  ).toBeVisible();
+  await expect(page.getByLabel("Captions")).toHaveValue(
+    "Shared just for supporters.",
+  );
+  await expect(page.getByLabel("Price")).toHaveValue("1");
   await expect(page.getByRole("button", { name: /^publish/i })).toBeEnabled();
 });

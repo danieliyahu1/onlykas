@@ -154,6 +154,11 @@ nav a {
 .nav-link:focus-visible {
   color: var(--paper);
 }
+.wallet-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
 .nav-icon,
 .nav-account-action {
   display: inline-grid;
@@ -736,6 +741,46 @@ button:disabled {
   object-fit: contain;
   margin: 2rem 0;
   background: #080706;
+}
+.post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+.wallet-page {
+  width: min(100%, 72rem);
+}
+.wallet-page > h1 {
+  max-width: 10ch;
+}
+.wallet-page > .wallet {
+  margin: 0 0 2rem;
+}
+.subscription-list {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+.subscription-card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.subscription-card h2,
+.subscription-card p {
+  margin: 0;
+}
+.single-post > .post-actions {
+  width: min(100%, 30rem);
+}
+.post-actions .primary,
+.post-actions .secondary {
+  flex: 1 1 12rem;
+  text-align: center;
+  text-decoration: none;
 }
 .single-post > .primary {
   width: min(100%, 22rem);

@@ -1,0 +1,50 @@
+pragma silverscript ^0.1.0;
+
+contract Membership(
+    byte[32] initialCreator,
+    byte[32] initialOwner,
+    int initialExpiresAtDaa,
+    bool initialIsMinter
+) {
+    int constant MEMBERSHIP_LIFETIME_DAA = 864000;
+    int constant MEMBERSHIP_PRICE = 100000000;
+    int constant INDEX_OUTPUT_VALUE = 1000;
+    int constant MEMBERSHIP_OUTPUT_VALUE = 10000000;
+
+    byte[32] creator = initialCreator;
+    byte[32] owner = initialOwner;
+    int expiresAtDaa = initialExpiresAtDaa;
+    bool isMinter = initialIsMinter;
+
+    #[covenant(binding = auth, from = 1, to = 2, name = mint)]
+    function mintMembership(
+        State prevState,
+        State[] newStates,
+        byte fundingInputIndex,
+        byte paymentOutputIndex,
+        byte ownerIndexOutputIndex
+    ) {
+        require(prevState.isMinter);
+
+        require(newStates[0].creator == prevState.creator);
+        require(newStates[0].owner == prevState.owner);
+        require(newStates[0].expiresAtDaa == prevState.expiresAtDaa);
+        require(newStates[0].isMinter);
+
+        require(!newStates[1].isMinter);
+        require(newStates[1].creator == prevState.creator);
+        require(tx.daa >= newStates[1].expiresAtDaa - MEMBERSHIP_LIFETIME_DAA);
+
+        int memberOutputIndex = OpAuthOutputIdx(this.activeInputIndex, 1);
+        require(tx.outputs[memberOutputIndex].value == MEMBERSHIP_OUTPUT_VALUE);
+
+        byte[] ownerLock = byte[](new ScriptPubKeyP2PK(pubkey(newStates[1].owner)));
+        require(tx.inputs[unsigned(fundingInputIndex)].scriptPubKey == ownerLock);
+        require(tx.outputs[unsigned(ownerIndexOutputIndex)].scriptPubKey == ownerLock);
+        require(tx.outputs[unsigned(ownerIndexOutputIndex)].value == INDEX_OUTPUT_VALUE);
+
+        byte[] creatorLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.creator)));
+        require(tx.outputs[unsigned(paymentOutputIndex)].scriptPubKey == creatorLock);
+        require(tx.outputs[unsigned(paymentOutputIndex)].value == MEMBERSHIP_PRICE);
+    }
+}

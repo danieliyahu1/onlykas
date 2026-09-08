@@ -2,20 +2,10 @@ import { createApp } from "./app.js";
 import { parseEnvironment } from "./config.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { R2Storage } from "./r2-storage.js";
-import {
-  cleanupExpiredUploads,
-  expireExpiredMemberships,
-  processNextUpload,
-  reconcilePendingMembershipDeploys,
-  reconcilePendingMembershipMints,
-  reconcilePendingMembershipTransfers,
-  reconcilePendingPayments,
-} from "./worker.js";
 import { KaspaWalletVerifier } from "./wallet-verifier.js";
-import { KaspaPaymentGateway } from "./payment-gateway.js";
-import { KaspaCovenantGateway } from "./covenant-gateway.js";
 import { KaspaMembershipVerifier } from "./verifier.js";
-import { logEvent, safeError } from "./observability.js";
+import { KaspaPaymentGateway } from "./payment-gateway.js";
+import { KaspaMembershipGateway } from "./membership-gateway.js";
 
 const environment = parseEnvironment(process.env);
 const store = new LibsqlStore(
@@ -35,7 +25,7 @@ const app = createApp({
   storage,
   walletVerifier: new KaspaWalletVerifier(),
   paymentGateway: new KaspaPaymentGateway(environment.KASPA_NODE_URL),
-  covenantGateway: new KaspaCovenantGateway(environment.KASPA_NODE_URL),
+  membershipGateway: new KaspaMembershipGateway(environment.KASPA_NODE_URL),
   membershipVerifier: new KaspaMembershipVerifier(environment.KASPA_NODE_URL),
   publicOrigin: environment.PUBLIC_ORIGIN,
   production: environment.NODE_ENV === "production",
@@ -46,55 +36,3 @@ app.listen(environment.PORT, "0.0.0.0", () =>
   ),
 );
 
-setInterval(() => {
-  void processNextUpload(
-    store,
-    storage,
-    Date.now(),
-    environment.MEDIA_JOB_STALE_MS,
-  ).catch((error) =>
-    logEvent("media_worker_unhandled_error", safeError(error)),
-  );
-  void cleanupExpiredUploads(store, storage).catch((error) =>
-    logEvent("media_cleanup_unhandled_error", safeError(error)),
-  );
-  void reconcilePendingMembershipDeploys(
-    store,
-    new KaspaCovenantGateway(environment.KASPA_NODE_URL),
-  ).catch((error) =>
-    logEvent(
-      "membership_deploy_reconciliation_unhandled_error",
-      safeError(error),
-    ),
-  );
-  void reconcilePendingMembershipMints(
-    store,
-    new KaspaCovenantGateway(environment.KASPA_NODE_URL),
-  ).catch((error) =>
-    logEvent(
-      "membership_mint_reconciliation_unhandled_error",
-      safeError(error),
-    ),
-  );
-  void reconcilePendingMembershipTransfers(
-    store,
-    new KaspaCovenantGateway(environment.KASPA_NODE_URL),
-  ).catch((error) =>
-    logEvent(
-      "membership_transfer_reconciliation_unhandled_error",
-      safeError(error),
-    ),
-  );
-  void expireExpiredMemberships(store).catch((error) =>
-    logEvent("membership_expiry_unhandled_error", safeError(error)),
-  );
-}, environment.MEDIA_JOB_INTERVAL_MS).unref();
-
-setInterval(() => {
-  void reconcilePendingPayments(
-    store,
-    new KaspaPaymentGateway(environment.KASPA_NODE_URL),
-  ).catch((error) =>
-    logEvent("payment_reconciliation_unhandled_error", safeError(error)),
-  );
-}, environment.PAYMENT_RECONCILIATION_INTERVAL_MS).unref();

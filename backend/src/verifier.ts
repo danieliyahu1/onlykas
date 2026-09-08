@@ -1,149 +1,53 @@
+import type { MembershipCheck, MembershipVerifier } from "./domain.js";
+import { XOnlyPublicKey } from "@kluster/kaspa-wasm";
 import {
-  buildMembershipCovenantTemplate,
-  fingerprintTemplate,
-  MEMBERSHIP_COVENANT_PREFIX,
-  MEMBERSHIP_DURATION_MS,
-} from "./covenant.js";
-import type {
-  MembershipCheck,
-  MembershipCheckStatus,
-  MembershipVerifier,
-} from "./domain.js";
+  addressPublicKey,
+  addressScript,
+  decodeMembershipRedeemScript,
+  MEMBERSHIP_DURATION_DAA,
+  MEMBERSHIP_INDEX_VALUE,
+  MEMBERSHIP_OUTPUT_VALUE,
+  MEMBERSHIP_PRICE_SOMPI,
+  membershipAddress,
+  membershipScript,
+  parseMembershipPayload,
+} from "./membership-contract.js";
 
-export interface MembershipToken {
-  type: "MINT" | "TRANSFER";
-  owner: string;
-  createdAt: number;
-  validUntil: number;
-  offerId?: string;
-  creator?: string;
-  membershipId?: string;
-}
-
-export interface MembershipDeploy {
-  type: "DEPLOY_COVENANT";
-  templateFingerprint: string;
-  template: string;
-  payoutPk: string;
-  deployer: string;
-}
-
-export function membershipCovenantId(templateJson: string): string {
-  return `${MEMBERSHIP_COVENANT_PREFIX}${fingerprintTemplate(templateJson).slice(0, 16)}`;
-}
-
-export function canonicalMembershipCovenantId(): string {
-  return membershipCovenantId(buildMembershipCovenantTemplate());
-}
-
-export function isMembershipCovenant(
-  covenant: unknown,
-): covenant is { type: string; payload?: unknown } {
-  if (!covenant || typeof covenant !== "object") return false;
-  return (covenant as Record<string, unknown>).type === "KCC-0020";
-}
-
-export function parseCovenantPayload(
-  payload: unknown,
-): Record<string, unknown> | null {
-  if (payload === null || payload === undefined) return null;
-  let value: unknown = payload;
-  if (typeof value === "string") {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      return null;
-    }
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function requiredString(
-  record: Record<string, unknown>,
-  key: string,
-): string | null {
-  const value = record[key];
-  return typeof value === "string" ? value : null;
-}
-
-function numberOrNull(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (
-    typeof value === "string" &&
-    value.trim() !== "" &&
-    Number.isFinite(Number(value))
-  )
-    return Number(value);
-  return null;
-}
-
-export function recognizeMembershipToken(
-  covenant: unknown,
-): MembershipToken | null {
-  if (!isMembershipCovenant(covenant)) return null;
-  const payload = parseCovenantPayload(covenant.payload);
-  if (!payload) return null;
-  if (payload.type !== "MINT" && payload.type !== "TRANSFER") return null;
-  const owner = requiredString(payload, "owner");
-  const createdAt = numberOrNull(payload.created_at);
-  const validUntil = numberOrNull(payload.valid_until);
-  if (!owner || createdAt === null || validUntil === null) return null;
-  if (validUntil - createdAt !== MEMBERSHIP_DURATION_MS) return null;
-  const token: MembershipToken = {
-    type: payload.type,
-    owner,
-    createdAt,
-    validUntil,
-  };
-  if (typeof payload.offerId === "string") token.offerId = payload.offerId;
-  if (typeof payload.creator === "string") token.creator = payload.creator;
-  if (typeof payload.membershipId === "string")
-    token.membershipId = payload.membershipId;
-  return token;
-}
-
-export function recognizeMembershipDeploy(
-  covenant: unknown,
-): MembershipDeploy | null {
-  if (!isMembershipCovenant(covenant)) return null;
-  const payload = parseCovenantPayload(covenant.payload);
-  if (!payload) return null;
-  if (payload.type !== "DEPLOY_COVENANT") return null;
-  const templateFingerprint = requiredString(payload, "templateFingerprint");
-  const template = requiredString(payload, "template");
-  const payoutPk = requiredString(payload, "payoutPk");
-  const deployer = requiredString(payload, "deployer");
-  if (!templateFingerprint || !template || !payoutPk || !deployer) return null;
-  if (fingerprintTemplate(template) !== templateFingerprint) return null;
-  return {
-    type: "DEPLOY_COVENANT",
-    templateFingerprint,
-    template,
-    payoutPk,
-    deployer,
-  };
-}
-
-export function membershipTokenValidity(
-  token: MembershipToken,
-  expectedOwner: string | undefined,
-  now: number,
-): Exclude<MembershipCheckStatus, "NOT_MEMBERSHIP"> {
-  if (expectedOwner !== undefined && token.owner !== expectedOwner)
-    return "OWNER_MISMATCH";
-  return token.validUntil > now ? "VALID" : "EXPIRED";
-}
+const DAA_MILLISECONDS = 100;
 
 type VerifierUtxo = {
   outpoint: { transactionId: string; index: number };
   utxoEntry: {
     amount: string;
-    scriptPublicKey: { scriptPublicKey: string };
     blockDaaScore?: string;
-    isCoinbase?: boolean;
-    covenant?: unknown;
   };
+};
+
+type ChainCovenant = {
+  covenant_id?: string;
+  covenantId?: string;
+  authorizing_input?: number;
+  authorizingInput?: number;
+};
+
+type ChainOutput = {
+  amount?: string | number;
+  value?: string | number;
+  script_public_key?: string | { script_public_key?: string; scriptPublicKey?: string };
+  scriptPublicKey?: string | { script?: string };
+  script_public_key_address?: string;
+  covenant_id?: string;
+  covenantId?: string;
+  covenant_authorizing_input?: number;
+  authorizing_input?: number;
+  covenant?: ChainCovenant | null;
+};
+
+type ChainTransaction = {
+  version?: number;
+  is_accepted?: boolean;
+  payload?: string;
+  outputs?: ChainOutput[];
 };
 
 export class KaspaMembershipVerifier implements MembershipVerifier {
@@ -155,103 +59,192 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
   async verifyAddress(
     address: string,
     expectedOwner?: string,
+    expectedCovenantId?: string,
+    expectedCreator?: string,
   ): Promise<MembershipCheck[]> {
-    const utxos = await this.utxos(address);
-    return Promise.all(
-      utxos.map((utxo) => this.checkUtxo(utxo, expectedOwner)),
-    );
+    const [utxos, currentDaa] = await Promise.all([this.utxos(address), this.currentDaa()]);
+    const pointers = utxos.filter((utxo) => bigintOrNull(utxo.utxoEntry.amount) === MEMBERSHIP_INDEX_VALUE);
+    return Promise.all(pointers.map(async (pointer) => {
+      const transaction = await this.transaction(pointer.outpoint.transactionId);
+      return this.checkMemberOutput(
+        pointer.outpoint.transactionId,
+        1,
+        transaction,
+        currentDaa,
+        expectedOwner ?? address,
+        expectedCovenantId,
+        expectedCreator,
+      );
+    }));
   }
 
   async verifyUtxo(
     transactionId: string,
     outputIndex: number,
     expectedOwner?: string,
+    expectedCovenantId?: string,
+    expectedCreator?: string,
   ): Promise<MembershipCheck> {
-    const covenant = await this.transactionCovenant(transactionId, outputIndex);
-    return this.categorize(transactionId, outputIndex, covenant, expectedOwner);
-  }
-
-  private async checkUtxo(
-    utxo: VerifierUtxo,
-    expectedOwner?: string,
-  ): Promise<MembershipCheck> {
-    const covenant = await this.covenantForUtxo(utxo);
-    return this.categorize(
-      utxo.outpoint.transactionId,
-      utxo.outpoint.index,
-      covenant,
-      expectedOwner,
-    );
-  }
-
-  private async covenantForUtxo(utxo: VerifierUtxo): Promise<unknown> {
-    if (utxo.utxoEntry.covenant !== undefined) return utxo.utxoEntry.covenant;
-    return this.transactionCovenant(
-      utxo.outpoint.transactionId,
-      utxo.outpoint.index,
-    );
-  }
-
-  private async transactionCovenant(
-    transactionId: string,
-    outputIndex: number,
-  ): Promise<unknown> {
-    const transaction = await this.request<{
-      outputs?: { covenant?: unknown }[];
-    }>(`/transactions/${transactionId}`);
-    return transaction.outputs?.[outputIndex]?.covenant ?? null;
-  }
-
-  private categorize(
-    transactionId: string,
-    outputIndex: number,
-    covenant: unknown,
-    expectedOwner?: string,
-  ): MembershipCheck {
-    const token = recognizeMembershipToken(covenant);
-    if (!token) {
-      const deploy = recognizeMembershipDeploy(covenant);
-      return {
-        transactionId,
-        outputIndex,
-        covenantId: deploy ? membershipCovenantId(deploy.template) : null,
-        kind: deploy ? "deploy" : "none",
-        tokenType: null,
-        owner: null,
-        createdAt: null,
-        validUntil: null,
-        status: "NOT_MEMBERSHIP",
-      };
-    }
-    return {
+    const [transaction, currentDaa] = await Promise.all([
+      this.transaction(transactionId),
+      this.currentDaa(),
+    ]);
+    return this.checkMemberOutput(
       transactionId,
       outputIndex,
-      covenantId: canonicalMembershipCovenantId(),
-      kind: "token",
-      tokenType: token.type,
-      owner: token.owner,
-      createdAt: new Date(token.createdAt).toISOString(),
-      validUntil: new Date(token.validUntil).toISOString(),
-      status: membershipTokenValidity(token, expectedOwner, this.now()),
-    };
+      transaction,
+      currentDaa,
+      expectedOwner,
+      expectedCovenantId,
+      expectedCreator,
+    );
   }
 
-  private async utxos(address: string): Promise<VerifierUtxo[]> {
-    return this.request<VerifierUtxo[]>(
-      `/addresses/${encodeURIComponent(address)}/utxos`,
-    );
+  private async checkMemberOutput(
+    transactionId: string,
+    outputIndex: number,
+    transaction: ChainTransaction,
+    currentDaa: bigint,
+    expectedOwner?: string,
+    expectedCovenantId?: string,
+    expectedCreator?: string,
+  ): Promise<MembershipCheck> {
+    const output = transaction.outputs?.[outputIndex];
+    const covenantId = outputCovenantId(output);
+    const redeemScript = parseMembershipPayload(transaction.payload);
+    const state = redeemScript ? decodeMembershipRedeemScript(redeemScript) : null;
+    if (
+      !transaction.is_accepted ||
+      transaction.version !== 1 ||
+      outputIndex !== 1 ||
+      !output ||
+      !covenantId ||
+      !state ||
+      state.isMinter ||
+      outputAmount(output) !== MEMBERSHIP_OUTPUT_VALUE ||
+      outputScript(output) !== membershipScript(state) ||
+      outputAuthorizingInput(output) !== 0 ||
+      (expectedCovenantId !== undefined && covenantId !== expectedCovenantId)
+    ) return notMembership(transactionId, outputIndex, covenantId);
+
+    const owner = expectedOwner ?? keyAddress(state.owner);
+    const creator = expectedCreator ?? keyAddress(state.creator);
+    if (!owner || !creator) return notMembership(transactionId, outputIndex, covenantId);
+    if (state.owner !== addressPublicKey(owner))
+      return membership(transactionId, outputIndex, covenantId, owner, state.expiresAtDaa, currentDaa, "OWNER_MISMATCH", this.now);
+    if (state.creator !== addressPublicKey(creator))
+      return notMembership(transactionId, outputIndex, covenantId);
+
+    const creatorPayment = transaction.outputs?.[2];
+    const ownerPointer = transaction.outputs?.[3];
+    if (
+      outputAmount(creatorPayment) !== MEMBERSHIP_PRICE_SOMPI ||
+      outputScript(creatorPayment) !== addressScript(creator) ||
+      outputAmount(ownerPointer) !== MEMBERSHIP_INDEX_VALUE ||
+      outputScript(ownerPointer) !== addressScript(owner) ||
+      !(await this.isUnspent(membershipAddress(state), transactionId, outputIndex))
+    ) return notMembership(transactionId, outputIndex, covenantId);
+
+    const status = state.expiresAtDaa > currentDaa ? "VALID" : "EXPIRED";
+    return membership(transactionId, outputIndex, covenantId, owner, state.expiresAtDaa, currentDaa, status, this.now);
+  }
+
+  private async isUnspent(address: string, transactionId: string, outputIndex: number): Promise<boolean> {
+    const utxos = await this.utxos(address);
+    return utxos.some((utxo) => utxo.outpoint.transactionId === transactionId && utxo.outpoint.index === outputIndex);
+  }
+
+  private transaction(transactionId: string): Promise<ChainTransaction> {
+    return this.request<ChainTransaction>(`/transactions/${transactionId}`);
+  }
+
+  private async currentDaa(): Promise<bigint> {
+    const value = await this.request<{ virtualDaaScore: string }>(`/info/blockdag?x=${Date.now()}`);
+    return BigInt(value.virtualDaaScore);
+  }
+
+  private utxos(address: string): Promise<VerifierUtxo[]> {
+    return this.request<VerifierUtxo[]>(`/addresses/${encodeURIComponent(address)}/utxos`);
   }
 
   private async request<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.api}${path}`, {
-      headers: { "Content-Type": "application/json" },
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(
-        `Kaspa verification failed: ${response.status} ${detail}`,
-      );
-    }
-    return (await response.json()) as T;
+    const response = await fetch(`${this.api}${path}`, { headers: { "Content-Type": "application/json" } });
+    if (!response.ok) throw new Error(`Kaspa verification failed: ${response.status} ${await response.text()}`);
+    return await response.json() as T;
   }
+}
+
+function membership(
+  transactionId: string,
+  outputIndex: number,
+  covenantId: string,
+  owner: string,
+  expiresAtDaa: bigint,
+  currentDaa: bigint,
+  status: MembershipCheck["status"],
+  now: () => number,
+): MembershipCheck {
+  const createdDaa = expiresAtDaa - MEMBERSHIP_DURATION_DAA;
+  const estimate = (score: bigint) => new Date(now() + Number(score - currentDaa) * DAA_MILLISECONDS).toISOString();
+  return {
+    transactionId,
+    outputIndex,
+    covenantId,
+    kind: "token",
+    tokenType: "MINT",
+    owner,
+    createdAt: estimate(createdDaa),
+    validUntil: estimate(expiresAtDaa),
+    status,
+  };
+}
+
+function outputCovenantId(output: ChainOutput | undefined): string | null {
+  return output?.covenant_id ?? output?.covenantId ?? output?.covenant?.covenant_id ?? output?.covenant?.covenantId ?? null;
+}
+
+function outputAuthorizingInput(output: ChainOutput): number | null {
+  return output.covenant_authorizing_input ?? output.authorizing_input ?? output.covenant?.authorizing_input ?? output.covenant?.authorizingInput ?? null;
+}
+
+function outputAmount(output: ChainOutput | undefined): bigint | null {
+  return bigintOrNull(output?.amount ?? output?.value);
+}
+
+function outputScript(output: ChainOutput | undefined): string | null {
+  if (!output) return null;
+  const value = output.script_public_key ?? output.scriptPublicKey;
+  if (typeof value === "string") return withVersion(value);
+  if (!value) return null;
+  if ("script" in value) return withVersion(value.script ?? "");
+  const rest = value as { script_public_key?: string; scriptPublicKey?: string };
+  return withVersion(rest.script_public_key ?? rest.scriptPublicKey ?? "");
+}
+
+function withVersion(script: string): string {
+  return script.startsWith("0000") ? script : `0000${script}`;
+}
+
+function bigintOrNull(value: unknown): bigint | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  try { return BigInt(value); } catch { return null; }
+}
+
+function keyAddress(publicKey: string): string | null {
+  try { return new XOnlyPublicKey(publicKey).toAddress("testnet-10").toString(); }
+  catch { return null; }
+}
+
+function notMembership(transactionId: string, outputIndex: number, covenantId: string | null = null): MembershipCheck {
+  return {
+    transactionId,
+    outputIndex,
+    covenantId,
+    kind: "none",
+    tokenType: null,
+    owner: null,
+    createdAt: null,
+    validUntil: null,
+    status: "NOT_MEMBERSHIP",
+  };
 }

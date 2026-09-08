@@ -10,10 +10,8 @@ import {
   COPY,
   mediaHintError,
   validatePost,
-  type UploadError,
 } from "@onlykas/shared";
-import { api, ApiError } from "./kasware.js";
-import { uploadMedia, waitForVerification } from "./upload.js";
+import { uploadMedia } from "./upload.js";
 import { KaspaMark } from "./KaspaMark.js";
 import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
@@ -24,22 +22,12 @@ interface Props {
   signingIn: boolean;
 }
 
-const uploadMessages: Record<Exclude<UploadError, null>, string> = {
-  UNSUPPORTED_MEDIA: COPY.unsupportedMedia,
-  IMAGE_TOO_LARGE: COPY.imageTooLarge,
-  VIDEO_TOO_LARGE: COPY.videoTooLarge,
-  MALFORMED_MEDIA: COPY.malformedMedia,
-  STORAGE_FAILURE: COPY.uploadFailed,
-};
-
 export function PublishPage({ address, signIn, signingIn }: Props) {
   const navigate = useNavigate();
   const mediaInput = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [uploadId, setUploadId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [publishing, setPublishing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [failure, setFailure] = useState<{
@@ -77,7 +65,6 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     }
     setFailure(null);
     setStatus(null);
-    setUploadId(null);
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
   }
@@ -97,14 +84,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     setUploading(true);
     setProgress(0);
     try {
-      const id = await uploadMedia(file, setProgress);
-      setStatus("Preparing your post...");
-      const verified = await waitForVerification(id);
-      if (verified.state !== "VERIFIED")
-        throw new Error(
-          verified.error ? uploadMessages[verified.error] : COPY.uploadFailed,
-        );
-      setUploadId(id);
+      const id = await uploadMedia(file, form.caption, form.priceKas, setProgress);
       return id;
     } catch (caught) {
       setFailure({
@@ -115,33 +95,6 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
       return null;
     } finally {
       setUploading(false);
-    }
-  }
-
-  async function publish(id: string) {
-    setPublishing(true);
-    setStatus(COPY.publishing);
-    try {
-      const post = await api<{ id: string }>("/api/posts", {
-        method: "POST",
-        body: JSON.stringify({
-          uploadId: id,
-          title: postTitle,
-          ...form,
-          permanenceConfirmed: true,
-        }),
-      });
-      navigate(`/post/${post.id}`);
-    } catch (caught) {
-      const apiFailure = caught instanceof ApiError ? caught : null;
-      if (apiFailure?.code === "MEDIA_ALREADY_PUBLISHED") setUploadId(null);
-      setFailure({
-        code: apiFailure?.code ?? null,
-        message: caught instanceof Error ? caught.message : COPY.publishFailed,
-      });
-      setStatus(null);
-    } finally {
-      setPublishing(false);
     }
   }
 
@@ -163,21 +116,19 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
           return;
         }
       }
-      const id = uploadId ?? (await uploadFile(selectedFile));
-      if (id) await publish(id);
+      const id = await uploadFile(selectedFile);
+      if (id) navigate(`/post/${id}`);
     } finally {
       setSubmitting(false);
     }
   }
 
-  const busy = submitting || uploading || publishing || signingIn;
+  const busy = submitting || uploading || signingIn;
   const actionLabel = signingIn
     ? "Signing in..."
     : uploading
       ? `Uploading ${progress}%`
-      : publishing
-        ? COPY.publishing
-        : "Publish";
+      : "Publish";
 
   return (
     <section className="publish-card">

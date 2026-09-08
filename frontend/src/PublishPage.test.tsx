@@ -1,10 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { COPY } from "@onlykas/shared";
 import { PublishPage } from "./PublishPage.js";
-import { ApiError, api } from "./kasware.js";
-import { uploadMedia, waitForVerification } from "./upload.js";
+import { api } from "./kasware.js";
+import { uploadMedia } from "./upload.js";
 
 vi.mock("./kasware.js", async () => ({
   ...(await vi.importActual("./kasware.js")),
@@ -12,7 +12,6 @@ vi.mock("./kasware.js", async () => ({
 }));
 vi.mock("./upload.js", () => ({
   uploadMedia: vi.fn(),
-  waitForVerification: vi.fn(),
 }));
 
 const address = `kaspatest:${"q".repeat(60)}`;
@@ -32,17 +31,10 @@ function renderPage({
 }
 
 function prepareSuccessfulPublish() {
-  vi.mocked(uploadMedia).mockImplementation(async (_file, progress) => {
+  vi.mocked(uploadMedia).mockImplementation(async (_file, _caption, _price, progress) => {
     progress(100);
     return "upload-id";
   });
-  vi.mocked(waitForVerification).mockResolvedValue({
-    id: "upload-id",
-    state: "VERIFIED",
-    expiresAt: new Date().toISOString(),
-    error: null,
-  });
-  vi.mocked(api).mockResolvedValue({ id: "post-id" });
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -69,19 +61,8 @@ describe("creator publish experience", () => {
 
     await user.click(screen.getByRole("button", { name: /^publish/i }));
 
-    await waitFor(() => expect(api).toHaveBeenCalledOnce());
     expect(signIn).toHaveBeenCalledOnce();
     expect(uploadMedia).toHaveBeenCalledOnce();
-    expect(api).toHaveBeenCalledWith("/api/posts", {
-      method: "POST",
-      body: JSON.stringify({
-        uploadId: "upload-id",
-        title: "Private photo",
-        caption: "Shared just for supporters.",
-        priceKas: "1",
-        permanenceConfirmed: true,
-      }),
-    });
   });
 
   it("lets captions and price be edited", async () => {
@@ -98,13 +79,11 @@ describe("creator publish experience", () => {
     await user.type(screen.getByLabelText(/Price/), "1.25");
     await user.click(screen.getByRole("button", { name: /^publish/i }));
 
-    await waitFor(() =>
-      expect(api).toHaveBeenCalledWith("/api/posts", {
-        method: "POST",
-        body: expect.stringContaining(
-          '"title":"Private video","caption":"A private video"',
-        ),
-      }),
+    expect(uploadMedia).toHaveBeenCalledWith(
+      expect.any(File),
+      "A private video",
+      "1.25",
+      expect.any(Function),
     );
   });
 
@@ -147,15 +126,9 @@ describe("creator publish experience", () => {
 
   it("explains when the same media was already published", async () => {
     prepareSuccessfulPublish();
-    vi.mocked(api)
-      .mockRejectedValueOnce(
-        new ApiError(
-          "MEDIA_ALREADY_PUBLISHED",
-          COPY.mediaAlreadyPublished,
-          409,
-        ),
-      )
-      .mockResolvedValueOnce({ id: "new-post-id" });
+    vi.mocked(uploadMedia)
+      .mockRejectedValueOnce(new Error(COPY.mediaAlreadyPublished))
+      .mockResolvedValueOnce("new-post-id");
     const user = userEvent.setup();
     renderPage();
     const mediaInput = screen.getByLabelText(/choose image or video/i);
@@ -178,7 +151,6 @@ describe("creator publish experience", () => {
       screen.queryByText(COPY.mediaAlreadyPublished),
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^publish/i }));
-    await waitFor(() => expect(api).toHaveBeenCalledTimes(2));
     expect(uploadMedia).toHaveBeenCalledTimes(2);
   });
 

@@ -10,9 +10,9 @@ import {
 import { COPY, type ProfileResponse } from "@onlykas/shared";
 import { authenticate, kasware, WalletError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
-import { MembershipPage } from "./MembershipPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
+import { WalletPostsPage } from "./WalletPages.js";
 import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
@@ -123,9 +123,10 @@ export function App() {
           </Link>
           <div className="nav-group">
             <GlobalSearch />
-            <Link to="/membership" className="nav-link">
-              Membership
-            </Link>
+            <div className="wallet-nav">
+              <Link to="/wallet/posts" className="nav-link">Posts</Link>
+              {address && <Link to={`/creator/${address}`} className="nav-link">Profile</Link>}
+            </div>
             {address ? (
               <details className="account">
                 <summary
@@ -200,34 +201,17 @@ export function App() {
               }
             />
             <Route path="/find" element={<FindCreatorPage />} />
-            <Route
-              path="/membership"
-              element={
-                <MembershipPage
-                  address={address}
-                  signIn={signIn}
-                  signingIn={signingIn}
-                />
-              }
-            />
+            <Route path="/wallet/posts" element={<WalletPostsPage address={address} />} />
             <Route
               path="/creator/:address"
               element={
-                <CreatorPage
-                  wallet={address}
-                  signIn={signIn}
-                  signingIn={signingIn}
-                />
+                <CreatorPage address={address} signIn={signIn} signingIn={signingIn} />
               }
             />
             <Route
               path="/post/:id"
               element={
-                <PostPage
-                  address={address}
-                  signIn={signIn}
-                  signingIn={signingIn}
-                />
+                <PostPage address={address} signIn={signIn} signingIn={signingIn} />
               }
             />
             <Route path="*" element={<MessageNotFound />} />

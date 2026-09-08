@@ -26,6 +26,7 @@ export async function getWalletPublicKey(): Promise<string> {
 
 export async function signPreparedPayment(
   transaction: string,
+  signInputs?: number[],
 ): Promise<string> {
   try {
     const inputs =
@@ -33,7 +34,9 @@ export async function signPreparedPayment(
     return await kasware().signPskt({
       txJsonString: transaction,
       options: {
-        signInputs: inputs.map((_, index) => ({ index, sighashType: 1 })),
+        signInputs: (signInputs ?? inputs.map((_, index) => index)).map(
+          (index) => ({ index, sighashType: 1 }),
+        ),
       },
     });
   } catch (caught) {

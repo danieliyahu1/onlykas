@@ -1,10 +1,11 @@
 export const NETWORK = "kaspa_testnet_10" as const;
 export const CHALLENGE_TTL_MS = 5 * 60 * 1_000;
 export const SESSION_IDLE_TTL_MS = 15 * 60 * 1_000;
+export const PAYMENT_RECEIPT_TTL_MS = 15 * 60 * 1_000;
 export const UPLOAD_TTL_MS = 24 * 60 * 60 * 1_000;
 export const MEMBERSHIP_DESCRIPTION_MAX = 280;
 export const MAX_IMAGE_BYTES = 25_000_000;
-export const MAX_VIDEO_BYTES = 500_000_000;
+export const MAX_VIDEO_BYTES = 100_000_000;
 export const MIN_MULTIPART_PART_BYTES = 5 * 1024 * 1024;
 export const KASPA_TESTNET_ADDRESS_PATTERN = /^kaspatest:[a-z0-9]{40,80}$/;
 
@@ -20,7 +21,7 @@ export const COPY = {
   verificationFailed: "OnlyKas could not verify this wallet. Try again.",
   unsupportedMedia: "Choose a JPEG, PNG, WebP, MP4, or WebM file.",
   imageTooLarge: "Images can be up to 25 MB.",
-  videoTooLarge: "Videos can be up to 500 MB.",
+  videoTooLarge: "Videos can be up to 100 MB.",
   malformedMedia: "This file cannot be played by OnlyKas.",
   uploadFailed: "Upload failed. Try again.",
   invalidPrice:
@@ -165,6 +166,8 @@ export interface CreatorResponse {
   address: string;
   displayAddress: string;
   displayName: string | null;
+  isOwner: boolean;
+  membership: { offered: boolean; active: boolean };
   posts: PostResponse[];
 }
 
@@ -180,92 +183,6 @@ export interface ProfileResponse {
   displayName: string | null;
 }
 
-export type MembershipOfferDeployState =
-  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
-
-export interface MembershipOfferResponse {
-  id: string;
-  creator: string;
-  covenantId: string;
-  priceSompi: string;
-  description: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MembershipDeployResponse {
-  id: string;
-  creator: string;
-  covenantId: string;
-  priceSompi: string;
-  description: string;
-  state: MembershipOfferDeployState;
-  transaction?: string;
-  fingerprint?: string;
-  transactionId: string | null;
-  rejection: string | null;
-  offer: MembershipOfferResponse | null;
-  previousRejection?: string | null;
-  membershipExists?: boolean;
-}
-
-export type MembershipState = "ACTIVE" | "EXPIRED" | "TRANSFERRED";
-
-export interface MembershipResponse {
-  id: string;
-  offerId: string;
-  owner: string;
-  creator: string;
-  covenantId: string;
-  createdTxId: string | null;
-  createdAt: string;
-  validUntil: string;
-  state: MembershipState;
-}
-
-export type MembershipMintAttemptState =
-  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
-
-export interface MembershipMintAttemptResponse {
-  id: string;
-  offerId: string;
-  creator: string;
-  covenantId: string;
-  priceSompi: string;
-  state: MembershipMintAttemptState;
-  transaction?: string;
-  fingerprint?: string;
-  transactionId: string | null;
-  rejection: string | null;
-  submittedAt: number | null;
-  lastCheckedAt: number | null;
-  reconciliationAttempts: number;
-  membership: MembershipResponse | null;
-}
-
-export type MembershipTransferAttemptState =
-  "PREPARED" | "PENDING" | "CONFIRMED" | "REJECTED";
-
-export interface MembershipTransferAttemptResponse {
-  id: string;
-  membershipId: string;
-  seller: string;
-  buyer: string;
-  saleAmountSompi: string;
-  creatorRoyaltySompi: string;
-  creatorPayoutAddress: string;
-  state: MembershipTransferAttemptState;
-  transaction?: string;
-  fingerprint?: string;
-  transactionId: string | null;
-  rejection: string | null;
-  submittedAt: number | null;
-  lastCheckedAt: number | null;
-  reconciliationAttempts: number;
-  membership: MembershipResponse | null;
-}
-
 export type MembershipCheckStatus =
   "VALID" | "EXPIRED" | "OWNER_MISMATCH" | "NOT_MEMBERSHIP";
 
@@ -273,8 +190,8 @@ export interface MembershipCheckResponse {
   transactionId: string;
   outputIndex: number;
   covenantId: string | null;
-  kind: "token" | "deploy" | "none";
-  tokenType: "MINT" | "TRANSFER" | null;
+  kind: "token" | "none";
+  tokenType: "MINT" | null;
   owner: string | null;
   createdAt: string | null;
   validUntil: string | null;
