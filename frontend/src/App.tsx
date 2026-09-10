@@ -124,8 +124,11 @@ export function App() {
           <div className="nav-group">
             <GlobalSearch />
             <div className="wallet-nav">
-              <Link to="/wallet/posts" className="nav-link">Posts</Link>
-              {address && <Link to={`/creator/${address}`} className="nav-link">Profile</Link>}
+              {address && (
+                <Link to={`/creator/${address}`} className="nav-link">
+                  My page
+                </Link>
+              )}
             </div>
             {address ? (
               <details className="account">

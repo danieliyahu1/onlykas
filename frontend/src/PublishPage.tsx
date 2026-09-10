@@ -133,7 +133,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
   return (
     <section className="publish-card">
       <header className="publish-intro">
-        <h1>Share something special.</h1>
+        <h1>Share with your fans.</h1>
       </header>
       <form onSubmit={(event) => void publishSelected(event)}>
         <div className="publish-upload">
@@ -185,12 +185,17 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
               </button>
             </div>
           )}
+          {!selectedFile && failure && (
+            <div aria-live="polite" className="feedback inline error">
+              {failure.message}
+            </div>
+          )}
         </div>
 
         <div className="publish-controls">
           <div className="publish-details">
             <label>
-              Captions
+              Caption
               <textarea
                 value={form.caption}
                 maxLength={280}
@@ -226,23 +231,27 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
             )}
           </div>
 
-          <div
-            aria-live="polite"
-            className={failure ? "feedback error" : "feedback"}
-          >
-            {failure?.message ?? status}
-          </div>
-          <button
-            className="primary publish-action"
-            disabled={!selectedFile || busy}
-          >
-            {actionLabel}
-          </button>
           {selectedFile && (
             <p className="permanence-note">
               Published posts cannot be changed.
             </p>
           )}
+          <div
+            aria-live="polite"
+            className={
+              failure || status ? "feedback inline error" : "feedback inline"
+            }
+          >
+            {selectedFile ? failure?.message ?? status : status}
+          </div>
+          <button
+            className="primary publish-action"
+            disabled={!selectedFile || busy}
+          >
+            {selectedFile
+              ? `${actionLabel} for ${form.priceKas || "0"} KAS`
+              : actionLabel}
+          </button>
         </div>
       </form>
     </section>

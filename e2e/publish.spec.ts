@@ -5,7 +5,7 @@ test("creator entry point becomes ready after choosing media", async ({
 }) => {
   await page.goto("/publish");
   await expect(
-    page.getByRole("heading", { name: /share something special/i }),
+    page.getByRole("heading", { name: /share with your fans/i }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /^publish/i })).toBeDisabled();
   await expect(
@@ -21,7 +21,7 @@ test("creator entry point becomes ready after choosing media", async ({
   await expect(
     page.getByRole("img", { name: /selected image preview/i }),
   ).toBeVisible();
-  await expect(page.getByLabel("Captions")).toHaveValue(
+  await expect(page.getByLabel("Caption")).toHaveValue(
     "Shared just for supporters.",
   );
   await expect(page.getByLabel("Price")).toHaveValue("1");

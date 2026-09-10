@@ -442,6 +442,10 @@ textarea {
   overflow: hidden;
   background: #080b0a;
 }
+.media-stage:focus-within {
+  outline: 2px solid var(--acid);
+  outline-offset: 4px;
+}
 .media-stage.has-media {
   border-style: solid;
   border-color: var(--line);
@@ -535,7 +539,7 @@ textarea {
   font-size: 1rem;
 }
 .permanence-note {
-  margin: -0.5rem 0 0;
+  margin: 0;
   color: var(--muted);
   font-size: 0.78rem;
   text-align: center;

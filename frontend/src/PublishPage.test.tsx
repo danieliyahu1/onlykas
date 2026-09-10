@@ -54,7 +54,7 @@ describe("creator publish experience", () => {
     expect(
       screen.getByRole("img", { name: /selected image preview/i }),
     ).toBeVisible();
-    expect(screen.getByLabelText(/Captions/)).toHaveValue(
+    expect(screen.getByLabelText(/Caption/)).toHaveValue(
       "Shared just for supporters.",
     );
     expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
@@ -73,8 +73,8 @@ describe("creator publish experience", () => {
       screen.getByLabelText(/choose image or video/i),
       new File(["video"], "release.mp4", { type: "video/mp4" }),
     );
-    await user.clear(screen.getByLabelText(/Captions/));
-    await user.type(screen.getByLabelText(/Captions/), "A private video");
+    await user.clear(screen.getByLabelText(/Caption/));
+    await user.type(screen.getByLabelText(/Caption/), "A private video");
     await user.clear(screen.getByLabelText(/Price/));
     await user.type(screen.getByLabelText(/Price/), "1.25");
     await user.click(screen.getByRole("button", { name: /^publish/i }));
@@ -91,19 +91,19 @@ describe("creator publish experience", () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(screen.getByLabelText(/Captions/)).toHaveValue(
+    expect(screen.getByLabelText(/Caption/)).toHaveValue(
       "Shared just for supporters.",
     );
     expect(screen.getByLabelText(/Price/)).toHaveValue("1");
 
-    await user.clear(screen.getByLabelText(/Captions/));
-    await user.type(screen.getByLabelText(/Captions/), "Custom captions");
+    await user.clear(screen.getByLabelText(/Caption/));
+    await user.type(screen.getByLabelText(/Caption/), "Custom captions");
     expect(
       screen.getByRole("button", { name: "Restore defaults" }),
     ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Restore defaults" }));
-    expect(screen.getByLabelText(/Captions/)).toHaveValue(
+    expect(screen.getByLabelText(/Caption/)).toHaveValue(
       "Shared just for supporters.",
     );
     expect(screen.getByLabelText(/Price/)).toHaveValue("1");
