@@ -12,7 +12,6 @@ import { authenticate, kasware, WalletError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
-import { WalletPostsPage } from "./WalletPages.js";
 import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
@@ -204,7 +203,6 @@ export function App() {
               }
             />
             <Route path="/find" element={<FindCreatorPage />} />
-            <Route path="/wallet/posts" element={<WalletPostsPage address={address} />} />
             <Route
               path="/creator/:address"
               element={

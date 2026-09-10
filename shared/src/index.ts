@@ -154,7 +154,6 @@ export interface UploadResponse {
 export interface PostResponse {
   id: string;
   creator: string;
-  title: string;
   caption: string;
   priceSompi: string;
   mediaType: MediaType;
@@ -239,24 +238,14 @@ export function parseKasToSompi(value: string): bigint | null {
   return sompi > 0n ? sompi : null;
 }
 
-export function validatePost(
-  title: string,
-  caption: string,
-  price: string,
-): string[] {
+export function validatePost(caption: string, price: string): string[] {
   const errors: string[] = [];
-  const normalizedTitle = normalizePostText(title);
   const normalizedCaption = normalizePostText(caption);
-  if (
-    Array.from(normalizedTitle).length < 1 ||
-    Array.from(normalizedTitle).length > 80
-  )
-    errors.push("Title must be between 1 and 80 characters.");
   if (
     Array.from(normalizedCaption).length < 1 ||
     Array.from(normalizedCaption).length > 280
   )
-    errors.push("Captions must be between 1 and 280 characters.");
+    errors.push("Caption must be between 1 and 280 characters.");
   if (parseKasToSompi(price) === null) errors.push(COPY.invalidPrice);
   return errors;
 }

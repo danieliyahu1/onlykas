@@ -22,11 +22,13 @@ describe("post validation", () => {
   );
 
   it("normalizes text and enforces visible character limits", () => {
-    expect(validatePost(" title ", " caption ", "2")).toEqual([]);
-    expect(validatePost(" ", " ", "0")).toEqual([
-      "Title must be between 1 and 80 characters.",
-      "Captions must be between 1 and 280 characters.",
+    expect(validatePost(" caption ", "2")).toEqual([]);
+    expect(validatePost(" ", "0")).toEqual([
+      "Caption must be between 1 and 280 characters.",
       COPY.invalidPrice,
+    ]);
+    expect(validatePost("x".repeat(281), "1")).toEqual([
+      "Caption must be between 1 and 280 characters.",
     ]);
   });
 });

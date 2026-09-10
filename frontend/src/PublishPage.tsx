@@ -43,10 +43,6 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
 
   useAutoDismiss(failure?.message ?? null, () => setFailure(null));
 
-  const postTitle = selectedFile?.type.startsWith("video/")
-    ? "Private video"
-    : "Private photo";
-
   useEffect(
     () => () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -101,7 +97,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
   async function publishSelected(event: FormEvent) {
     event.preventDefault();
     if (!selectedFile || submitting) return;
-    const errors = validatePost(postTitle, form.caption, form.priceKas);
+    const errors = validatePost(form.caption, form.priceKas);
     if (errors.length) {
       setFailure({ code: null, message: errors.join(" ") });
       return;

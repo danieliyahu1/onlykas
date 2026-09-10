@@ -104,7 +104,6 @@ function post(id: string): Post {
   return {
     id,
     creator: "kaspatest:qqtestcreator",
-    title: "Private photo",
     caption: "A private post",
     priceSompi: "100000000",
     mediaType: "image/jpeg",

@@ -21,6 +21,7 @@ export class MemoryStore implements Store {
   async creatorPosts(address: string) { return [...this.posts.values()].filter(v => v.creator === address).sort((a,b) => b.publishedAt-a.publishedAt).map(v => structuredClone(v)); }
   async createPurchase(v: Purchase) { const duplicate = [...this.purchases.values()].some(x => x.transactionId === v.transactionId); if (duplicate || this.purchases.has(`${v.postId}:${v.buyer}`)) return false; this.purchases.set(`${v.postId}:${v.buyer}`, structuredClone(v)); return true; }
   async getPurchase(postId: string, buyer: string) { const v = this.purchases.get(`${postId}:${buyer}`); return v ? structuredClone(v) : null; }
+  async purchasesForBuyer(buyer: string) { return [...this.purchases.values()].filter(v => v.buyer === buyer).map(v => structuredClone(v)); }
   async getCreatorCovenant(creator: string) { const v = this.creatorCovenants.get(creator); return v ? structuredClone(v) : null; }
   async saveCreatorCovenant(v: CreatorCovenant) { if (this.creatorCovenants.has(v.creator)) throw new Error("COVENANT_ALREADY_REGISTERED"); this.creatorCovenants.set(v.creator, structuredClone(v)); }
   async createMembershipPurchase(v: MembershipPurchase) { if (this.membershipPurchaseRecords.has(v.transactionId)) return false; this.membershipPurchaseRecords.set(v.transactionId, structuredClone(v)); return true; }
