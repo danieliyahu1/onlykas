@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { PaymentGateway, PaymentSubmission, Post, PreparedPayment } from "./domain.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";
+import { defaultMetrics, type Metrics } from "./metrics.js";
 
 const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const ZERO_SUBNETWORK = "0".repeat(40);
@@ -16,12 +17,13 @@ export class KaspaPaymentGateway implements PaymentGateway {
     private readonly api = "https://api-tn10.kaspa.org",
     private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     private readonly logger: Logger = defaultLogger,
+    private readonly metrics: Metrics = defaultMetrics,
   ) {}
 
   async prepare(post: Post, buyer: string): Promise<PreparedPayment> {
     const [utxos, estimate] = await Promise.all([
-      this.request<Utxo[]>(`/addresses/${encodeURIComponent(buyer)}/utxos`),
-      this.request<{ normalBuckets: { feerate: number }[]; priorityBucket: { feerate: number } }>("/info/fee-estimate"),
+      this.request<Utxo[]>("utxos", `/addresses/${encodeURIComponent(buyer)}/utxos`),
+      this.request<{ normalBuckets: { feerate: number }[]; priorityBucket: { feerate: number } }>("fee_estimate", "/info/fee-estimate"),
     ]);
     const amount = BigInt(post.priceSompi);
     const rate = estimate.normalBuckets[0]?.feerate ?? estimate.priorityBucket.feerate;
@@ -64,7 +66,7 @@ export class KaspaPaymentGateway implements PaymentGateway {
     if (!sameTransaction(original, signed)) return this.reject("PREPARED_TRANSACTION_CHANGED");
     if (!hasAllSignatures(signed)) return this.reject("INVALID_SIGNATURES");
     await this.validateInputs(signed);
-    const result = await this.request<{ transactionId?: string; error?: string }>("/transactions", { method: "POST", body: JSON.stringify({ transaction: toSubmitTransaction(signed), allowOrphan: false }) });
+    const result = await this.request<{ transactionId?: string; error?: string }>("submit_transaction", "/transactions", { method: "POST", body: JSON.stringify({ transaction: toSubmitTransaction(signed), allowOrphan: false }) });
     if (result.error || !result.transactionId) return this.reject(result.error ?? "TRANSACTION_REJECTED", result.transactionId ?? null);
     this.logger.info("payment_submitted", { transactionIdPrefix: result.transactionId.slice(0, 12) });
     return this.status(result.transactionId);
@@ -79,12 +81,13 @@ export class KaspaPaymentGateway implements PaymentGateway {
   }
 
   async status(transactionId: string): Promise<PaymentSubmission> {
-    const value = await this.requestRetryingMissing<{ is_accepted: boolean }>(`/transactions/${transactionId}`);
+    const value = await this.requestRetryingMissing<{ is_accepted: boolean }>("transaction_status", `/transactions/${transactionId}`);
     return { isAccepted: value?.is_accepted ? true : null, transactionId, rejection: null };
   }
 
   async verifyPurchase(transactionId: string, buyer: string, creator: string, amountSompi: string): Promise<boolean> {
     const tx = await this.requestRetryingMissing<ChainTransaction>(
+      "verify_purchase",
       `/transactions/${transactionId}?inputs=true&outputs=true&resolve_previous_outpoints=full`,
     );
     if (!tx) return false;
@@ -93,11 +96,11 @@ export class KaspaPaymentGateway implements PaymentGateway {
     return tx.outputs.some((output) => String(output.amount) === amountSompi && output.script_public_key_address === creator);
   }
 
-  private async requestRetryingMissing<T>(path: string): Promise<T | null> {
+  private async requestRetryingMissing<T>(operation: string, path: string): Promise<T | null> {
     let delay = VERIFY_BASE_DELAY_MS;
     for (let attempt = 0; attempt < VERIFY_MAX_ATTEMPTS; attempt++) {
       try {
-        return await this.request<T>(path);
+        return await this.request<T>(operation, path);
       } catch (error) {
         if (!(error instanceof KaspaRequestError) || error.status !== 404) throw error;
         if (attempt === VERIFY_MAX_ATTEMPTS - 1) return null;
@@ -112,17 +115,19 @@ export class KaspaPaymentGateway implements PaymentGateway {
     for (const input of transaction.inputs as Record<string, unknown>[]) {
       const id = input.transactionId; const index = input.index;
       if (typeof id !== "string" || !/^[0-9a-f]{64}$/i.test(id) || typeof index !== "number" || !Number.isInteger(index) || index < 0) throw new Error("INVALID_INPUT");
-      const parent = await this.request<{ outputs?: { amount: string | number; script_public_key: string | { script_public_key?: string; scriptPublicKey?: string } }[] }>(`/transactions/${id}`);
+      const parent = await this.request<{ outputs?: { amount: string | number; script_public_key: string | { script_public_key?: string; scriptPublicKey?: string } }[] }>("parent_transaction", `/transactions/${id}`);
       const output = parent.outputs?.[index]; const utxo = input.utxo as Record<string, unknown> | undefined;
       const script = typeof output?.script_public_key === "string" ? output.script_public_key : output?.script_public_key?.script_public_key ?? output?.script_public_key?.scriptPublicKey;
       if (!output || !utxo || String(output.amount) !== String(utxo.amount) || !script || `0000${script.replace(/^0000/, "")}` !== utxo.scriptPublicKey) throw new Error("INPUT_CHANGED");
     }
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.api}${path}`, { headers: { "Content-Type": "application/json" }, ...init });
-    if (!response.ok) throw new KaspaRequestError(response.status, await response.text());
-    return await response.json() as T;
+  private async request<T>(operation: string, path: string, init?: RequestInit): Promise<T> {
+    return this.metrics.observeDependency("kaspa_rest", operation, async () => {
+      const response = await fetch(`${this.api}${path}`, { headers: { "Content-Type": "application/json" }, ...init });
+      if (!response.ok) throw new KaspaRequestError(response.status, await response.text());
+      return await response.json() as T;
+    });
   }
 }
 

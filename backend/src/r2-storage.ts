@@ -8,6 +8,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import type { ObjectStorage } from "./domain.js";
+import { defaultMetrics, type Metrics } from "./metrics.js";
 
 export type StorageFailureCategory =
   | "OBJECT_NOT_FOUND"
@@ -41,6 +42,7 @@ export class R2Storage implements ObjectStorage {
       accessKeyId: string;
       secretAccessKey: string;
     },
+    private readonly metrics: Metrics = defaultMetrics,
   ) {
     this.client = new S3Client({
       endpoint: config.endpoint,
@@ -52,12 +54,14 @@ export class R2Storage implements ObjectStorage {
     });
   }
   async putFile(key: string, sourcePath: string, contentType: string): Promise<void> {
-    await this.client.send(new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      Body: createReadStream(sourcePath),
-      ContentType: contentType,
-    }));
+    await this.metrics.observeDependency("r2", "put_object", () =>
+      this.client.send(new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: createReadStream(sourcePath),
+        ContentType: contentType,
+      })),
+    );
   }
   async readRange(
     key: string,
@@ -66,22 +70,26 @@ export class R2Storage implements ObjectStorage {
   ): Promise<{ bytes: Uint8Array; size: number; contentType: string }> {
     let head: HeadObjectCommandOutput;
     try {
-      head = await this.client.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      head = await this.metrics.observeDependency("r2", "head_object", () =>
+        this.client.send(
+          new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+        ),
       );
     } catch (error) {
       throw toStorageError("head_object", key, error);
     }
     let result: GetObjectCommandOutput;
     try {
-      result = await this.client.send(
-        new GetObjectCommand({
-          Bucket: this.bucket,
-          Key: key,
-          ...(start === undefined
-            ? {}
-            : { Range: `bytes=${start}-${end ?? ""}` }),
-        }),
+      result = await this.metrics.observeDependency("r2", "get_object", () =>
+        this.client.send(
+          new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+            ...(start === undefined
+              ? {}
+              : { Range: `bytes=${start}-${end ?? ""}` }),
+          }),
+        ),
       );
     } catch (error) {
       throw toStorageError("get_object", key, error);
@@ -95,8 +103,10 @@ export class R2Storage implements ObjectStorage {
     };
   }
   async delete(key: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+    await this.metrics.observeDependency("r2", "delete_object", () =>
+      this.client.send(
+        new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+      ),
     );
   }
 }

@@ -14,8 +14,14 @@ describe("environment", () => {
   it("parses a complete testnet-only environment", () => {
     expect(parseEnvironment(valid)).toMatchObject({
       PORT: 3000,
+      METRICS_PORT: 9090,
+      GIT_REVISION: "unknown",
       R2_REGION: "auto",
     });
+  });
+
+  it("rejects an invalid metrics port", () => {
+    expect(() => parseEnvironment({ ...valid, METRICS_PORT: "0" })).toThrow();
   });
 
   it("rejects missing private storage", () => {

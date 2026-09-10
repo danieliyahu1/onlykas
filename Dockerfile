@@ -12,13 +12,15 @@ COPY frontend/src ./frontend/src
 RUN pnpm build && pnpm deploy --legacy --filter @onlykas/backend --prod /prod/backend
 
 FROM node:24-alpine AS runtime
+ARG GIT_REVISION=unknown
 ENV NODE_ENV=production
 ENV FFPROBE_PATH=/usr/bin/ffprobe
+ENV GIT_REVISION=$GIT_REVISION
 WORKDIR /app/backend
 RUN apk add --no-cache ffmpeg
 COPY --from=build /prod/backend ./
 COPY --from=build /app/backend/dist ./dist
 COPY --from=build /app/frontend/dist /app/frontend/dist
 USER 1000
-EXPOSE 3000
+EXPOSE 3000 9090
 CMD ["node", "dist/server.js"]

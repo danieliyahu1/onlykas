@@ -30,6 +30,8 @@ spec:
           ports:
             - name: http
               containerPort: 3000
+            - name: metrics
+              containerPort: 9090
           envFrom:
             - configMapRef:
                 name: onlykas-config

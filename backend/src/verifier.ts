@@ -1,6 +1,7 @@
 import type { MembershipCheck, MembershipVerifier } from "./domain.js";
 import { XOnlyPublicKey } from "@kluster/kaspa-wasm";
 import { logger as defaultLogger, type Logger } from "./observability.js";
+import { defaultMetrics, type Metrics } from "./metrics.js";
 import {
   addressPublicKey,
   addressScript,
@@ -56,6 +57,7 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
     private readonly api = "https://api-tn10.kaspa.org",
     private readonly now: () => number = Date.now,
     private readonly logger: Logger = defaultLogger,
+    private readonly metrics: Metrics = defaultMetrics,
   ) {}
 
   async verifyAddress(
@@ -157,28 +159,30 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
   }
 
   private transaction(transactionId: string): Promise<ChainTransaction> {
-    return this.request<ChainTransaction>(`/transactions/${transactionId}`);
+    return this.request<ChainTransaction>("transaction", `/transactions/${transactionId}`);
   }
 
   private async currentDaa(): Promise<bigint> {
-    const value = await this.request<{ virtualDaaScore: string }>(`/info/blockdag?x=${Date.now()}`);
+    const value = await this.request<{ virtualDaaScore: string }>("blockdag", `/info/blockdag?x=${Date.now()}`);
     return BigInt(value.virtualDaaScore);
   }
 
   private utxos(address: string): Promise<VerifierUtxo[]> {
-    return this.request<VerifierUtxo[]>(`/addresses/${encodeURIComponent(address)}/utxos`);
+    return this.request<VerifierUtxo[]>("utxos", `/addresses/${encodeURIComponent(address)}/utxos`);
   }
 
-  private async request<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.api}${path}`, { headers: { "Content-Type": "application/json" } });
-    if (!response.ok) {
-      this.logger.error("membership_verification_failed", {
-        endpoint: path.split("/")[1] ?? path,
-        status: response.status,
-      });
-      throw new Error(`Kaspa verification failed: ${response.status} ${await response.text()}`);
-    }
-    return await response.json() as T;
+  private async request<T>(operation: string, path: string): Promise<T> {
+    return this.metrics.observeDependency("kaspa_rest", operation, async () => {
+      const response = await fetch(`${this.api}${path}`, { headers: { "Content-Type": "application/json" } });
+      if (!response.ok) {
+        this.logger.error("membership_verification_failed", {
+          endpoint: path.split("/")[1] ?? path,
+          status: response.status,
+        });
+        throw new Error(`Kaspa verification failed: ${response.status} ${await response.text()}`);
+      }
+      return await response.json() as T;
+    });
   }
 }
 

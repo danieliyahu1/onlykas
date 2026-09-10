@@ -1,5 +1,6 @@
 import request from "supertest";
 import { createApp } from "./app.js";
+import { createMetrics, type Metrics } from "./metrics.js";
 import { MemoryStore } from "./memory-store.js";
 import type { EventLogger, Logger } from "./observability.js";
 import type { ObjectStorage, PaymentGateway, Post, Store } from "./domain.js";
@@ -101,6 +102,33 @@ describe("API request diagnostics", () => {
   });
 });
 
+describe("request metrics", () => {
+  it("labels requests by route template and never by dynamic identifiers", async () => {
+    const store = new MemoryStore();
+    await store.publishPost(post("post-123"));
+    const metrics = createMetrics({ version: "test", revision: "test" });
+    const { app } = testApp(store, undefined, metrics);
+
+    await request(app).get("/api/posts/post-123").expect(200);
+
+    const body = await metrics.render();
+    expect(body).toContain('route="/api/posts/:id"');
+    expect(body).not.toContain("post-123");
+
+    const values = (
+      await metrics.registry
+        .getSingleMetric("onlykas_http_requests_total")!
+        .get()
+    ).values;
+    expect(values).toContainEqual(
+      expect.objectContaining({
+        labels: { method: "GET", route: "/api/posts/:id", status: "200" },
+        value: 1,
+      }),
+    );
+  });
+});
+
 describe("payment confirmation", () => {
   async function buyerSession(store: MemoryStore) {
     const buyer = `kaspatest:${"b".repeat(60)}`;
@@ -158,7 +186,7 @@ describe("payment confirmation", () => {
   });
 });
 
-function testApp(store: Store = new MemoryStore(), paymentGateway?: PaymentGateway) {
+function testApp(store: Store = new MemoryStore(), paymentGateway?: PaymentGateway, metrics?: Metrics) {
   const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
   const record =
     (level: string): EventLogger =>
@@ -183,6 +211,7 @@ function testApp(store: Store = new MemoryStore(), paymentGateway?: PaymentGatew
     ...(paymentGateway ? { paymentGateway } : {}),
     publicOrigin: "http://localhost:5173",
     logger,
+    ...(metrics ? { metrics } : {}),
   });
   return { app, events };
 }

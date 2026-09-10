@@ -7,6 +7,8 @@ const environmentSchema = z.object({
     .default("development"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional(),
   PORT: z.coerce.number().int().positive().default(3000),
+  METRICS_PORT: z.coerce.number().int().positive().default(9090),
+  GIT_REVISION: z.string().default("unknown"),
   PUBLIC_ORIGIN: z.string().url(),
   DATABASE_URL: z.string().min(1),
   DATABASE_AUTH_TOKEN: z.string().optional(),

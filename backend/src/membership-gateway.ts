@@ -34,6 +34,7 @@ import {
   type MembershipState,
 } from "./membership-contract.js";
 import { logger as defaultLogger, safeError, type Logger } from "./observability.js";
+import { defaultMetrics, type Metrics } from "./metrics.js";
 
 const ZERO_SUBNETWORK = "0".repeat(40);
 const WALLET_COMPUTE_BUDGET = 50;
@@ -94,6 +95,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     private readonly relay: MembershipTransactionRelay = submitMembershipTransactionOverWrpc,
     private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     private readonly logger: Logger = defaultLogger,
+    private readonly metrics: Metrics = defaultMetrics,
   ) {}
 
   async prepareOffer(creator: string): Promise<PreparedMembershipTransaction> {
@@ -147,7 +149,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     const minterUtxo = await this.findMinterUtxo(minterUtxos, minter, covenantIdHex);
     if (!minterUtxo) throw new Error("MEMBERSHIP_OFFER_UNAVAILABLE");
     const [{ virtualDaaScore }, buyerUtxos, rate] = await Promise.all([
-      this.request<{ virtualDaaScore: string }>(`/info/blockdag?x=${Date.now()}`),
+      this.request<{ virtualDaaScore: string }>("blockdag", `/info/blockdag?x=${Date.now()}`),
       this.utxos(buyer),
       this.feeRate(),
     ]);
@@ -244,7 +246,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     });
     let transactionId: string;
     try {
-      transactionId = await this.relay(signedTransaction);
+      transactionId = await this.metrics.observeDependency("kaspa_wrpc", "submit_transaction", () => this.relay(signedTransaction));
     } catch (error) {
       this.logger.error("membership_transaction_relay_failed", {
         signInputs: preparedValue.signInputs,
@@ -285,16 +287,18 @@ export class KaspaMembershipGateway implements MembershipGateway {
   }
 
   private async transaction(transactionId: string): Promise<{ is_accepted?: boolean } | null> {
-    const response = await fetch(`${this.api}/transactions/${transactionId.toLowerCase()}`, {
-      headers: { "Content-Type": "application/json" },
+    return this.metrics.observeDependency("kaspa_rest", "transaction_status", async () => {
+      const response = await fetch(`${this.api}/transactions/${transactionId.toLowerCase()}`, {
+        headers: { "Content-Type": "application/json" },
+      });
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
+      return await response.json() as { is_accepted?: boolean };
     });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
-    return await response.json() as { is_accepted?: boolean };
   }
 
   private utxos(address: string) {
-    return this.request<Utxo[]>(`/addresses/${encodeURIComponent(address)}/utxos`);
+    return this.request<Utxo[]>("utxos", `/addresses/${encodeURIComponent(address)}/utxos`);
   }
 
   private async findMinterUtxo(
@@ -308,7 +312,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
       && utxo.utxoEntry.scriptPublicKey.scriptPublicKey === expectedScript,
     );
     const matches = await Promise.all(candidates.map(async (utxo) => {
-      const transaction = await this.request<ChainTransaction>(`/transactions/${utxo.outpoint.transactionId}`);
+      const transaction = await this.request<ChainTransaction>("parent_transaction", `/transactions/${utxo.outpoint.transactionId}`);
       const output = transaction.outputs?.[utxo.outpoint.index];
       return transaction.version === 1
         && transaction.is_accepted === true
@@ -323,17 +327,19 @@ export class KaspaMembershipGateway implements MembershipGateway {
   }
 
   private async feeRate() {
-    const estimate = await this.request<{ normalBuckets: { feerate: number }[]; priorityBucket: { feerate: number } }>("/info/fee-estimate");
+    const estimate = await this.request<{ normalBuckets: { feerate: number }[]; priorityBucket: { feerate: number } }>("fee_estimate", "/info/fee-estimate");
     return estimate.normalBuckets[0]?.feerate ?? estimate.priorityBucket.feerate;
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.api}${path}`, {
-      headers: { "Content-Type": "application/json" },
-      ...init,
+  private async request<T>(operation: string, path: string, init?: RequestInit): Promise<T> {
+    return this.metrics.observeDependency("kaspa_rest", operation, async () => {
+      const response = await fetch(`${this.api}${path}`, {
+        headers: { "Content-Type": "application/json" },
+        ...init,
+      });
+      if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
+      return await response.json() as T;
     });
-    if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
-    return await response.json() as T;
   }
 }
 
