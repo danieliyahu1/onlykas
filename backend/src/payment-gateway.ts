@@ -54,9 +54,15 @@ export class KaspaPaymentGateway implements PaymentGateway {
   }
 
   async verifyPurchase(transactionId: string, buyer: string, creator: string, amountSompi: string): Promise<boolean> {
-    const tx = await this.request<ChainTransaction>(
-      `/transactions/${transactionId}?inputs=true&outputs=true&resolve_previous_outpoints=full`,
-    );
+    let tx: ChainTransaction;
+    try {
+      tx = await this.request<ChainTransaction>(
+        `/transactions/${transactionId}?inputs=true&outputs=true&resolve_previous_outpoints=full`,
+      );
+    } catch (error) {
+      if (error instanceof KaspaRequestError && error.status === 404) return false;
+      throw error;
+    }
     if (!tx.is_accepted || !tx.inputs?.length || !tx.outputs?.length) return false;
     if (!tx.inputs.every((input) => input.previous_outpoint_resolved?.script_public_key_address === buyer)) return false;
     return tx.outputs.some((output) => String(output.amount) === amountSompi && output.script_public_key_address === creator);
@@ -75,8 +81,14 @@ export class KaspaPaymentGateway implements PaymentGateway {
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${this.api}${path}`, { headers: { "Content-Type": "application/json" }, ...init });
-    if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
+    if (!response.ok) throw new KaspaRequestError(response.status, await response.text());
     return await response.json() as T;
+  }
+}
+
+class KaspaRequestError extends Error {
+  constructor(readonly status: number, body: string) {
+    super(`Kaspa request failed: ${status} ${body}`);
   }
 }
 
