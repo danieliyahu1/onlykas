@@ -25,7 +25,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: onlykas
-          image: ghcr.io/danieliyahu1/onlykas:ed5cae1260b806cd9e04dce5246716da7d98c16a
+          image: ghcr.io/danieliyahu1/onlykas:fc6a852f9ff91e862bcd65f1a9f441189f0dcee0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
