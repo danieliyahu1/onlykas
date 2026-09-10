@@ -13,6 +13,7 @@
     "start": "pnpm --filter @onlykas/backend start",
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:e2e": "playwright test",
+    "test:contract": "cargo test --manifest-path backend/contracts/consensus-tests/Cargo.toml",
     "test:unit": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   },

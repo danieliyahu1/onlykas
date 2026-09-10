@@ -64,9 +64,9 @@ describe("KaspaMembershipGateway", () => {
           }],
         });
       if (url.includes(encodeURIComponent(creator)))
-        return Response.json([funding(creator, "11".repeat(32), "30000000")]);
+        return Response.json([funding(creator, "11".repeat(32), "100000000")]);
       if (url.includes(encodeURIComponent(buyer)))
-        return Response.json([funding(buyer, "22".repeat(32), "200000000")]);
+        return Response.json([funding(buyer, "22".repeat(32), "6000000000")]);
       return new Response("not found", { status: 404 });
     }));
     const gateway = new KaspaMembershipGateway("https://node.test");
@@ -86,7 +86,7 @@ describe("KaspaMembershipGateway", () => {
     expect(mintTransaction.outputs[1]?.covenant?.covenantId.toString()).toBe(offer.covenantId);
     const inputValue = mintTransaction.inputs.reduce((sum, input) => sum + (input.utxo?.amount ?? 0n), 0n);
     const outputValue = mintTransaction.outputs.reduce((sum, output) => sum + output.value, 0n);
-    expect(inputValue).toBeGreaterThan(outputValue);
+    expect(inputValue - outputValue).toBe(1_490_700n);
   });
 
   it("prices fees from version 1 compute mass", async () => {
@@ -98,7 +98,7 @@ describe("KaspaMembershipGateway", () => {
         return Response.json([{
           outpoint: { transactionId: "11".repeat(32), index: 0 },
           utxoEntry: {
-            amount: "30000000",
+            amount: "100000000",
             scriptPublicKey: { scriptPublicKey: addressScript(creator).slice(4) },
             blockDaaScore: "100",
             isCoinbase: false,
@@ -113,7 +113,7 @@ describe("KaspaMembershipGateway", () => {
     const inputValue = transaction.inputs.reduce((sum, input) => sum + (input.utxo?.amount ?? 0n), 0n);
     const outputValue = transaction.outputs.reduce((sum, output) => sum + output.value, 0n);
 
-    expect(inputValue - outputValue).toBeGreaterThanOrEqual(608_300n);
+    expect(inputValue - outputValue).toBe(608_300n);
   });
 
   it("submits version 1 inputs using compute budgets", async () => {
@@ -129,7 +129,7 @@ describe("KaspaMembershipGateway", () => {
         return Response.json([{
           outpoint: { transactionId: "11".repeat(32), index: 0 },
           utxoEntry: {
-            amount: "30000000",
+            amount: "100000000",
             scriptPublicKey: { scriptPublicKey: addressScript(creator).slice(4) },
             blockDaaScore: "100",
             isCoinbase: false,

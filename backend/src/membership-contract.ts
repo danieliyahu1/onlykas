@@ -7,8 +7,8 @@ import artifact from "./contracts/membership.json" with { type: "json" };
 
 export const MEMBERSHIP_PRICE_SOMPI = 100_000_000n;
 export const MEMBERSHIP_DURATION_DAA = 864_000n;
-export const MEMBERSHIP_INDEX_VALUE = 1_000n;
-export const MEMBERSHIP_OUTPUT_VALUE = 10_000_000n;
+export const MEMBERSHIP_INDEX_VALUE = 50_000_000n;
+export const MEMBERSHIP_OUTPUT_VALUE = 50_000_000n;
 export const MEMBERSHIP_PROTOCOL = "onlykas-membership-v1";
 
 export interface MembershipState {
@@ -132,12 +132,17 @@ export function parseMembershipPayload(payload: string | undefined): string | nu
 }
 
 function encodeState(state: MembershipState): Uint8Array {
-  const builder = new ScriptBuilder({ flags: { covenantsEnabled: true } });
-  builder.addData(state.creator);
-  builder.addData(state.owner);
-  builder.addData(hex(encodePositiveI64(state.expiresAtDaa)));
-  builder.addData(state.isMinter ? "01" : "00");
-  return Uint8Array.from(Buffer.from(builder.toString(), "hex"));
+  return concat(
+    fixedPush(Buffer.from(state.creator, "hex")),
+    fixedPush(Buffer.from(state.owner, "hex")),
+    fixedPush(encodePositiveI64(state.expiresAtDaa)),
+    fixedPush(Uint8Array.of(state.isMinter ? 1 : 0)),
+  );
+}
+
+function fixedPush(value: Uint8Array): Uint8Array {
+  if (value.length > 75) throw new Error("MEMBERSHIP_STATE_FIELD_TOO_LARGE");
+  return concat(Uint8Array.of(value.length), value);
 }
 
 function encodePositiveI64(value: bigint): Uint8Array {

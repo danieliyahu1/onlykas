@@ -8,8 +8,8 @@ contract Membership(
 ) {
     int constant MEMBERSHIP_LIFETIME_DAA = 864000;
     int constant MEMBERSHIP_PRICE = 100000000;
-    int constant INDEX_OUTPUT_VALUE = 1000;
-    int constant MEMBERSHIP_OUTPUT_VALUE = 10000000;
+    int constant INDEX_OUTPUT_VALUE = 50000000;
+    int constant MEMBERSHIP_OUTPUT_VALUE = 50000000;
 
     byte[32] creator = initialCreator;
     byte[32] owner = initialOwner;

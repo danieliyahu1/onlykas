@@ -6,6 +6,7 @@ playwright-report/
 test-results/
 coverage/
 dist/
+target/
 node_modules/
 *.tsbuildinfo
 console-full.log

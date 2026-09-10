@@ -16,7 +16,7 @@ describe("membership contract codec", () => {
     expect(Object.keys(artifact.contracts.Membership.entries)).toEqual(["mint"]);
   });
 
-  it("round-trips state through the compiled RC-1 template", () => {
+  it("round-trips state through the compiled v1.0.0 template", () => {
     const state: MembershipState = {
       creator: addressPublicKey(creator),
       owner: addressPublicKey(buyer),
@@ -25,6 +25,20 @@ describe("membership contract codec", () => {
     };
 
     expect(decodeMembershipRedeemScript(membershipRedeemScript(state))).toEqual(state);
+  });
+
+  it("preserves the fixed-width true state encoding", () => {
+    const creatorKey = addressPublicKey(creator);
+    const state: MembershipState = {
+      creator: creatorKey,
+      owner: creatorKey,
+      expiresAtDaa: 0n,
+      isMinter: true,
+    };
+    const redeemScript = membershipRedeemScript(state);
+
+    expect(redeemScript.length / 2).toBe(artifact.contracts.Membership.compiled.bytecode.length);
+    expect(decodeMembershipRedeemScript(redeemScript)).toEqual(state);
   });
 
   it("builds a mint invocation against the current minter script", () => {
