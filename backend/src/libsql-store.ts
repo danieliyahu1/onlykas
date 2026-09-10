@@ -1,9 +1,10 @@
 import { createClient, type Client } from "@libsql/client";
 import type { Challenge, CreatorCovenant, MembershipPurchase, Post, Profile, Purchase, Session, Store } from "./domain.js";
+import { logger as defaultLogger, type Logger } from "./observability.js";
 
 export class LibsqlStore implements Store {
   private readonly client: Client;
-  constructor(url: string, authToken?: string) { this.client = createClient({ url, ...(authToken ? { authToken } : {}) }); }
+  constructor(url: string, authToken?: string, private readonly logger: Logger = defaultLogger) { this.client = createClient({ url, ...(authToken ? { authToken } : {}) }); }
   async initialize() {
     await this.client.batch([
       `CREATE TABLE IF NOT EXISTS auth_challenges (id TEXT PRIMARY KEY, nonce TEXT NOT NULL UNIQUE, address TEXT NOT NULL, origin TEXT NOT NULL, network TEXT NOT NULL, message TEXT NOT NULL, expires_at INTEGER NOT NULL, consumed_at INTEGER)`,
@@ -17,6 +18,7 @@ export class LibsqlStore implements Store {
       `CREATE TABLE IF NOT EXISTS membership_purchases (transaction_id TEXT PRIMARY KEY, buyer TEXT NOT NULL)`,
       `CREATE INDEX IF NOT EXISTS membership_purchases_buyer ON membership_purchases (buyer)`,
     ], "write");
+    this.logger.info("database_initialized");
   }
   async createChallenge(v: Challenge) { await this.client.execute({ sql: `INSERT INTO auth_challenges VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: [v.id,v.nonce,v.address,v.origin,v.network,v.message,v.expiresAt,v.consumedAt] }); }
   async consumeChallenge(id: string, now: number) { const r = await this.client.execute({sql:`UPDATE auth_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>? RETURNING *`,args:[now,id,now]}); return r.rows[0] ? challengeFromRow(r.rows[0]) : null; }

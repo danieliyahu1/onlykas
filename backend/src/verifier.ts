@@ -1,5 +1,6 @@
 import type { MembershipCheck, MembershipVerifier } from "./domain.js";
 import { XOnlyPublicKey } from "@kluster/kaspa-wasm";
+import { logger as defaultLogger, type Logger } from "./observability.js";
 import {
   addressPublicKey,
   addressScript,
@@ -54,6 +55,7 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
   constructor(
     private readonly api = "https://api-tn10.kaspa.org",
     private readonly now: () => number = Date.now,
+    private readonly logger: Logger = defaultLogger,
   ) {}
 
   async verifyAddress(
@@ -169,7 +171,13 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
 
   private async request<T>(path: string): Promise<T> {
     const response = await fetch(`${this.api}${path}`, { headers: { "Content-Type": "application/json" } });
-    if (!response.ok) throw new Error(`Kaspa verification failed: ${response.status} ${await response.text()}`);
+    if (!response.ok) {
+      this.logger.error("membership_verification_failed", {
+        endpoint: path.split("/")[1] ?? path,
+        status: response.status,
+      });
+      throw new Error(`Kaspa verification failed: ${response.status} ${await response.text()}`);
+    }
     return await response.json() as T;
   }
 }

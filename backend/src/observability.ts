@@ -4,8 +4,22 @@ const sensitiveKey =
   /authorization|cookie|secret|token|password|signature|transaction|payload|url/i;
 const requestIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 
+export type LogLevel = "debug" | "info" | "warn" | "error";
 export type LogFields = Record<string, unknown>;
 export type EventLogger = (event: string, fields?: LogFields) => void;
+export interface Logger {
+  debug: EventLogger;
+  info: EventLogger;
+  warn: EventLogger;
+  error: EventLogger;
+}
+
+const levelRank: Record<LogLevel, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+};
 
 export function requestId(value: unknown): string {
   return typeof value === "string" && requestIdPattern.test(value)
@@ -33,17 +47,34 @@ export function redact(value: unknown, key?: string): unknown {
   return value;
 }
 
-export const logEvent: EventLogger = (event, fields = {}) => {
+function emit(level: LogLevel, event: string, fields: LogFields): void {
   const redacted = redact(fields);
-  console.log(
-    JSON.stringify({
-      timestamp: new Date().toISOString(),
-      level: "info",
-      event,
-      ...(redacted && typeof redacted === "object" ? redacted : {}),
-    }),
-  );
-};
+  const line = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    level,
+    event,
+    ...(redacted && typeof redacted === "object" ? redacted : {}),
+  });
+  if (level === "warn" || level === "error") process.stderr.write(`${line}\n`);
+  else process.stdout.write(`${line}\n`);
+}
+
+export function createLogger(minLevel: LogLevel = "info"): Logger {
+  const write =
+    (level: LogLevel): EventLogger =>
+    (event, fields = {}) => {
+      if (levelRank[level] < levelRank[minLevel]) return;
+      emit(level, event, fields);
+    };
+  return {
+    debug: write("debug"),
+    info: write("info"),
+    warn: write("warn"),
+    error: write("error"),
+  };
+}
+
+export const logger: Logger = createLogger("info");
 
 export function safeError(error: unknown): LogFields {
   const details = error as {

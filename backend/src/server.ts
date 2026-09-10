@@ -1,5 +1,6 @@
 import { createApp } from "./app.js";
 import { parseEnvironment } from "./config.js";
+import { createLogger } from "./observability.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { R2Storage } from "./r2-storage.js";
 import { KaspaWalletVerifier } from "./wallet-verifier.js";
@@ -8,9 +9,11 @@ import { KaspaPaymentGateway } from "./payment-gateway.js";
 import { KaspaMembershipGateway } from "./membership-gateway.js";
 
 const environment = parseEnvironment(process.env);
+const logger = createLogger(environment.LOG_LEVEL);
 const store = new LibsqlStore(
   environment.DATABASE_URL,
   environment.DATABASE_AUTH_TOKEN,
+  logger,
 );
 const storage = new R2Storage(environment.R2_BUCKET, {
   endpoint: environment.R2_ENDPOINT,
@@ -25,14 +28,18 @@ const app = createApp({
   storage,
   walletVerifier: new KaspaWalletVerifier(),
   paymentGateway: new KaspaPaymentGateway(environment.KASPA_NODE_URL),
-  membershipGateway: new KaspaMembershipGateway(environment.KASPA_NODE_URL),
+  membershipGateway: new KaspaMembershipGateway(
+    environment.KASPA_NODE_URL,
+    undefined,
+    undefined,
+    logger,
+  ),
   membershipVerifier: new KaspaMembershipVerifier(environment.KASPA_NODE_URL),
   publicOrigin: environment.PUBLIC_ORIGIN,
   production: environment.NODE_ENV === "production",
+  logger,
 });
 app.listen(environment.PORT, "0.0.0.0", () =>
-  console.log(
-    JSON.stringify({ event: "server_started", port: environment.PORT }),
-  ),
+  logger.info("server_started", { port: environment.PORT }),
 );
 

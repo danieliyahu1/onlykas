@@ -1,9 +1,11 @@
 import { z } from "zod";
+import type { LogLevel } from "./observability.js";
 
 const environmentSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).optional(),
   PORT: z.coerce.number().int().positive().default(3000),
   PUBLIC_ORIGIN: z.string().url(),
   DATABASE_URL: z.string().min(1),
@@ -19,8 +21,16 @@ const environmentSchema = z.object({
   MEDIA_JOB_STALE_MS: z.coerce.number().int().positive().default(300_000),
 });
 
-export type Environment = z.infer<typeof environmentSchema>;
+export type Environment = z.infer<typeof environmentSchema> & {
+  LOG_LEVEL: LogLevel;
+};
 
 export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
-  return environmentSchema.parse(input);
+  const parsed = environmentSchema.parse(input);
+  return {
+    ...parsed,
+    LOG_LEVEL:
+      parsed.LOG_LEVEL ??
+      (parsed.NODE_ENV === "production" ? "info" : "debug"),
+  };
 }

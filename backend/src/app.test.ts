@@ -1,7 +1,7 @@
 import request from "supertest";
 import { createApp } from "./app.js";
 import { MemoryStore } from "./memory-store.js";
-import type { EventLogger } from "./observability.js";
+import type { EventLogger, Logger } from "./observability.js";
 import type { ObjectStorage, PaymentGateway, Post, Store } from "./domain.js";
 
 describe("API request diagnostics", () => {
@@ -160,8 +160,16 @@ describe("payment confirmation", () => {
 
 function testApp(store: Store = new MemoryStore(), paymentGateway?: PaymentGateway) {
   const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
-  const logger: EventLogger = (event, fields = {}) => {
-    events.push({ event, fields });
+  const record =
+    (level: string): EventLogger =>
+    (event, fields = {}) => {
+      events.push({ event, fields: { level, ...fields } });
+    };
+  const logger: Logger = {
+    debug: record("debug"),
+    info: record("info"),
+    warn: record("warn"),
+    error: record("error"),
   };
   const storage: ObjectStorage = {
     putFile: async () => undefined,

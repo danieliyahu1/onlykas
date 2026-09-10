@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PaymentGateway, PaymentSubmission, Post, PreparedPayment } from "./domain.js";
+import { logger as defaultLogger, type Logger } from "./observability.js";
 
 const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const ZERO_SUBNETWORK = "0".repeat(40);
@@ -14,6 +15,7 @@ export class KaspaPaymentGateway implements PaymentGateway {
   constructor(
     private readonly api = "https://api-tn10.kaspa.org",
     private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    private readonly logger: Logger = defaultLogger,
   ) {}
 
   async prepare(post: Post, buyer: string): Promise<PreparedPayment> {
@@ -33,26 +35,47 @@ export class KaspaPaymentGateway implements PaymentGateway {
       if (total >= amount + estimatedFee(selected.length, rate)) break;
     }
     const fee = estimatedFee(selected.length, rate);
-    if (total < amount + fee) throw new Error("INSUFFICIENT_FUNDS");
+    if (total < amount + fee) {
+      this.logger.warn("payment_prepare_insufficient_funds", {
+        postId: post.id,
+        amountSompi: post.priceSompi,
+      });
+      throw new Error("INSUFFICIENT_FUNDS");
+    }
     const outputs = [{ value: amount.toString(), scriptPublicKey: scriptFor(post.creator), covenant: null }];
     const change = total - amount - fee;
     if (change > 0n) outputs.push({ value: change.toString(), scriptPublicKey: buyerScript, covenant: null });
     const transaction = JSON.stringify({ id: "0".repeat(64), version: 0, inputs: selected.map((utxo) => ({ transactionId: utxo.outpoint.transactionId, index: utxo.outpoint.index, sequence: "0", sigOpCount: 1, computeBudget: 0, signatureScript: "", utxo: { amount: utxo.utxoEntry.amount, scriptPublicKey: `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}`, blockDaaScore: utxo.utxoEntry.blockDaaScore, isCoinbase: utxo.utxoEntry.isCoinbase } })), outputs, subnetworkId: ZERO_SUBNETWORK, lockTime: "0", gas: "0", storageMass: "20000", payload: "" });
+    this.logger.debug("payment_prepared", {
+      postId: post.id,
+      inputCount: selected.length,
+      outputCount: outputs.length,
+      amountSompi: post.priceSompi,
+    });
     return { transaction, fingerprint: digest(transaction), amountSompi: post.priceSompi, creator: post.creator };
   }
 
   async submit(prepared: PreparedPayment, signedTransaction: string): Promise<PaymentSubmission> {
     let signed: Record<string, unknown>;
-    try { signed = JSON.parse(signedTransaction) as Record<string, unknown>; } catch { return rejected("INVALID_TRANSACTION"); }
+    try { signed = JSON.parse(signedTransaction) as Record<string, unknown>; } catch { return this.reject("INVALID_TRANSACTION"); }
     const original = JSON.parse(prepared.transaction) as Record<string, unknown>;
-    if (!isTransactionShape(original) || !isTransactionShape(signed)) return rejected("INVALID_TRANSACTION");
-    if (digest(prepared.transaction) !== prepared.fingerprint) return rejected("INVALID_PREPARED_TEMPLATE");
-    if (!sameTransaction(original, signed)) return rejected("PREPARED_TRANSACTION_CHANGED");
-    if (!hasAllSignatures(signed)) return rejected("INVALID_SIGNATURES");
+    if (!isTransactionShape(original) || !isTransactionShape(signed)) return this.reject("INVALID_TRANSACTION");
+    if (digest(prepared.transaction) !== prepared.fingerprint) return this.reject("INVALID_PREPARED_TEMPLATE");
+    if (!sameTransaction(original, signed)) return this.reject("PREPARED_TRANSACTION_CHANGED");
+    if (!hasAllSignatures(signed)) return this.reject("INVALID_SIGNATURES");
     await this.validateInputs(signed);
     const result = await this.request<{ transactionId?: string; error?: string }>("/transactions", { method: "POST", body: JSON.stringify({ transaction: toSubmitTransaction(signed), allowOrphan: false }) });
-    if (result.error || !result.transactionId) return rejected(result.error ?? "TRANSACTION_REJECTED", result.transactionId ?? null);
+    if (result.error || !result.transactionId) return this.reject(result.error ?? "TRANSACTION_REJECTED", result.transactionId ?? null);
+    this.logger.info("payment_submitted", { transactionIdPrefix: result.transactionId.slice(0, 12) });
     return this.status(result.transactionId);
+  }
+
+  private reject(reason: string, transactionId: string | null = null): PaymentSubmission {
+    this.logger.warn("payment_submit_rejected", {
+      reason,
+      ...(transactionId ? { transactionIdPrefix: transactionId.slice(0, 12) } : {}),
+    });
+    return rejected(reason, transactionId);
   }
 
   async status(transactionId: string): Promise<PaymentSubmission> {

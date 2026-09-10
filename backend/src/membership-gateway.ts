@@ -33,7 +33,7 @@ import {
   membershipScript,
   type MembershipState,
 } from "./membership-contract.js";
-import { logEvent, safeError, type EventLogger } from "./observability.js";
+import { logger as defaultLogger, safeError, type Logger } from "./observability.js";
 
 const ZERO_SUBNETWORK = "0".repeat(40);
 const WALLET_COMPUTE_BUDGET = 50;
@@ -93,7 +93,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     private readonly api = "https://api-tn10.kaspa.org",
     private readonly relay: MembershipTransactionRelay = submitMembershipTransactionOverWrpc,
     private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-    private readonly logger: EventLogger = logEvent,
+    private readonly logger: Logger = defaultLogger,
   ) {}
 
   async prepareOffer(creator: string): Promise<PreparedMembershipTransaction> {
@@ -130,7 +130,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     if (change > 0n)
       outputs.push({ value: change.toString(), scriptPublicKey: addressScript(creator), covenant: null });
     const result = prepared(transaction(selected.map(walletInput), outputs, ""), id, selected.map((_, index) => index), null);
-    this.logger("membership_transaction_prepared", {
+    this.logger.debug("membership_transaction_prepared", {
       kind: "offer",
       inputCount: selected.length,
       outputCount: outputs.length,
@@ -204,14 +204,14 @@ export class KaspaMembershipGateway implements MembershipGateway {
       1,
     );
     try {
-      this.logger("membership_preflight", {
+      this.logger.debug("membership_preflight", {
         kind: "purchase",
         checks: membershipPreflight(creator, buyer, minter, member, inputs, outputs, virtualDaaScore),
       });
     } catch {
       // Diagnostics must never affect transaction preparation or submission.
     }
-    this.logger("membership_transaction_prepared", {
+    this.logger.debug("membership_transaction_prepared", {
       kind: "purchase",
       inputCount: inputs.length,
       outputCount: outputs.length,
@@ -237,7 +237,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
       return rejected("PREPARED_TRANSACTION_CHANGED");
     if (!preparedValue.signInputs.every((index) => validSignature(signed.inputs[index]?.signatureScript)))
       return rejected("INVALID_SIGNATURES");
-    this.logger("membership_transaction_signed", {
+    this.logger.debug("membership_transaction_signed", {
       signInputs: preparedValue.signInputs,
       signedSummary: transactionSummary(signedTransaction),
       sigDiagnostics: signatureSummary(signed, preparedValue.signInputs),
@@ -246,7 +246,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     try {
       transactionId = await this.relay(signedTransaction);
     } catch (error) {
-      this.logger("membership_transaction_relay_failed", {
+      this.logger.error("membership_transaction_relay_failed", {
         signInputs: preparedValue.signInputs,
         signedSummary: transactionSummary(signedTransaction),
         error: safeError(error),
@@ -254,17 +254,17 @@ export class KaspaMembershipGateway implements MembershipGateway {
       });
       throw error;
     }
-    this.logger("membership_transaction_relayed", {
+    this.logger.info("membership_transaction_relayed", {
       txIdPrefix: transactionId.slice(0, 12),
     });
     const chain = await this.waitForTransaction(transactionId);
     if (!chain) {
-      this.logger("membership_transaction_confirmation_timeout", {
+      this.logger.warn("membership_transaction_confirmation_timeout", {
         txIdPrefix: transactionId.slice(0, 12),
       });
       throw new Error(`Transaction ${transactionId} was not confirmed on chain`);
     }
-    this.logger("membership_transaction_confirmed", {
+    this.logger.info("membership_transaction_confirmed", {
       txIdPrefix: transactionId.slice(0, 12),
       accepted: chain.is_accepted === true,
     });

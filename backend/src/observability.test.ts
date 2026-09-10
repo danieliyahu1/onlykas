@@ -1,4 +1,4 @@
-import { redact, requestId, safeError } from "./observability.js";
+import { createLogger, redact, requestId, safeError } from "./observability.js";
 
 describe("observability safeguards", () => {
   it("redacts sensitive fields and URLs recursively", () => {
@@ -57,5 +57,35 @@ describe("observability safeguards", () => {
       storageCauseCode: "NoSuchKey",
       storageCauseStatusCode: 404,
     });
+  });
+});
+
+describe("logger levels", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("suppresses events below the configured level", () => {
+    const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    const logger = createLogger("warn");
+
+    logger.debug("debug_event");
+    logger.info("info_event");
+    logger.warn("warn_event");
+    logger.error("error_event");
+
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).toHaveBeenCalledTimes(2);
+  });
+
+  it("routes info to stdout and errors to stderr", () => {
+    const stdout = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    const logger = createLogger("debug");
+
+    logger.info("info_event");
+    logger.error("error_event");
+
+    expect(stdout).toHaveBeenCalledTimes(1);
+    expect(stderr).toHaveBeenCalledTimes(1);
   });
 });
