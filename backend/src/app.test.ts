@@ -78,6 +78,27 @@ describe("API request diagnostics", () => {
     });
     expect(JSON.stringify(events)).not.toContain("do-not-log");
   });
+
+  it("does not crash when an API route does not exist", async () => {
+    const { app, events } = testApp();
+
+    const response = await request(app)
+      .get("/api/does-not-exist")
+      .set("X-Request-Id", "missing-route");
+
+    expect(response.status).toBe(404);
+    expect(events).toContainEqual({
+      event: "request_completed",
+      fields: expect.objectContaining({
+        requestId: "missing-route",
+        path: "/api/does-not-exist",
+        statusCode: 404,
+      }),
+    });
+    expect(
+      events.some((entry) => "postId" in entry.fields),
+    ).toBe(false);
+  });
 });
 
 describe("payment confirmation", () => {
