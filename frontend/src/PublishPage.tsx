@@ -162,7 +162,6 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
             ) : (
               <label className="media-prompt" htmlFor="media">
                 <strong>Add a photo or video</strong>
-                <span>It is the only thing you need.</span>
               </label>
             )}
             {uploading && (
