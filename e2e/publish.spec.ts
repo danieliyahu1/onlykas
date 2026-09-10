@@ -5,7 +5,7 @@ test("creator entry point becomes ready after choosing media", async ({
 }) => {
   await page.goto("/publish");
   await expect(
-    page.getByRole("heading", { name: /share with your fans/i }),
+    page.getByRole("heading", { name: "Share with your fans" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: /^publish/i })).toBeDisabled();
   await expect(

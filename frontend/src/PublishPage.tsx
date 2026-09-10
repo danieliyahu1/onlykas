@@ -133,7 +133,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
   return (
     <section className="publish-card">
       <header className="publish-intro">
-        <h1>Share with your fans.</h1>
+        <h1>Share with your fans</h1>
       </header>
       <form onSubmit={(event) => void publishSelected(event)}>
         <div className="publish-upload">
