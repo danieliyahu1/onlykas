@@ -1,3 +1,5 @@
+import { COPY } from "@onlykas/shared";
+
 export function uploadMedia(
   file: File,
   caption: string,
@@ -17,7 +19,7 @@ export function uploadMedia(
       if (event.lengthComputable)
         onProgress(Math.round((event.loaded / event.total) * 100));
     };
-    request.onerror = () => reject(new Error("Upload failed"));
+    request.onerror = () => reject(new Error(COPY.serverDown));
     request.onload = () => {
       let body: { id?: string; message?: string } = {};
       try {

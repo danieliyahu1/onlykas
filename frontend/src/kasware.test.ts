@@ -107,4 +107,17 @@ describe("Kasware authentication", () => {
     });
     fetchMock.mockRestore();
   });
+
+  it("reports the server as down when the network request fails", async () => {
+    const fetchMock = vi
+      .spyOn(window, "fetch")
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(api("/api/profile")).rejects.toMatchObject({
+      code: "SERVER_UNAVAILABLE",
+      message: COPY.serverDown,
+      status: 0,
+    });
+    fetchMock.mockRestore();
+  });
 });

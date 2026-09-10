@@ -146,6 +146,8 @@ export async function api<T = unknown>(
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
+  }).catch(() => {
+    throw new ApiError("SERVER_UNAVAILABLE", COPY.serverDown, 0);
   });
   const body =
     response.status === 204

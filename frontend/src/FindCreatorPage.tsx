@@ -4,7 +4,7 @@ import {
   isKaspaTestnetAddress,
   type CreatorSearchResult,
 } from "@onlykas/shared";
-import { api } from "./kasware.js";
+import { api, ApiError } from "./kasware.js";
 import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
@@ -42,7 +42,13 @@ export function FindCreatorPage() {
         setResults(found);
         setSearched(true);
       })
-      .catch(() => setError("Profiles could not be found. Try again."))
+      .catch((error: unknown) =>
+        setError(
+          error instanceof ApiError
+            ? error.message
+            : "Profiles could not be found. Try again.",
+        ),
+      )
       .finally(() => setSearching(false));
   }, [navigate, searchParams]);
 

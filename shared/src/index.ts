@@ -19,6 +19,7 @@ export const COPY = {
   walletCancelled: "Wallet connection cancelled.",
   signInCancelled: "Sign-in cancelled.",
   verificationFailed: "OnlyKas could not verify this wallet. Try again.",
+  serverDown: "Server is down. Try again shortly.",
   unsupportedMedia: "Choose a JPEG, PNG, WebP, MP4, or WebM file.",
   imageTooLarge: "Images can be up to 25 MB.",
   videoTooLarge: "Videos can be up to 100 MB.",

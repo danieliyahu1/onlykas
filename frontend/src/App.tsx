@@ -8,7 +8,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { COPY, type ProfileResponse } from "@onlykas/shared";
-import { authenticate, kasware, WalletError, api } from "./kasware.js";
+import { authenticate, kasware, WalletError, ApiError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
@@ -81,7 +81,9 @@ export function App() {
       return authenticatedAddress;
     } catch (error) {
       setWalletError(
-        error instanceof WalletError ? error.message : COPY.verificationFailed,
+        error instanceof WalletError || error instanceof ApiError
+          ? error.message
+          : COPY.verificationFailed,
       );
       return null;
     } finally {
