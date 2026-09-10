@@ -1,5 +1,5 @@
 import { createClient, type Client } from "@libsql/client";
-import type { Challenge, CreatorCovenant, MembershipPurchase, Post, Profile, Purchase, Session, Store } from "./domain.js";
+import type { Challenge, CreatorCovenant, MembershipPurchase, Post, PreparedMembershipRecord, PreparedPaymentRecord, Profile, Purchase, Session, Store } from "./domain.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 
 export class LibsqlStore implements Store {
@@ -17,12 +17,22 @@ export class LibsqlStore implements Store {
       `CREATE TABLE IF NOT EXISTS creator_covenants (creator TEXT PRIMARY KEY, covenant_id TEXT NOT NULL UNIQUE)`,
       `CREATE TABLE IF NOT EXISTS membership_purchases (transaction_id TEXT PRIMARY KEY, buyer TEXT NOT NULL)`,
       `CREATE INDEX IF NOT EXISTS membership_purchases_buyer ON membership_purchases (buyer)`,
+      `CREATE TABLE IF NOT EXISTS prepared_payments (id TEXT PRIMARY KEY, transaction_json TEXT NOT NULL, fingerprint TEXT NOT NULL, amount_sompi TEXT NOT NULL, creator TEXT NOT NULL, post_id TEXT NOT NULL, buyer TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS prepared_memberships (id TEXT PRIMARY KEY, transaction_json TEXT NOT NULL, fingerprint TEXT NOT NULL, covenant_id TEXT NOT NULL, sign_inputs TEXT NOT NULL, member_output_index INTEGER, creator TEXT NOT NULL, buyer TEXT NOT NULL, kind TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
     ], "write");
     this.logger.info("database_initialized");
   }
   async createChallenge(v: Challenge) { await this.client.execute({ sql: `INSERT INTO auth_challenges VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: [v.id,v.nonce,v.address,v.origin,v.network,v.message,v.expiresAt,v.consumedAt] }); }
   async consumeChallenge(id: string, now: number) { const r = await this.client.execute({sql:`UPDATE auth_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>? RETURNING *`,args:[now,id,now]}); return r.rows[0] ? challengeFromRow(r.rows[0]) : null; }
   async pruneChallenges(now: number) { await this.client.execute({sql:`DELETE FROM auth_challenges WHERE consumed_at IS NOT NULL OR expires_at<=?`,args:[now]}); }
+  async savePreparedPayment(v: PreparedPaymentRecord) { await this.client.execute({sql:`INSERT INTO prepared_payments VALUES (?,?,?,?,?,?,?,?)`,args:[v.id,v.transaction,v.fingerprint,v.amountSompi,v.creator,v.postId,v.buyer,v.expiresAt]}); }
+  async getPreparedPayment(id: string, now: number) { const r=await this.client.execute({sql:`SELECT * FROM prepared_payments WHERE id=? AND expires_at>?`,args:[id,now]}); return r.rows[0] ? preparedPaymentFromRow(r.rows[0]) : null; }
+  async deletePreparedPayment(id: string) { await this.client.execute({sql:`DELETE FROM prepared_payments WHERE id=?`,args:[id]}); }
+  async prunePreparedPayments(now: number) { await this.client.execute({sql:`DELETE FROM prepared_payments WHERE expires_at<=?`,args:[now]}); }
+  async savePreparedMembership(v: PreparedMembershipRecord) { await this.client.execute({sql:`INSERT INTO prepared_memberships VALUES (?,?,?,?,?,?,?,?,?,?)`,args:[v.id,v.transaction,v.fingerprint,v.covenantId,JSON.stringify(v.signInputs),v.memberOutputIndex,v.creator,v.buyer,v.kind,v.expiresAt]}); }
+  async getPreparedMembership(id: string, now: number) { const r=await this.client.execute({sql:`SELECT * FROM prepared_memberships WHERE id=? AND expires_at>?`,args:[id,now]}); return r.rows[0] ? preparedMembershipFromRow(r.rows[0]) : null; }
+  async deletePreparedMembership(id: string) { await this.client.execute({sql:`DELETE FROM prepared_memberships WHERE id=?`,args:[id]}); }
+  async prunePreparedMemberships(now: number) { await this.client.execute({sql:`DELETE FROM prepared_memberships WHERE expires_at<=?`,args:[now]}); }
   async createSession(v: Session) { await this.client.execute({sql:`INSERT INTO sessions VALUES (?,?,?)`,args:[v.id,v.address,v.expiresAt]}); }
   async getSession(id: string, now: number) { const r=await this.client.execute({sql:`SELECT * FROM sessions WHERE id=? AND expires_at>?`,args:[id,now]}); return r.rows[0] ? {id:text(r.rows[0].id),address:text(r.rows[0].address),expiresAt:number(r.rows[0].expires_at)} : null; }
   async rollSession(id: string, expiresAt: number) { await this.client.execute({sql:`UPDATE sessions SET expires_at=? WHERE id=?`,args:[expiresAt,id]}); }
@@ -48,3 +58,5 @@ const postFromRow=(r:Record<string,unknown>):Post=>({id:text(r.id),creator:text(
 const purchaseFromRow=(r:Record<string,unknown>):Purchase=>({postId:text(r.post_id),buyer:text(r.buyer),transactionId:text(r.transaction_id)});
 const creatorCovenantFromRow=(r:Record<string,unknown>):CreatorCovenant=>({creator:text(r.creator),covenantId:text(r.covenant_id)});
 const membershipPurchaseFromRow=(r:Record<string,unknown>):MembershipPurchase=>({transactionId:text(r.transaction_id),buyer:text(r.buyer)});
+const preparedPaymentFromRow=(r:Record<string,unknown>):PreparedPaymentRecord=>({id:text(r.id),transaction:text(r.transaction_json),fingerprint:text(r.fingerprint),amountSompi:text(r.amount_sompi),creator:text(r.creator),postId:text(r.post_id),buyer:text(r.buyer),expiresAt:number(r.expires_at)});
+const preparedMembershipFromRow=(r:Record<string,unknown>):PreparedMembershipRecord=>({id:text(r.id),transaction:text(r.transaction_json),fingerprint:text(r.fingerprint),covenantId:text(r.covenant_id),signInputs:JSON.parse(text(r.sign_inputs)) as number[],memberOutputIndex:r.member_output_index===null?null:number(r.member_output_index),creator:text(r.creator),buyer:text(r.buyer),kind:text(r.kind) as PreparedMembershipRecord["kind"],expiresAt:number(r.expires_at)});

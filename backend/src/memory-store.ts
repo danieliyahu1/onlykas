@@ -1,4 +1,4 @@
-import type { Challenge, CreatorCovenant, MembershipPurchase, Post, Profile, Purchase, Session, Store } from "./domain.js";
+import type { Challenge, CreatorCovenant, MembershipPurchase, Post, PreparedMembershipRecord, PreparedPaymentRecord, Profile, Purchase, Session, Store } from "./domain.js";
 
 export class MemoryStore implements Store {
   readonly challenges = new Map<string, Challenge>(); readonly sessions = new Map<string, Session>();
@@ -6,10 +6,20 @@ export class MemoryStore implements Store {
   readonly purchases = new Map<string, Purchase>();
   readonly creatorCovenants = new Map<string, CreatorCovenant>();
   readonly membershipPurchaseRecords = new Map<string, MembershipPurchase>();
+  readonly preparedPaymentRecords = new Map<string, PreparedPaymentRecord>();
+  readonly preparedMembershipRecords = new Map<string, PreparedMembershipRecord>();
   async initialize() {}
   async createChallenge(v: Challenge) { this.challenges.set(v.id, structuredClone(v)); }
   async consumeChallenge(id: string, now: number) { const v = this.challenges.get(id); if (!v || v.consumedAt !== null || v.expiresAt <= now) return null; v.consumedAt = now; return structuredClone(v); }
   async pruneChallenges(now: number) { for (const [id, v] of this.challenges) if (v.consumedAt !== null || v.expiresAt <= now) this.challenges.delete(id); }
+  async savePreparedPayment(v: PreparedPaymentRecord) { this.preparedPaymentRecords.set(v.id, structuredClone(v)); }
+  async getPreparedPayment(id: string, now: number) { const v = this.preparedPaymentRecords.get(id); return v && v.expiresAt > now ? structuredClone(v) : null; }
+  async deletePreparedPayment(id: string) { this.preparedPaymentRecords.delete(id); }
+  async prunePreparedPayments(now: number) { for (const [id, v] of this.preparedPaymentRecords) if (v.expiresAt <= now) this.preparedPaymentRecords.delete(id); }
+  async savePreparedMembership(v: PreparedMembershipRecord) { this.preparedMembershipRecords.set(v.id, structuredClone(v)); }
+  async getPreparedMembership(id: string, now: number) { const v = this.preparedMembershipRecords.get(id); return v && v.expiresAt > now ? structuredClone(v) : null; }
+  async deletePreparedMembership(id: string) { this.preparedMembershipRecords.delete(id); }
+  async prunePreparedMemberships(now: number) { for (const [id, v] of this.preparedMembershipRecords) if (v.expiresAt <= now) this.preparedMembershipRecords.delete(id); }
   async createSession(v: Session) { this.sessions.set(v.id, structuredClone(v)); }
   async getSession(id: string, now: number) { const v = this.sessions.get(id); return v && v.expiresAt > now ? structuredClone(v) : null; }
   async rollSession(id: string, expiresAt: number) { const v = this.sessions.get(id); if (v) v.expiresAt = expiresAt; }

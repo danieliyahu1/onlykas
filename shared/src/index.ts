@@ -2,6 +2,7 @@ export const NETWORK = "kaspa_testnet_10" as const;
 export const CHALLENGE_TTL_MS = 2 * 60 * 1_000;
 export const SESSION_IDLE_TTL_MS = 15 * 60 * 1_000;
 export const PAYMENT_RECEIPT_TTL_MS = 15 * 60 * 1_000;
+export const PREPARED_TTL_MS = 5 * 60 * 1_000;
 export const UPLOAD_TTL_MS = 24 * 60 * 60 * 1_000;
 export const MEMBERSHIP_DESCRIPTION_MAX = 280;
 export const MAX_IMAGE_BYTES = 25_000_000;

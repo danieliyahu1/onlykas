@@ -22,11 +22,22 @@ export interface MembershipGateway {
   submit(prepared: PreparedMembershipTransaction, signedTransaction: string): Promise<PaymentSubmission>;
 }
 
+export interface PreparedPaymentRecord { id: string; transaction: string; fingerprint: string; amountSompi: string; creator: string; postId: string; buyer: string; expiresAt: number; }
+export interface PreparedMembershipRecord { id: string; transaction: string; fingerprint: string; covenantId: string; signInputs: number[]; memberOutputIndex: number | null; creator: string; buyer: string; kind: "offer" | "purchase"; expiresAt: number; }
+
 export interface Store {
   initialize(): Promise<void>;
   createChallenge(value: Challenge): Promise<void>;
   consumeChallenge(id: string, now: number): Promise<Challenge | null>;
   pruneChallenges(now: number): Promise<void>;
+  savePreparedPayment(value: PreparedPaymentRecord): Promise<void>;
+  getPreparedPayment(id: string, now: number): Promise<PreparedPaymentRecord | null>;
+  deletePreparedPayment(id: string): Promise<void>;
+  prunePreparedPayments(now: number): Promise<void>;
+  savePreparedMembership(value: PreparedMembershipRecord): Promise<void>;
+  getPreparedMembership(id: string, now: number): Promise<PreparedMembershipRecord | null>;
+  deletePreparedMembership(id: string): Promise<void>;
+  prunePreparedMemberships(now: number): Promise<void>;
   createSession(value: Session): Promise<void>;
   getSession(id: string, now: number): Promise<Session | null>;
   rollSession(id: string, expiresAt: number): Promise<void>;
