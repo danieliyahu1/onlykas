@@ -3,7 +3,7 @@ import type { PaymentGateway, PaymentSubmission, Post, PreparedPayment } from ".
 
 const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const ZERO_SUBNETWORK = "0".repeat(40);
-const VERIFY_MAX_ATTEMPTS = 3;
+const VERIFY_MAX_ATTEMPTS = 5;
 const VERIFY_BASE_DELAY_MS = 1_000;
 const VERIFY_MAX_DELAY_MS = 4_000;
 type Sleep = (milliseconds: number) => Promise<void>;
@@ -56,28 +56,33 @@ export class KaspaPaymentGateway implements PaymentGateway {
   }
 
   async status(transactionId: string): Promise<PaymentSubmission> {
-    const value = await this.request<{ is_accepted: boolean }>(`/transactions/${transactionId}`);
-    return { isAccepted: value.is_accepted ? true : null, transactionId, rejection: null };
+    const value = await this.requestRetryingMissing<{ is_accepted: boolean }>(`/transactions/${transactionId}`);
+    return { isAccepted: value?.is_accepted ? true : null, transactionId, rejection: null };
   }
 
   async verifyPurchase(transactionId: string, buyer: string, creator: string, amountSompi: string): Promise<boolean> {
+    const tx = await this.requestRetryingMissing<ChainTransaction>(
+      `/transactions/${transactionId}?inputs=true&outputs=true&resolve_previous_outpoints=full`,
+    );
+    if (!tx) return false;
+    if (!tx.is_accepted || !tx.inputs?.length || !tx.outputs?.length) return false;
+    if (!tx.inputs.every((input) => input.previous_outpoint_resolved?.script_public_key_address === buyer)) return false;
+    return tx.outputs.some((output) => String(output.amount) === amountSompi && output.script_public_key_address === creator);
+  }
+
+  private async requestRetryingMissing<T>(path: string): Promise<T | null> {
     let delay = VERIFY_BASE_DELAY_MS;
     for (let attempt = 0; attempt < VERIFY_MAX_ATTEMPTS; attempt++) {
       try {
-        const tx = await this.request<ChainTransaction>(
-          `/transactions/${transactionId}?inputs=true&outputs=true&resolve_previous_outpoints=full`,
-        );
-        if (!tx.is_accepted || !tx.inputs?.length || !tx.outputs?.length) return false;
-        if (!tx.inputs.every((input) => input.previous_outpoint_resolved?.script_public_key_address === buyer)) return false;
-        return tx.outputs.some((output) => String(output.amount) === amountSompi && output.script_public_key_address === creator);
+        return await this.request<T>(path);
       } catch (error) {
         if (!(error instanceof KaspaRequestError) || error.status !== 404) throw error;
-        if (attempt === VERIFY_MAX_ATTEMPTS - 1) return false;
+        if (attempt === VERIFY_MAX_ATTEMPTS - 1) return null;
         await this.sleep(delay);
         delay = Math.min(delay * 2, VERIFY_MAX_DELAY_MS);
       }
     }
-    return false;
+    return null;
   }
 
   private async validateInputs(transaction: Record<string, unknown>) {

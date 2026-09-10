@@ -39,7 +39,6 @@ export const COPY = {
   unlockPrompt:
     "You are supporting this creator with {price} KAS. Kasware will show the network fee before you approve. This payment cannot be reversed.",
   paymentCancelled: "Payment cancelled.",
-  confirmingPayment: "Confirming payment...",
   unlocked: "Unlocked.",
   insufficientFunds: "You need enough KAS for the post and the network fee.",
   transactionRejected:
