@@ -37,6 +37,8 @@ export const logEvent: EventLogger = (event, fields = {}) => {
   const redacted = redact(fields);
   console.log(
     JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: "info",
       event,
       ...(redacted && typeof redacted === "object" ? redacted : {}),
     }),
@@ -65,6 +67,9 @@ export function safeError(error: unknown): LogFields {
     errorMessage: redact(
       error instanceof Error ? error.message : String(error),
     ),
+    ...(error instanceof Error && error.stack
+      ? { errorStack: redact(error.stack) }
+      : {}),
     ...(typeof details.operation === "string"
       ? { storageOperation: details.operation }
       : {}),
