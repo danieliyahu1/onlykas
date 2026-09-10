@@ -26,6 +26,7 @@ export interface Store {
   initialize(): Promise<void>;
   createChallenge(value: Challenge): Promise<void>;
   consumeChallenge(id: string, now: number): Promise<Challenge | null>;
+  pruneChallenges(now: number): Promise<void>;
   createSession(value: Session): Promise<void>;
   getSession(id: string, now: number): Promise<Session | null>;
   rollSession(id: string, expiresAt: number): Promise<void>;

@@ -9,6 +9,7 @@ export class MemoryStore implements Store {
   async initialize() {}
   async createChallenge(v: Challenge) { this.challenges.set(v.id, structuredClone(v)); }
   async consumeChallenge(id: string, now: number) { const v = this.challenges.get(id); if (!v || v.consumedAt !== null || v.expiresAt <= now) return null; v.consumedAt = now; return structuredClone(v); }
+  async pruneChallenges(now: number) { for (const [id, v] of this.challenges) if (v.consumedAt !== null || v.expiresAt <= now) this.challenges.delete(id); }
   async createSession(v: Session) { this.sessions.set(v.id, structuredClone(v)); }
   async getSession(id: string, now: number) { const v = this.sessions.get(id); return v && v.expiresAt > now ? structuredClone(v) : null; }
   async rollSession(id: string, expiresAt: number) { const v = this.sessions.get(id); if (v) v.expiresAt = expiresAt; }

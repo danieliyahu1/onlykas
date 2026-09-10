@@ -22,6 +22,7 @@ export class LibsqlStore implements Store {
   }
   async createChallenge(v: Challenge) { await this.client.execute({ sql: `INSERT INTO auth_challenges VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: [v.id,v.nonce,v.address,v.origin,v.network,v.message,v.expiresAt,v.consumedAt] }); }
   async consumeChallenge(id: string, now: number) { const r = await this.client.execute({sql:`UPDATE auth_challenges SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>? RETURNING *`,args:[now,id,now]}); return r.rows[0] ? challengeFromRow(r.rows[0]) : null; }
+  async pruneChallenges(now: number) { await this.client.execute({sql:`DELETE FROM auth_challenges WHERE consumed_at IS NOT NULL OR expires_at<=?`,args:[now]}); }
   async createSession(v: Session) { await this.client.execute({sql:`INSERT INTO sessions VALUES (?,?,?)`,args:[v.id,v.address,v.expiresAt]}); }
   async getSession(id: string, now: number) { const r=await this.client.execute({sql:`SELECT * FROM sessions WHERE id=? AND expires_at>?`,args:[id,now]}); return r.rows[0] ? {id:text(r.rows[0].id),address:text(r.rows[0].address),expiresAt:number(r.rows[0].expires_at)} : null; }
   async rollSession(id: string, expiresAt: number) { await this.client.execute({sql:`UPDATE sessions SET expires_at=? WHERE id=?`,args:[expiresAt,id]}); }
