@@ -24,6 +24,7 @@ export class MemoryStore implements Store {
   async getSession(id: string, now: number) { const v = this.sessions.get(id); return v && v.expiresAt > now ? structuredClone(v) : null; }
   async rollSession(id: string, expiresAt: number) { const v = this.sessions.get(id); if (v) v.expiresAt = expiresAt; }
   async deleteSession(id: string) { this.sessions.delete(id); }
+  async pruneSessions(now: number) { for (const [id, v] of this.sessions) if (v.expiresAt <= now) this.sessions.delete(id); }
   async getProfile(address: string) { const v = this.profiles.get(address); return v ? structuredClone(v) : null; }
   async saveProfile(v: Profile) { this.profiles.set(v.address, structuredClone(v)); }
   async searchCreators(name: string, limit: number) { const q = name.toLocaleLowerCase(); return [...this.profiles.values()].filter(v => v.displayName?.toLocaleLowerCase().includes(q)).filter(v => [...this.posts.values()].some(p => p.creator === v.address)).slice(0, limit).map(v => structuredClone(v)); }

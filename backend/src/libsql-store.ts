@@ -37,6 +37,7 @@ export class LibsqlStore implements Store {
   async getSession(id: string, now: number) { const r=await this.client.execute({sql:`SELECT * FROM sessions WHERE id=? AND expires_at>?`,args:[id,now]}); return r.rows[0] ? {id:text(r.rows[0].id),address:text(r.rows[0].address),expiresAt:number(r.rows[0].expires_at)} : null; }
   async rollSession(id: string, expiresAt: number) { await this.client.execute({sql:`UPDATE sessions SET expires_at=? WHERE id=?`,args:[expiresAt,id]}); }
   async deleteSession(id: string) { await this.client.execute({sql:`DELETE FROM sessions WHERE id=?`,args:[id]}); }
+  async pruneSessions(now: number) { await this.client.execute({sql:`DELETE FROM sessions WHERE expires_at<=?`,args:[now]}); }
   async getProfile(address: string) { const r=await this.client.execute({sql:`SELECT * FROM profiles WHERE address=?`,args:[address]}); return r.rows[0] ? profileFromRow(r.rows[0]) : null; }
   async saveProfile(v: Profile) { await this.client.execute({sql:`INSERT INTO profiles VALUES (?,?,?) ON CONFLICT(address) DO UPDATE SET display_name=excluded.display_name,updated_at=excluded.updated_at`,args:[v.address,v.displayName,v.updatedAt]}); }
   async searchCreators(name: string, limit: number) { const r=await this.client.execute({sql:`SELECT p.* FROM profiles p WHERE p.display_name IS NOT NULL AND lower(p.display_name) LIKE lower(?) AND EXISTS (SELECT 1 FROM posts WHERE creator=p.address) ORDER BY p.display_name LIMIT ?`,args:[`%${name}%`,limit]}); return r.rows.map(profileFromRow); }

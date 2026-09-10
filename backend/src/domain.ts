@@ -42,6 +42,7 @@ export interface Store {
   getSession(id: string, now: number): Promise<Session | null>;
   rollSession(id: string, expiresAt: number): Promise<void>;
   deleteSession(id: string): Promise<void>;
+  pruneSessions(now: number): Promise<void>;
   getProfile(address: string): Promise<Profile | null>;
   saveProfile(value: Profile): Promise<void>;
   searchCreators(name: string, limit: number): Promise<Profile[]>;
