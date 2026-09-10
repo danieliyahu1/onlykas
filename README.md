@@ -60,6 +60,27 @@ Populate the vault keys referenced by `deploy/externalsecret.yaml`: `onlykas-DAT
 
 The GitHub Actions workflow verifies the repository, publishes a `linux/arm64` image tagged with the commit SHA to GHCR, and updates `deploy/deployment.yaml` automatically. Argo CD then detects the manifest commit and syncs the new image.
 
+## Metrics and observability
+
+The process exposes Prometheus metrics on a dedicated internal port. It is served by a separate listener, not by the public Express app on port 3000, and is reachable only inside the cluster:
+
+```
+METRICS_PORT=9090
+curl http://localhost:9090/metrics
+```
+
+`deploy/metrics-service.yaml` publishes that port through an internal ClusterIP Service, and `deploy/vmservicescrape.yaml` tells the cluster's VictoriaMetrics agent to scrape it. `deploy/grafana-dashboard.yaml` is a dashboard ConfigMap labeled `grafana_dashboard: "1"` in the `observability` namespace; Grafana's sidecar loads it automatically.
+
+Recorded signals include:
+
+- HTTP request rate, error rate, duration, and in-flight requests by route template.
+- Media publication outcomes, validation failures, and delivery bytes.
+- Payment and membership preparation, finalization, and verification outcomes.
+- Turso, Cloudflare R2, Kaspa REST, and Kaspa wRPC request duration and failures.
+- Node.js runtime metrics (CPU, memory, event loop lag, GC) and `onlykas_build_info`.
+
+Labels are bounded (route templates, methods, status codes, enumerated outcomes). Wallet addresses, post IDs, transaction IDs, storage keys, and request IDs are never used as labels.
+
 ## Support
 
 If you like this repo, you can tip me at https://kas.coffee/danieliyahu.

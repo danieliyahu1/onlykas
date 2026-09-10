@@ -3,8 +3,6 @@ name: Build and publish
 on:
   push:
     branches: [master]
-    paths-ignore:
-      - deploy/**
   pull_request:
   workflow_dispatch:
 
@@ -35,6 +33,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test:unit
       - run: pnpm build
+      - name: Validate Kubernetes manifests
+        run: |
+          curl -sSL -o /tmp/kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp
+          /tmp/kubeconform -summary -ignore-missing-schemas deploy
 
   image:
     if: github.event_name != 'pull_request' && github.actor != 'github-actions[bot]'
@@ -58,6 +61,8 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: |
+            GIT_REVISION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
