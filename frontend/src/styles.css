@@ -658,6 +658,130 @@ button:disabled {
   background: #211614;
   box-shadow: 0 0.75rem 2rem #0006;
 }
+.feedback-button {
+  display: inline-grid;
+  place-items: center;
+  width: auto;
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--acid);
+  background: transparent;
+  color: var(--acid);
+  font-weight: 700;
+}
+.feedback-button:hover,
+.feedback-button:focus-visible {
+  color: var(--ink);
+  background: var(--acid);
+}
+.feedback-dialog {
+  width: min(100% - 2rem, 28rem);
+  max-height: min(100% - 3rem, 34rem);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--paper);
+  padding: 0;
+}
+.feedback-dialog::backdrop {
+  background: rgba(4, 8, 10, 0.75);
+}
+.feedback-form {
+  padding: 1.75rem;
+}
+.feedback-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+.feedback-head h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+.feedback-close {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
+  flex-shrink: 0;
+}
+.feedback-close:hover {
+  background: rgba(244, 247, 246, 0.06);
+  color: var(--paper);
+}
+.feedback-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin-bottom: 0.65rem;
+}
+.feedback-form textarea {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  resize: vertical;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.feedback-form textarea:focus {
+  border-color: var(--acid);
+  box-shadow: 0 0 0 1px var(--acid);
+  outline: none;
+}
+.feedback-hint {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.feedback-note {
+  margin: 0.65rem 0 0;
+  font-size: 0.875rem;
+}
+.feedback-note.error {
+  color: #ff826f;
+}
+.feedback-actions {
+  margin-top: 1.15rem;
+}
+.feedback-actions .primary {
+  width: 100%;
+}
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.75rem 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--acid);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 0 0.75rem 1.75rem #000a;
+  pointer-events: none;
+  z-index: 40;
+}
 .dialog-backdrop {
   position: fixed;
   inset: 0;

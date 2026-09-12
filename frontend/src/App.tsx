@@ -12,6 +12,7 @@ import { authenticate, kasware, WalletError, ApiError, api } from "./kasware.js"
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
+import { FeedbackButton } from "./FeedbackButton.js";
 import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
@@ -131,6 +132,7 @@ export function App() {
                 </Link>
               )}
             </div>
+            <FeedbackButton />
             {address ? (
               <details className="account">
                 <summary
