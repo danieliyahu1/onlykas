@@ -107,7 +107,18 @@ export const COPY = {
   transferUnavailable:
     "Membership transfers are temporarily unavailable. Try again.",
   transferNotFound: "This transfer could not be found.",
+  feedbackButton: "Feedback",
+  feedbackDialogTitle: "Tell us anything",
+  feedbackLabel: "A bug, an idea, or something that felt confusing.",
+  feedbackHint: "Anonymous. Sent straight to us.",
+  feedbackPlaceholder: "What should we improve?",
+  feedbackSend: "Send feedback",
+  feedbackThanks: "Thanks. Your feedback was sent.",
+  feedbackRequired: "Write a few words first.",
+  feedbackFailed: "Could not send feedback. Please try again.",
 } as const;
+
+export const FEEDBACK_MAX_MESSAGE = 1500;
 
 export const MEDIA_TYPES = [
   "image/jpeg",
