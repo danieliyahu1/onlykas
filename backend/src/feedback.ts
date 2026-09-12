@@ -93,8 +93,22 @@ export class TelegramFeedback {
         disable_web_page_preview: true,
       }),
     });
-    if (!response.ok)
-      throw new Error(`Telegram sendMessage failed with HTTP ${response.status}`);
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const parsed = JSON.parse(await response.text()) as {
+          description?: unknown;
+        };
+        const description =
+          typeof parsed.description === "string" ? parsed.description : "";
+        if (description) detail = `: ${description.slice(0, 200)}`;
+      } catch {
+        // Non-JSON error body; the HTTP status is enough.
+      }
+      throw new Error(
+        `Telegram sendMessage failed with HTTP ${response.status}${detail}`,
+      );
+    }
   }
 }
 
@@ -133,6 +147,11 @@ export class FeedbackSpill {
     this.entries.push(entry);
     await this.#persist();
     return this.entries[this.entries.length - 1]!;
+  }
+
+  async pending(): Promise<number> {
+    await this.#load();
+    return this.entries.length;
   }
 
   async remove(entry: FeedbackEntry): Promise<void> {
@@ -240,17 +259,22 @@ export class FeedbackService {
       const reason =
         "TELEGRAM_FEEDBACK_BOT_TOKEN or TELEGRAM_FEEDBACK_CHAT_ID is not set";
       this.metrics?.recordFeedback({ outcome: "disabled" });
-      this.logger.warn?.("feedback_delivery_disabled", { reason });
+      this.logger.warn?.("feedback_delivery_disabled", {
+        reason,
+        pending: this.spill.entries.length,
+      });
       return { accepted: true, queued: true };
     }
     try {
       await this.deliverer.deliver(entry);
       await this.spill.remove(entry);
       this.metrics?.recordFeedback({ outcome: "delivered" });
+      this.logger.info?.("feedback_delivered", { id: entry.id });
       return { accepted: true };
     } catch (error) {
       this.metrics?.recordFeedback({ outcome: "queued" });
       this.logger.error?.("feedback_delivery_failed", {
+        id: entry.id,
         message:
           error instanceof Error ? error.message : String(error),
       });

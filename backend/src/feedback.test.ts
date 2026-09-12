@@ -107,6 +107,23 @@ describe("TelegramFeedback", () => {
     });
     await expect(telegram.deliver({ message: "hi" })).rejects.toThrow(/401/);
   });
+
+  it("reports the Telegram error description on a non-OK response", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ ok: false, description: "chat not found" }),
+        { status: 400 },
+      )) as typeof fetch;
+    const telegram = new TelegramFeedback({
+      botToken: "bad",
+      chatId: "1",
+      fetchImpl,
+    });
+    await expect(telegram.deliver({ message: "hi" })).rejects.toThrow(/400/);
+    await expect(telegram.deliver({ message: "hi" })).rejects.toThrow(
+      /chat not found/,
+    );
+  });
 });
 
 describe("FeedbackSpill", () => {
@@ -129,6 +146,7 @@ describe("FeedbackSpill", () => {
       });
       expect(second.entries).toHaveLength(1);
       expect(second.entries[0]!.id).toBe(entry.id);
+      expect(await second.pending()).toBe(1);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -210,6 +228,31 @@ describe("FeedbackService", () => {
     }
   });
 
+  it("logs feedback_delivered when Telegram delivers", async () => {
+    const dir = await tempDir("feedback-service-log-");
+    try {
+      const infos: Array<{ event: string; fields?: Record<string, unknown> }> =
+        [];
+      const service = new FeedbackService({
+        deliverer: { enabled: true, deliver: async () => undefined },
+        spill: new FeedbackSpill({ filePath: join(dir, "spill.json") }),
+        logger: {
+          info: (event, fields) =>
+            infos.push({ event, ...(fields ? { fields } : {}) }),
+        },
+      });
+
+      const result = await service.submit({ message: "ping" });
+
+      expect(result.accepted).toBe(true);
+      expect(infos).toHaveLength(1);
+      expect(infos[0]!.event).toBe("feedback_delivered");
+      expect(infos[0]!.fields?.id).toBeTruthy();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("spills but still returns accepted when delivery fails", async () => {
     const dir = await tempDir("feedback-service-fail-");
     try {
@@ -260,6 +303,7 @@ describe("FeedbackService", () => {
       expect(String(warnings[0]!.fields?.reason)).toContain(
         "TELEGRAM_FEEDBACK_BOT_TOKEN",
       );
+      expect(warnings[0]!.fields?.pending).toBe(1);
       expect(service.spill.entries).toHaveLength(1);
       expect(service.spill.entries[0]!.message).toBe("offline note");
       expect(await metrics.render()).toContain(

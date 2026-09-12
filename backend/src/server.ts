@@ -79,6 +79,8 @@ const feedbackService = new FeedbackService({
 // Retry accepted-but-undelivered feedback (crashes, Telegram outages) on
 // startup and then periodically until it lands.
 if (feedbackDeliverer.enabled) {
+  const pending = await feedbackSpill.pending();
+  logger.info("feedback_delivery_enabled", { pending });
   void feedbackService
     .drainPending()
     .catch((error) =>
@@ -86,6 +88,7 @@ if (feedbackDeliverer.enabled) {
         message: error instanceof Error ? error.message : String(error),
       }),
     );
+
   const feedbackDrainTimer = setInterval(() => {
     void feedbackService
       .drainPending()
@@ -97,8 +100,11 @@ if (feedbackDeliverer.enabled) {
   }, 120_000);
   feedbackDrainTimer.unref();
 } else {
+  const pending = await feedbackSpill.pending();
   logger.warn("feedback_delivery_disabled", {
-    reason: "TELEGRAM_FEEDBACK_BOT_TOKEN or TELEGRAM_FEEDBACK_CHAT_ID is not set",
+    reason:
+      "TELEGRAM_FEEDBACK_BOT_TOKEN or TELEGRAM_FEEDBACK_CHAT_ID is not set",
+    pending,
   });
 }
 
