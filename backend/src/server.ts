@@ -9,6 +9,11 @@ import { KaspaWalletVerifier } from "./wallet-verifier.js";
 import { KaspaMembershipVerifier } from "./verifier.js";
 import { KaspaPaymentGateway } from "./payment-gateway.js";
 import { KaspaMembershipGateway } from "./membership-gateway.js";
+import {
+  FeedbackService,
+  FeedbackSpill,
+  TelegramFeedback,
+} from "./feedback.js";
 
 async function readVersion(): Promise<string> {
   try {
@@ -47,6 +52,56 @@ const storage = new R2Storage(
 );
 await store.initialize();
 
+// Anonymous feedback: the browser posts a short message, and the server
+// forwards it to a private Telegram chat. The bot token and chat id are
+// runtime-only configuration; when they are missing the app still accepts the
+// feedback and logs a warning so a missing bot never breaks the app.
+const feedbackDeliverer = new TelegramFeedback({
+  ...(environment.TELEGRAM_FEEDBACK_BOT_TOKEN
+    ? { botToken: environment.TELEGRAM_FEEDBACK_BOT_TOKEN }
+    : {}),
+  ...(environment.TELEGRAM_FEEDBACK_CHAT_ID
+    ? { chatId: environment.TELEGRAM_FEEDBACK_CHAT_ID }
+    : {}),
+  ...(environment.FEEDBACK_TELEGRAM_SEND_URL
+    ? { endpoint: environment.FEEDBACK_TELEGRAM_SEND_URL }
+    : {}),
+});
+const feedbackSpill = new FeedbackSpill({
+  filePath: environment.FEEDBACK_SPILL_PATH,
+});
+const feedbackService = new FeedbackService({
+  deliverer: feedbackDeliverer,
+  spill: feedbackSpill,
+  metrics,
+  logger,
+});
+// Retry accepted-but-undelivered feedback (crashes, Telegram outages) on
+// startup and then periodically until it lands.
+if (feedbackDeliverer.enabled) {
+  void feedbackService
+    .drainPending()
+    .catch((error) =>
+      logger.debug("feedback_drain_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  const feedbackDrainTimer = setInterval(() => {
+    void feedbackService
+      .drainPending()
+      .catch((error) =>
+        logger.debug("feedback_drain_failed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+  }, 120_000);
+  feedbackDrainTimer.unref();
+} else {
+  logger.warn("feedback_delivery_disabled", {
+    reason: "TELEGRAM_FEEDBACK_BOT_TOKEN or TELEGRAM_FEEDBACK_CHAT_ID is not set",
+  });
+}
+
 const app = createApp({
   store,
   storage,
@@ -74,6 +129,7 @@ const app = createApp({
   production: environment.NODE_ENV === "production",
   logger,
   metrics,
+  feedbackService,
 });
 app.listen(environment.PORT, "0.0.0.0", () =>
   logger.info("server_started", { port: environment.PORT }),

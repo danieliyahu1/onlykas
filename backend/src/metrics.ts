@@ -54,6 +54,7 @@ export class Metrics {
   private readonly membershipVerification: Counter<"scope" | "status">;
   private readonly authChallenge: Counter<"outcome">;
   private readonly authSession: Counter<"outcome">;
+  private readonly feedback: Counter<"outcome">;
   private readonly dependencyRequests: Counter<
     "dependency" | "operation" | "outcome"
   >;
@@ -162,6 +163,12 @@ export class Metrics {
       labelNames: ["outcome"],
       registers,
     });
+    this.feedback = new Counter({
+      name: "onlykas_feedback_total",
+      help: "Anonymous user feedback submissions by outcome.",
+      labelNames: ["outcome"],
+      registers,
+    });
     this.dependencyRequests = new Counter({
       name: "onlykas_dependency_requests_total",
       help: "Outbound dependency requests by dependency, operation, and outcome.",
@@ -256,6 +263,11 @@ export class Metrics {
 
   authSessionAttempt(outcome: string): void {
     this.authSession.inc({ outcome });
+  }
+
+  /** Records an anonymous user feedback submission. */
+  recordFeedback(fields: { outcome: string }): void {
+    this.feedback.inc({ outcome: fields.outcome });
   }
 
   /**
