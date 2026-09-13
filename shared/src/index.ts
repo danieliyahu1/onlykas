@@ -216,6 +216,20 @@ export interface MembershipAddressVerificationResponse {
   memberships: MembershipCheckResponse[];
 }
 
+export interface RequestRateSeries {
+  route: string;
+  rates: number[];
+}
+
+export interface RequestRatesSnapshot {
+  total: number;
+  homepageVisits: number;
+  startedAt: number;
+  intervalMs: number;
+  timestamps: number[];
+  series: RequestRateSeries[];
+}
+
 export function createChallengeMessage(
   address: string,
   nonce: string,

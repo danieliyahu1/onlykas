@@ -258,6 +258,101 @@ main {
   grid-template-columns: 1fr;
   gap: clamp(2rem, 4vw, 4rem);
 }
+.request-rate {
+  width: min(100%, 92rem);
+  display: grid;
+  gap: 1.25rem;
+  margin-bottom: clamp(2rem, 5vw, 4rem);
+  padding: clamp(1.1rem, 2.5vw, 1.75rem);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: radial-gradient(120% 160% at 100% 0%, #143029 0%, transparent 58%), var(--surface);
+}
+.request-rate-header,
+.request-rate-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.request-rate-header h2 {
+  margin: 0.2rem 0 0;
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+}
+.request-rate-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--acid);
+  font: 500 0.66rem "DM Mono", monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.request-rate-live i,
+.request-rate-legend i {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+}
+.request-rate-live i { background: var(--acid); }
+.request-rate-count {
+  display: grid;
+  min-width: 12rem;
+  gap: 0.25rem;
+}
+.request-rate-count strong {
+  font-size: clamp(2.25rem, 6vw, 4.25rem);
+  line-height: 0.9;
+}
+.request-rate-count span,
+.request-rate-empty {
+  color: var(--muted);
+  font: 500 0.68rem "DM Mono", monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.request-rate-chart {
+  flex: 1;
+  min-width: 0;
+}
+.request-rate-chart svg {
+  display: block;
+  width: 100%;
+  min-height: 9rem;
+}
+.request-rate-grid { stroke: var(--line); stroke-width: 1; }
+.request-rate-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+.request-rate-legend {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+.request-rate-legend span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font: 400 0.72rem "DM Mono", monospace;
+}
+.request-rate-legend b {
+  overflow: hidden;
+  color: var(--paper);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.request-rate-legend em { color: var(--muted); font-style: normal; }
+@media (max-width: 720px) {
+  .request-rate-content { align-items: stretch; flex-direction: column; }
+  .request-rate-count { min-width: 0; }
+}
 @media (min-width: 960px) {
   .publish-card {
     width: min(100%, 92rem);

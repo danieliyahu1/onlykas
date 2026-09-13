@@ -14,6 +14,7 @@ import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
 import { FeedbackButton } from "./FeedbackButton.js";
 import { SocialLinks } from "./SocialLinks.js";
+import { RequestRateWidget } from "./RequestRateWidget.js";
 import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
@@ -189,21 +190,19 @@ export function App() {
             <Route
               path="/"
               element={
-                <PublishPage
-                  address={address}
-                  signIn={signIn}
-                  signingIn={signingIn}
-                />
+                <>
+                  <RequestRateWidget />
+                  <PublishPage address={address} signIn={signIn} signingIn={signingIn} />
+                </>
               }
             />
             <Route
               path="/publish"
               element={
-                <PublishPage
-                  address={address}
-                  signIn={signIn}
-                  signingIn={signingIn}
-                />
+                <>
+                  <RequestRateWidget />
+                  <PublishPage address={address} signIn={signIn} signingIn={signingIn} />
+                </>
               }
             />
             <Route path="/find" element={<FindCreatorPage />} />
