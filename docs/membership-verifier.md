@@ -6,13 +6,13 @@ and descriptive transaction fields are not authorization sources.
 
 ## Discovery
 
-Mint transactions create a 1,000-sompi P2PK output for the member. This output
+Mint transactions create a 50,000,000-sompi P2PK output for the member. This output
 is a discovery pointer, not the membership token itself.
 
 For each unspent output returned by `GET /addresses/{member}/utxos`, the
 verifier loads its creation transaction and requires the pointer output to:
 
-- contain exactly 1,000 sompi;
+- contain exactly 50,000,000 sompi;
 - use the scanned member address's P2PK script;
 - share a transaction with a valid membership covenant output.
 
@@ -24,20 +24,21 @@ the discovery output.
 A membership is recognized only when all of these checks pass:
 
 - the transaction has version `1`;
-- its hex payload decodes to JSON with protocol `onlykas-membership-v1`;
+- its hex payload decodes to JSON with protocol `onlykas-membership-v2`;
 - the payload reveals `memberRedeemScript`;
 - the redeem script matches the compiled SilverScript template and decodes to
   non-minter state;
 - hashing that redeem script produces the covenant output's P2SH script;
-- the output contains exactly 10,000,000 sompi;
+- the membership output contains exactly 50,000,000 sompi;
 - the output has a consensus covenant ID, matching `expectedCovenantId` when
   one is supplied;
 - the output is authorized by covenant input `0`;
 - the owner public key in covenant state derives the reported testnet-10
   address;
 - the creator public key in state matches the creator whose offer is checked;
-- the transaction pays exactly 1 KAS to that creator and creates the member's
-  1,000-sompi discovery pointer;
+- the transaction pays exactly 9.9 KAS to that creator, 0.1 KAS to the platform
+  address committed in covenant state, and creates the member's 50,000,000-sompi
+  discovery pointer;
 - the covenant output still appears in the UTXO set for its P2SH address.
 
 The last check prevents a spent token from remaining valid when an unrelated

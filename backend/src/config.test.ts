@@ -8,6 +8,7 @@ const valid = {
   R2_BUCKET: "test",
   R2_ACCESS_KEY_ID: "key",
   R2_SECRET_ACCESS_KEY: "secret",
+  PLATFORM_FEE_ADDRESS: "kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue",
 };
 
 describe("environment", () => {
@@ -26,5 +27,9 @@ describe("environment", () => {
 
   it("rejects missing private storage", () => {
     expect(() => parseEnvironment({ ...valid, R2_BUCKET: "" })).toThrow();
+  });
+
+  it("rejects an invalid fee wallet", () => {
+    expect(() => parseEnvironment({ ...valid, PLATFORM_FEE_ADDRESS: "kaspatest:not-an-address" })).toThrow();
   });
 });

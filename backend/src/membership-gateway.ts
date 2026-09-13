@@ -22,9 +22,11 @@ import type {
 import {
   addressPublicKey,
   addressScript,
+  MEMBERSHIP_CREATOR_SHARE,
   MEMBERSHIP_DURATION_DAA,
   MEMBERSHIP_INDEX_VALUE,
   MEMBERSHIP_OUTPUT_VALUE,
+  MEMBERSHIP_PLATFORM_SHARE,
   MEMBERSHIP_PRICE_SOMPI,
   membershipAddress,
   membershipMintSignatureScript,
@@ -91,6 +93,7 @@ type ChainTransaction = {
 
 export class KaspaMembershipGateway implements MembershipGateway {
   constructor(
+    private readonly platformFeeAddress: string,
     private readonly api = "https://api-tn10.kaspa.org",
     private readonly relay: MembershipTransactionRelay = submitMembershipTransactionOverWrpc,
     private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
@@ -99,7 +102,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
   ) {}
 
   async prepareOffer(creator: string): Promise<PreparedMembershipTransaction> {
-    const state = minterState(creator);
+    const state = minterState(creator, this.platformFeeAddress);
     const [utxos, rate] = await Promise.all([this.utxos(creator), this.feeRate()]);
     const redeemScript = membershipRedeemScript(state);
     const contractOutput = new TransactionOutput(
@@ -143,8 +146,8 @@ export class KaspaMembershipGateway implements MembershipGateway {
     return result;
   }
 
-  async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promise<PreparedMembershipTransaction> {
-    const minter = minterState(creator);
+async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promise<PreparedMembershipTransaction> {
+    const minter = minterState(creator, this.platformFeeAddress);
     const minterUtxos = await this.utxos(membershipAddress(minter));
     const minterUtxo = await this.findMinterUtxo(minterUtxos, minter, covenantIdHex);
     if (!minterUtxo) throw new Error("MEMBERSHIP_OFFER_UNAVAILABLE");
@@ -155,6 +158,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     ]);
     const member: MembershipState = {
       creator: minter.creator,
+      platform: minter.platform,
       owner: addressPublicKey(buyer),
       expiresAtDaa: BigInt(virtualDaaScore) + MEMBERSHIP_DURATION_DAA,
       isMinter: false,
@@ -163,7 +167,8 @@ export class KaspaMembershipGateway implements MembershipGateway {
     const outputs: PreparedOutput[] = [
       { value: MEMBERSHIP_OUTPUT_VALUE.toString(), scriptPublicKey: membershipScript(minter), covenant },
       { value: MEMBERSHIP_OUTPUT_VALUE.toString(), scriptPublicKey: membershipScript(member), covenant },
-      { value: MEMBERSHIP_PRICE_SOMPI.toString(), scriptPublicKey: addressScript(creator), covenant: null },
+      { value: MEMBERSHIP_CREATOR_SHARE.toString(), scriptPublicKey: addressScript(creator), covenant: null },
+      { value: MEMBERSHIP_PLATFORM_SHARE.toString(), scriptPublicKey: addressScript(this.platformFeeAddress), covenant: null },
       { value: MEMBERSHIP_INDEX_VALUE.toString(), scriptPublicKey: addressScript(buyer), covenant: null },
     ];
     const minterInput = {
@@ -179,6 +184,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
         1,
         2,
         3,
+        4,
       ),
       utxo: serializableUtxo(minterUtxo, covenantIdHex),
     };
@@ -208,7 +214,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     try {
       this.logger.debug("membership_preflight", {
         kind: "purchase",
-        checks: membershipPreflight(creator, buyer, minter, member, inputs, outputs, virtualDaaScore),
+        checks: membershipPreflight(creator, buyer, this.platformFeeAddress, minter, member, inputs, outputs, virtualDaaScore),
       });
     } catch {
       // Diagnostics must never affect transaction preparation or submission.
@@ -378,9 +384,15 @@ type TransactionShape = {
   payload: string;
 };
 
-function minterState(creator: string): MembershipState {
+function minterState(creator: string, platformFeeAddress: string): MembershipState {
   const publicKey = addressPublicKey(creator);
-  return { creator: publicKey, owner: publicKey, expiresAtDaa: 0n, isMinter: true };
+  return {
+    creator: publicKey,
+    platform: addressPublicKey(platformFeeAddress),
+    owner: publicKey,
+    expiresAtDaa: 0n,
+    isMinter: true,
+  };
 }
 
 function selectWalletUtxos(
@@ -620,6 +632,7 @@ async function testWalletSignatureDiagnostic(signedTransaction: string): Promise
 function membershipPreflight(
   creator: string,
   buyer: string,
+  platformFeeAddress: string,
   minter: MembershipState,
   member: MembershipState,
   inputs: TransactionInputShape[],
@@ -628,16 +641,19 @@ function membershipPreflight(
 ) {
   const creatorLock = addressScript(creator);
   const buyerLock = addressScript(buyer);
+  const platformLock = addressScript(platformFeeAddress);
   const minterOutput = outputs[0];
   const memberOutput = outputs[1];
   const paymentOutput = outputs[2];
-  const ownerOutput = outputs[3];
+  const platformOutput = outputs[3];
+  const ownerOutput = outputs[4];
   const fundingInput = inputs[1];
   const memberExpiry = member.expiresAtDaa;
   const currentDaa = BigInt(daa);
   return {
     previousIsMinter: { pass: minter.isMinter, actual: minter.isMinter },
     memberCreatorMatches: { pass: member.creator === minter.creator },
+    memberPlatformMatches: { pass: member.platform === minter.platform },
     memberIsNotMinter: { pass: !member.isMinter, actual: member.isMinter },
     memberExpiryWindow: {
       pass: currentDaa >= memberExpiry - MEMBERSHIP_DURATION_DAA,
@@ -668,9 +684,19 @@ function membershipPreflight(
       expectedScriptLength: creatorLock.length,
     },
     paymentOutputValue: {
-      pass: paymentOutput?.value === MEMBERSHIP_PRICE_SOMPI.toString(),
+      pass: paymentOutput?.value === MEMBERSHIP_CREATOR_SHARE.toString(),
       actual: paymentOutput?.value,
-      expected: MEMBERSHIP_PRICE_SOMPI.toString(),
+      expected: MEMBERSHIP_CREATOR_SHARE.toString(),
+    },
+    platformOutputUsesPlatformLock: {
+      pass: platformOutput?.scriptPublicKey === platformLock,
+      actualScriptLength: platformOutput?.scriptPublicKey.length,
+      expectedScriptLength: platformLock.length,
+    },
+    platformOutputValue: {
+      pass: platformOutput?.value === MEMBERSHIP_PLATFORM_SHARE.toString(),
+      actual: platformOutput?.value,
+      expected: MEMBERSHIP_PLATFORM_SHARE.toString(),
     },
     minterOutputPresent: { pass: Boolean(minterOutput?.covenant) },
     memberOutputPresent: { pass: Boolean(memberOutput?.covenant) },

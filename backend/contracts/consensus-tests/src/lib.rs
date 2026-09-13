@@ -18,8 +18,9 @@ mod tests {
     use silverscript_lang::ast::Expr;
     use silverscript_lang::compiler::{CompileOptions, CompiledContract, compile_contract};
 
-    const DEPOSIT: u64 = 50_000_000;
-    const PRICE: u64 = 100_000_000;
+const DEPOSIT: u64 = 50_000_000;
+    const CREATOR_SHARE: u64 = 990_000_000;
+    const PLATFORM_SHARE: u64 = 10_000_000;
     const DAA: u64 = 500_000;
     const EXPIRY: i64 = 1_364_000;
     const COMPUTE_BUDGET: u16 = 50;
@@ -39,12 +40,13 @@ mod tests {
         ScriptPublicKey::new(0, script.into())
     }
 
-    fn compile(creator: &[u8]) -> CompiledContract<'static> {
+fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
         let source = include_str!("../../membership.sil");
         compile_contract(
             source,
             &[
                 Expr::bytes(creator.to_vec()),
+                Expr::bytes(platform.to_vec()),
                 Expr::bytes(creator.to_vec()),
                 Expr::int(0),
                 Expr::bool(true),
@@ -54,9 +56,16 @@ mod tests {
         .expect("stable SilverScript compiles Membership")
     }
 
-    fn state(compiled: &CompiledContract, creator: &[u8], owner: &[u8], expiry: i64, minter: bool) -> Vec<u8> {
+    fn state(
+        compiled: &CompiledContract,
+        creator: &[u8],
+        platform: &[u8],
+        owner: &[u8],
+        expiry: i64,
+        minter: bool,
+    ) -> Vec<u8> {
         let mut encoded = Vec::with_capacity(compiled.state_layout.len);
-        for value in [creator, owner] {
+        for value in [creator, platform, owner] {
             encoded.push(32);
             encoded.extend_from_slice(value);
         }
@@ -73,16 +82,19 @@ mod tests {
         compiled: &CompiledContract,
         current: &[u8],
         creator: &[u8],
+        platform: &[u8],
         member: &[u8],
     ) -> Vec<u8> {
         let mut builder = ScriptBuilder::with_flags(EngineFlags { covenants_enabled: true, ..Default::default() });
         builder.add_data(&[creator, creator].concat()).unwrap();
+        builder.add_data(&[platform, platform].concat()).unwrap();
         builder.add_data(&[creator, member].concat()).unwrap();
         builder.add_data(&[0i64.to_le_bytes(), EXPIRY.to_le_bytes()].concat()).unwrap();
         builder.add_data(&[1, 0]).unwrap();
         builder.add_data(&[1]).unwrap();
         builder.add_data(&[2]).unwrap();
         builder.add_data(&[3]).unwrap();
+        builder.add_data(&[4]).unwrap();
         builder.add_data(compiled.dispatch_tags.values().next().expect("mint dispatch tag")).unwrap();
         builder.add_data(current).unwrap();
         builder.drain()
@@ -114,25 +126,27 @@ mod tests {
     }
 
     #[test]
-    fn membership_mint_passes_consensus_vm_and_mass_limit() {
+fn membership_mint_passes_consensus_vm_and_mass_limit() {
         let creator = key(1);
+        let platform = key(3);
         let buyer = key(2);
         let creator_key = creator.x_only_public_key().0.serialize();
+        let platform_key = platform.x_only_public_key().0.serialize();
         let buyer_key = buyer.x_only_public_key().0.serialize();
-        let compiled = compile(&creator_key);
-        let minter = state(&compiled, &creator_key, &creator_key, 0, true);
-        let member = state(&compiled, &creator_key, &buyer_key, EXPIRY, false);
+        let compiled = compile(&creator_key, &platform_key);
+        let minter = state(&compiled, &creator_key, &platform_key, &creator_key, 0, true);
+        let member = state(&compiled, &creator_key, &platform_key, &buyer_key, EXPIRY, false);
         let buyer_spk = p2pk(&buyer_key);
         let entries = vec![
             UtxoEntry::new(DEPOSIT, pay_to_script_hash_script(&minter), 1, false, Some(COVENANT_ID)),
-            UtxoEntry::new(500_000_000, buyer_spk.clone(), 1, false, None),
+            UtxoEntry::new(1_200_000_000, buyer_spk.clone(), 1, false, None),
         ];
         let unsigned = Transaction::new(
             1,
             vec![
                 TransactionInput::new_with_compute_budget(
                     TransactionOutpoint { transaction_id: TransactionId::from_bytes([1; 32]), index: 0 },
-                    covenant_signature_script(&compiled, &minter, &creator_key, &buyer_key),
+                    covenant_signature_script(&compiled, &minter, &creator_key, &platform_key, &buyer_key),
                     0,
                     COMPUTE_BUDGET,
                 ),
@@ -146,9 +160,10 @@ mod tests {
             vec![
                 TransactionOutput { value: DEPOSIT, script_public_key: pay_to_script_hash_script(&minter), covenant: Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID }) },
                 TransactionOutput { value: DEPOSIT, script_public_key: pay_to_script_hash_script(&member), covenant: Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID }) },
-                TransactionOutput { value: PRICE, script_public_key: p2pk(&creator_key), covenant: None },
+                TransactionOutput { value: CREATOR_SHARE, script_public_key: p2pk(&creator_key), covenant: None },
+                TransactionOutput { value: PLATFORM_SHARE, script_public_key: p2pk(&platform_key), covenant: None },
                 TransactionOutput { value: DEPOSIT, script_public_key: buyer_spk.clone(), covenant: None },
-                TransactionOutput { value: 299_000_000, script_public_key: buyer_spk, covenant: None },
+                TransactionOutput { value: 100_000_000, script_public_key: buyer_spk, covenant: None },
             ],
             DAA,
             Default::default(),
