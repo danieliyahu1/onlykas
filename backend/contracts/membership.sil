@@ -2,16 +2,19 @@ pragma silverscript ^0.1.0;
 
 contract Membership(
     byte[32] initialCreator,
+    byte[32] initialPlatform,
     byte[32] initialOwner,
     int initialExpiresAtDaa,
     bool initialIsMinter
 ) {
     int constant MEMBERSHIP_LIFETIME_DAA = 864000;
-    int constant MEMBERSHIP_PRICE = 100000000;
+    int constant MEMBERSHIP_CREATOR_SHARE = 990000000;
+    int constant MEMBERSHIP_PLATFORM_SHARE = 10000000;
     int constant INDEX_OUTPUT_VALUE = 50000000;
     int constant MEMBERSHIP_OUTPUT_VALUE = 50000000;
 
     byte[32] creator = initialCreator;
+    byte[32] platform = initialPlatform;
     byte[32] owner = initialOwner;
     int expiresAtDaa = initialExpiresAtDaa;
     bool isMinter = initialIsMinter;
@@ -22,17 +25,20 @@ contract Membership(
         State[] newStates,
         byte fundingInputIndex,
         byte paymentOutputIndex,
+        byte platformOutputIndex,
         byte ownerIndexOutputIndex
     ) {
         require(prevState.isMinter);
 
         require(newStates[0].creator == prevState.creator);
+        require(newStates[0].platform == prevState.platform);
         require(newStates[0].owner == prevState.owner);
         require(newStates[0].expiresAtDaa == prevState.expiresAtDaa);
         require(newStates[0].isMinter);
 
         require(!newStates[1].isMinter);
         require(newStates[1].creator == prevState.creator);
+        require(newStates[1].platform == prevState.platform);
         require(tx.daa >= newStates[1].expiresAtDaa - MEMBERSHIP_LIFETIME_DAA);
 
         int memberOutputIndex = OpAuthOutputIdx(this.activeInputIndex, 1);
@@ -45,6 +51,10 @@ contract Membership(
 
         byte[] creatorLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.creator)));
         require(tx.outputs[unsigned(paymentOutputIndex)].scriptPubKey == creatorLock);
-        require(tx.outputs[unsigned(paymentOutputIndex)].value == MEMBERSHIP_PRICE);
+        require(tx.outputs[unsigned(paymentOutputIndex)].value == MEMBERSHIP_CREATOR_SHARE);
+
+        byte[] platformLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.platform)));
+        require(tx.outputs[unsigned(platformOutputIndex)].scriptPubKey == platformLock);
+        require(tx.outputs[unsigned(platformOutputIndex)].value == MEMBERSHIP_PLATFORM_SHARE);
     }
 }

@@ -14,8 +14,10 @@ import {
 
 const creator = "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
 const buyer = "kaspatest:qzvp9r3gxg4wvcl44lm5phav2gz5zfx2de7qqqwd3hjlr53rtsn6wefhk0aj8";
+const platformFeeAddress = "kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue";
 const creatorKey = addressPublicKey(creator);
-const minter: MembershipState = { creator: creatorKey, owner: creatorKey, expiresAtDaa: 0n, isMinter: true };
+const platformKey = addressPublicKey(platformFeeAddress);
+const minter: MembershipState = { creator: creatorKey, platform: platformKey, owner: creatorKey, expiresAtDaa: 0n, isMinter: true };
 
 describe("KaspaMembershipGateway", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -69,7 +71,7 @@ describe("KaspaMembershipGateway", () => {
         return Response.json([funding(buyer, "22".repeat(32), "6000000000")]);
       return new Response("not found", { status: 404 });
     }));
-    const gateway = new KaspaMembershipGateway("https://node.test");
+    const gateway = new KaspaMembershipGateway(platformFeeAddress, "https://node.test");
 
     const offer = await gateway.prepareOffer(creator);
     offerCovenantId = offer.covenantId;
@@ -86,7 +88,7 @@ describe("KaspaMembershipGateway", () => {
     expect(mintTransaction.outputs[1]?.covenant?.covenantId.toString()).toBe(offer.covenantId);
     const inputValue = mintTransaction.inputs.reduce((sum, input) => sum + (input.utxo?.amount ?? 0n), 0n);
     const outputValue = mintTransaction.outputs.reduce((sum, output) => sum + output.value, 0n);
-    expect(inputValue - outputValue).toBe(1_490_700n);
+    expect(inputValue - outputValue).toBe(1_591_000n);
   });
 
   it("prices fees from version 1 compute mass", async () => {
@@ -106,7 +108,7 @@ describe("KaspaMembershipGateway", () => {
         }]);
       return new Response("not found", { status: 404 });
     }));
-    const gateway = new KaspaMembershipGateway("https://node.test");
+    const gateway = new KaspaMembershipGateway(platformFeeAddress, "https://node.test");
 
     const offer = await gateway.prepareOffer(creator);
     const transaction = Transaction.deserializeFromSafeJSON(offer.transaction);
@@ -144,7 +146,7 @@ describe("KaspaMembershipGateway", () => {
       }
       return new Response("not found", { status: 404 });
     }));
-    const gateway = new KaspaMembershipGateway("https://node.test", relay, sleep);
+    const gateway = new KaspaMembershipGateway(platformFeeAddress, "https://node.test", relay, sleep);
     const offer = await gateway.prepareOffer(creator);
     const signed = JSON.parse(offer.transaction) as { inputs: { signatureScript: string }[] };
     signed.inputs[0]!.signatureScript = "aa01";

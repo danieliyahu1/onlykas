@@ -5,14 +5,17 @@ import {
 } from "@kluster/kaspa-wasm";
 import artifact from "./contracts/membership.json" with { type: "json" };
 
-export const MEMBERSHIP_PRICE_SOMPI = 100_000_000n;
+export const MEMBERSHIP_PRICE_SOMPI = 1_000_000_000n;
+export const MEMBERSHIP_CREATOR_SHARE = 990_000_000n;
+export const MEMBERSHIP_PLATFORM_SHARE = 10_000_000n;
 export const MEMBERSHIP_DURATION_DAA = 864_000n;
 export const MEMBERSHIP_INDEX_VALUE = 50_000_000n;
 export const MEMBERSHIP_OUTPUT_VALUE = 50_000_000n;
-export const MEMBERSHIP_PROTOCOL = "onlykas-membership-v1";
+export const MEMBERSHIP_PROTOCOL = "onlykas-membership-v2";
 
 export interface MembershipState {
   creator: string;
+  platform: string;
   owner: string;
   expiresAtDaa: bigint;
   isMinter: boolean;
@@ -79,14 +82,15 @@ export function decodeMembershipRedeemScript(scriptHex: string): MembershipState
   if (script.length !== bytecode.length) return null;
   if (!equal(script.slice(0, offset), prefix) || !equal(script.slice(offset + len), suffix))
     return null;
-  const pushes = parsePushes(script.slice(offset, offset + len));
-  if (!pushes || pushes.length !== 4) return null;
-  const [creator, owner, expiry, minter] = pushes;
-  if (creator?.length !== 32 || owner?.length !== 32 || expiry?.length !== 8 || minter?.length !== 1)
+const pushes = parsePushes(script.slice(offset, offset + len));
+  if (!pushes || pushes.length !== 5) return null;
+  const [creator, platform, owner, expiry, minter] = pushes;
+  if (creator?.length !== 32 || platform?.length !== 32 || owner?.length !== 32 || expiry?.length !== 8 || minter?.length !== 1)
     return null;
   if (minter[0] !== 0 && minter[0] !== 1) return null;
   return {
     creator: hex(creator),
+    platform: hex(platform),
     owner: hex(owner),
     expiresAtDaa: decodePositiveI64(expiry),
     isMinter: minter[0] === 1,
@@ -99,15 +103,18 @@ export function membershipMintSignatureScript(
   member: MembershipState,
   fundingInputIndex: number,
   paymentOutputIndex: number,
+  platformOutputIndex: number,
   ownerIndexOutputIndex: number,
 ): string {
   const builder = new ScriptBuilder({ flags: { covenantsEnabled: true } });
   builder.addData(`${minter.creator}${member.creator}`);
+  builder.addData(`${minter.platform}${member.platform}`);
   builder.addData(`${minter.owner}${member.owner}`);
   builder.addData(hex(concat(encodePositiveI64(minter.expiresAtDaa), encodePositiveI64(member.expiresAtDaa))));
   builder.addData(minter.isMinter ? "0100" : "0000");
   builder.addData(byteHex(fundingInputIndex));
   builder.addData(byteHex(paymentOutputIndex));
+  builder.addData(byteHex(platformOutputIndex));
   builder.addData(byteHex(ownerIndexOutputIndex));
   builder.addData(contract.entries.mint.dispatch_tag);
   return ScriptBuilder.fromScript(builder.toString(), { flags: { covenantsEnabled: true } })
@@ -134,6 +141,7 @@ export function parseMembershipPayload(payload: string | undefined): string | nu
 function encodeState(state: MembershipState): Uint8Array {
   return concat(
     fixedPush(Buffer.from(state.creator, "hex")),
+    fixedPush(Buffer.from(state.platform, "hex")),
     fixedPush(Buffer.from(state.owner, "hex")),
     fixedPush(encodePositiveI64(state.expiresAtDaa)),
     fixedPush(Uint8Array.of(state.isMinter ? 1 : 0)),

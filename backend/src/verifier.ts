@@ -6,10 +6,11 @@ import {
   addressPublicKey,
   addressScript,
   decodeMembershipRedeemScript,
+  MEMBERSHIP_CREATOR_SHARE,
   MEMBERSHIP_DURATION_DAA,
   MEMBERSHIP_INDEX_VALUE,
   MEMBERSHIP_OUTPUT_VALUE,
-  MEMBERSHIP_PRICE_SOMPI,
+  MEMBERSHIP_PLATFORM_SHARE,
   membershipAddress,
   membershipScript,
   parseMembershipPayload,
@@ -133,17 +134,21 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
 
     const owner = expectedOwner ?? keyAddress(state.owner);
     const creator = expectedCreator ?? keyAddress(state.creator);
-    if (!owner || !creator) return notMembership(transactionId, outputIndex, covenantId);
+    const platformAddress = keyAddress(state.platform);
+    if (!owner || !creator || !platformAddress) return notMembership(transactionId, outputIndex, covenantId);
     if (state.owner !== addressPublicKey(owner))
       return membership(transactionId, outputIndex, covenantId, owner, state.expiresAtDaa, currentDaa, "OWNER_MISMATCH", this.now);
     if (state.creator !== addressPublicKey(creator))
       return notMembership(transactionId, outputIndex, covenantId);
 
     const creatorPayment = transaction.outputs?.[2];
-    const ownerPointer = transaction.outputs?.[3];
+    const platformPayment = transaction.outputs?.[3];
+    const ownerPointer = transaction.outputs?.[4];
     if (
-      outputAmount(creatorPayment) !== MEMBERSHIP_PRICE_SOMPI ||
+      outputAmount(creatorPayment) !== MEMBERSHIP_CREATOR_SHARE ||
       outputScript(creatorPayment) !== addressScript(creator) ||
+      outputAmount(platformPayment) !== MEMBERSHIP_PLATFORM_SHARE ||
+      outputScript(platformPayment) !== addressScript(platformAddress) ||
       outputAmount(ownerPointer) !== MEMBERSHIP_INDEX_VALUE ||
       outputScript(ownerPointer) !== addressScript(owner) ||
       !(await this.isUnspent(membershipAddress(state), transactionId, outputIndex))

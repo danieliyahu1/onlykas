@@ -120,6 +120,7 @@ const app = createApp({
     metrics,
   ),
   membershipGateway: new KaspaMembershipGateway(
+    environment.PLATFORM_FEE_ADDRESS,
     environment.KASPA_NODE_URL,
     undefined,
     undefined,

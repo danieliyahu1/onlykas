@@ -1,9 +1,10 @@
 import {
   addressPublicKey,
   addressScript,
+  MEMBERSHIP_CREATOR_SHARE,
   MEMBERSHIP_INDEX_VALUE,
   MEMBERSHIP_OUTPUT_VALUE,
-  MEMBERSHIP_PRICE_SOMPI,
+  MEMBERSHIP_PLATFORM_SHARE,
   membershipAddress,
   membershipPayload,
   membershipRedeemScript,
@@ -14,6 +15,7 @@ import { KaspaMembershipVerifier } from "./verifier.js";
 
 const creator = "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
 const buyer = "kaspatest:qzvp9r3gxg4wvcl44lm5phav2gz5zfx2de7qqqwd3hjlr53rtsn6wefhk0aj8";
+const platformFeeAddress = "kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue";
 const transactionId = "11".repeat(32);
 const covenantId = "22".repeat(32);
 
@@ -23,6 +25,7 @@ describe("KaspaMembershipVerifier", () => {
   it("validates committed state, native binding, payment, ownership, unspent status, and DAA", async () => {
     const state: MembershipState = {
       creator: addressPublicKey(creator),
+      platform: addressPublicKey(platformFeeAddress),
       owner: addressPublicKey(buyer),
       expiresAtDaa: 1_000_000n,
       isMinter: false,
@@ -40,7 +43,8 @@ describe("KaspaMembershipVerifier", () => {
         outputs: [
           {},
           { amount: MEMBERSHIP_OUTPUT_VALUE.toString(), script_public_key: membershipScript(state).slice(4), covenant: { covenantId, authorizingInput: 0 } },
-          { amount: MEMBERSHIP_PRICE_SOMPI.toString(), script_public_key: addressScript(creator).slice(4) },
+          { amount: MEMBERSHIP_CREATOR_SHARE.toString(), script_public_key: addressScript(creator).slice(4) },
+          { amount: MEMBERSHIP_PLATFORM_SHARE.toString(), script_public_key: addressScript(platformFeeAddress).slice(4) },
           { amount: MEMBERSHIP_INDEX_VALUE.toString(), script_public_key: addressScript(buyer).slice(4) },
         ],
       });
