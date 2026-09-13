@@ -41,6 +41,7 @@ export class Metrics {
   private readonly httpInFlight: Gauge;
   private readonly httpRequests: Counter<"method" | "route" | "status">;
   private readonly httpDuration: Histogram<"method" | "route">;
+  private readonly pageVisits: Counter<string>;
   private readonly mediaPublish: Counter<"outcome" | "media_type">;
   private readonly mediaPublishBytes: Histogram<"media_type">;
   private readonly mediaValidationFailures: Counter<"category">;
@@ -82,6 +83,11 @@ export class Metrics {
       help: "HTTP request duration in seconds by method and route template.",
       labelNames: ["method", "route"],
       buckets: HTTP_DURATION_BUCKETS,
+      registers,
+    });
+    this.pageVisits = new Counter({
+      name: "onlykas_page_visits_total",
+      help: "Total homepage visits.",
       registers,
     });
     this.mediaPublish = new Counter({
@@ -210,6 +216,11 @@ export class Metrics {
       { method: observation.method, route: observation.route },
       observation.durationSeconds,
     );
+  }
+
+  /** Records a homepage visit. */
+  recordHomepageVisit(): void {
+    this.pageVisits.inc();
   }
 
   mediaPublishAttempt(outcome: string, mediaType: string): void {

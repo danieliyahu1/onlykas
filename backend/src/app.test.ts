@@ -127,6 +127,24 @@ describe("request metrics", () => {
       }),
     );
   });
+
+  it("counts homepage visits without counting other routes", async () => {
+    const metrics = createMetrics({ version: "test", revision: "test" });
+    const { app } = testApp(undefined, undefined, metrics);
+
+    await request(app).get("/").expect(404);
+    await request(app).get("/healthz").expect(200);
+    await request(app).get("/api/posts/unknown").expect(404);
+
+    const values = (
+      await metrics.registry
+        .getSingleMetric("onlykas_page_visits_total")!
+        .get()
+    ).values;
+    expect(values).toEqual([
+      expect.objectContaining({ labels: {}, value: 1 }),
+    ]);
+  });
 });
 
 describe("payment confirmation", () => {

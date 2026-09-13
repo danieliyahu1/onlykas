@@ -23,6 +23,7 @@ describe("metrics endpoint", () => {
       statusCode: 200,
       durationSeconds: 0.02,
     });
+    metrics.recordHomepageVisit();
     const server = createMetricsServer(metrics);
     servers.push(server);
     const port = await listen(server);
@@ -36,6 +37,7 @@ describe("metrics endpoint", () => {
     expect(body).toContain("# TYPE onlykas_http_requests_total counter");
     expect(body).toContain("onlykas_http_requests_total");
     expect(body).toContain('route="/api/posts/:id"');
+    expect(body).toContain("onlykas_page_visits_total 1");
     expect(body).toContain("onlykas_http_request_duration_seconds");
     expect(body).toContain("onlykas_build_info");
     expect(body).toContain('revision="abc123"');
