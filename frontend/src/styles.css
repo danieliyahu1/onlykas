@@ -76,7 +76,7 @@ nav a {
 .nav-group {
   display: flex;
   align-items: center;
-  gap: clamp(1rem, 3vw, 2.5rem);
+  gap: clamp(0.75rem, 1.5vw, 1.25rem);
   margin-left: auto;
 }
 .global-search {
@@ -153,11 +153,6 @@ nav a {
 .nav-link:hover,
 .nav-link:focus-visible {
   color: var(--paper);
-}
-.wallet-nav {
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
 }
 .nav-icon,
 .nav-account-action {
@@ -673,6 +668,28 @@ button:disabled {
 .feedback-button:focus-visible {
   color: var(--ink);
   background: var(--acid);
+}
+.social-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid var(--acid);
+  background: transparent;
+  color: var(--acid);
+  text-decoration: none;
+}
+.social-button:hover,
+.social-button:focus-visible {
+  color: var(--ink);
+  background: var(--acid);
+}
+.social-button svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  fill: currentColor;
 }
 .feedback-dialog {
   width: min(100% - 2rem, 28rem);

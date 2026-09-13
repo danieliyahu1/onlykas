@@ -13,6 +13,7 @@ import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
 import { FeedbackButton } from "./FeedbackButton.js";
+import { SocialLinks } from "./SocialLinks.js";
 import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
@@ -125,14 +126,13 @@ export function App() {
           </Link>
           <div className="nav-group">
             <GlobalSearch />
-            <div className="wallet-nav">
-              {address && (
-                <Link to={`/creator/${address}`} className="nav-link">
-                  My page
-                </Link>
-              )}
-            </div>
+            <SocialLinks />
             <FeedbackButton />
+            {address && (
+              <Link to={`/creator/${address}`} className="nav-link">
+                My page
+              </Link>
+            )}
             {address ? (
               <details className="account">
                 <summary
