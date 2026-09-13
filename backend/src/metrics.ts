@@ -40,9 +40,6 @@ export class Metrics {
 
   private readonly httpInFlight: Gauge;
   private readonly httpRequests: Counter<"method" | "route" | "status">;
-  private readonly routeCounts = new Map<string, number>();
-  private totalRequests = 0;
-  private homepageVisits = 0;
   private readonly httpDuration: Histogram<"method" | "route">;
   private readonly mediaPublish: Counter<"outcome" | "media_type">;
   private readonly mediaPublishBytes: Histogram<"media_type">;
@@ -62,11 +59,6 @@ export class Metrics {
     "dependency" | "operation" | "outcome"
   >;
   private readonly dependencyDuration: Histogram<"dependency" | "operation">;
-
-  // Lifted from the HTTP request counter on demand for self-served rate
-  // snapshots (see RequestRateSampler in server.ts). Unlike the Prometheus
-  // counter it is not reset by an external scrape.
-  private readonly routeTotals = new Map<string, number>();
 
   constructor(build: BuildInfo, registry = new Registry()) {
     this.registry = registry;
@@ -209,11 +201,6 @@ export class Metrics {
   httpRequestFinished(observation: HttpRequestObservation): void {
     this.httpInFlight.dec();
     const status = String(observation.statusCode);
-    this.totalRequests += 1;
-    this.routeCounts.set(
-      observation.route,
-      (this.routeCounts.get(observation.route) ?? 0) + 1,
-    );
     this.httpRequests.inc({
       method: observation.method,
       route: observation.route,
@@ -223,24 +210,6 @@ export class Metrics {
       { method: observation.method, route: observation.route },
       observation.durationSeconds,
     );
-  }
-
-  /** Live per-route request totals, used to derive rolling request rates. */
-  requestRouteTotals(): ReadonlyMap<string, number> {
-    return this.routeCounts;
-  }
-
-  /** Total requests completed since this process started. */
-  totalRequestsCompleted(): number {
-    return this.totalRequests;
-  }
-
-  recordHomepageVisit(): void {
-    this.homepageVisits += 1;
-  }
-
-  homepageVisitsCompleted(): number {
-    return this.homepageVisits;
   }
 
   mediaPublishAttempt(outcome: string, mediaType: string): void {

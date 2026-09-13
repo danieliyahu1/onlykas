@@ -3,7 +3,6 @@ import { createApp } from "./app.js";
 import { parseEnvironment } from "./config.js";
 import { createLogger } from "./observability.js";
 import { createMetrics, createMetricsServer } from "./metrics.js";
-import { RequestRateSampler } from "./request-rate.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { R2Storage } from "./r2-storage.js";
 import { KaspaWalletVerifier } from "./wallet-verifier.js";
@@ -35,8 +34,6 @@ const metrics = createMetrics({
   version: await readVersion(),
   revision: environment.GIT_REVISION,
 });
-const requestRates = new RequestRateSampler(metrics);
-requestRates.start();
 const store = new LibsqlStore(
   environment.DATABASE_URL,
   environment.DATABASE_AUTH_TOKEN,
@@ -138,7 +135,6 @@ const app = createApp({
   production: environment.NODE_ENV === "production",
   logger,
   metrics,
-  requestRates,
   feedbackService,
 });
 app.listen(environment.PORT, "0.0.0.0", () =>
