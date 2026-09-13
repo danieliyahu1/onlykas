@@ -113,6 +113,7 @@ const app = createApp({
   storage,
   walletVerifier: new KaspaWalletVerifier(),
   paymentGateway: new KaspaPaymentGateway(
+    environment.PLATFORM_FEE_ADDRESS,
     environment.KASPA_NODE_URL,
     undefined,
     undefined,

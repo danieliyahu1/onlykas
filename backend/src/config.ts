@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { LogLevel } from "./observability.js";
+import { addressScript } from "./membership-contract.js";
 
 const environmentSchema = z.object({
   NODE_ENV: z
@@ -18,6 +19,13 @@ const environmentSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().min(1),
   R2_SECRET_ACCESS_KEY: z.string().min(1),
   KASPA_NODE_URL: z.string().url().default("https://api-tn10.kaspa.org"),
+  PLATFORM_FEE_ADDRESS: z.string().refine((value) => {
+    try {
+      return value.startsWith("kaspatest:") && /^000020[0-9a-f]{64}ac$/i.test(addressScript(value));
+    } catch {
+      return false;
+    }
+  }, "PLATFORM_FEE_ADDRESS must be a valid Kaspa testnet P2PK address"),
   FEEDBACK_SPILL_PATH: z.string().min(1).default("/tmp/feedback-spill.json"),
   TELEGRAM_FEEDBACK_BOT_TOKEN: z.string().min(1).optional(),
   TELEGRAM_FEEDBACK_CHAT_ID: z.string().min(1).optional(),

@@ -15,6 +15,8 @@ pnpm dev
 
 Copy the values described in `.env.example` into the process environment before starting the backend. The Vite server runs the browser application and proxies `/api` to Express.
 
+`PLATFORM_FEE_ADDRESS` is required and must be a valid Kaspa testnet P2PK address. New individual post payments send the rounded-nearest 1% fee to this wallet and reduce the creator output by the same amount.
+
 ## R2
 
 The configured bucket must have public access disabled. Configure CORS to allow only `PUBLIC_ORIGIN`, the `PUT` method, and the `Content-Type` header. Expose `ETag` so the browser can complete multipart uploads. No browser principal should have read or list access.
@@ -57,6 +59,8 @@ kubectl -n onlykas create secret docker-registry ghcr-pull \
 ```
 
 Populate the vault keys referenced by `deploy/externalsecret.yaml`: `onlykas-DATABASE_URL`, `onlykas-DATABASE_AUTH_TOKEN`, `onlykas-R2_ENDPOINT`, `onlykas-R2_ACCESS_KEY_ID`, and `onlykas-R2_SECRET_ACCESS_KEY`. These values must reference only the production Turso database and production R2 bucket. The External Secrets Operator creates `onlykas-secrets` from those values.
+
+Set `PLATFORM_FEE_ADDRESS` in `deploy/configmap.yaml` when changing the fee recipient.
 
 The GitHub Actions workflow verifies the repository, publishes a `linux/arm64` image tagged with the commit SHA to GHCR, and updates `deploy/deployment.yaml` automatically. Argo CD then detects the manifest commit and syncs the new image.
 

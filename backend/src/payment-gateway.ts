@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { PaymentGateway, PaymentSubmission, Post, PreparedPayment } from "./domain.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
+import { platformFeeSompi } from "./payment-fee.js";
 
 const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const ZERO_SUBNETWORK = "0".repeat(40);
@@ -13,7 +14,8 @@ type Utxo = { outpoint: { transactionId: string; index: number }; utxoEntry: { a
 type ChainTransaction = { is_accepted?: boolean; inputs?: { previous_outpoint_resolved?: { script_public_key_address?: string } }[]; outputs?: { amount?: string | number; script_public_key_address?: string }[] };
 
 export class KaspaPaymentGateway implements PaymentGateway {
-  constructor(
+constructor(
+    private readonly platformFeeAddress: string,
     private readonly api = "https://api-tn10.kaspa.org",
     private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     private readonly logger: Logger = defaultLogger,
@@ -26,6 +28,8 @@ export class KaspaPaymentGateway implements PaymentGateway {
       this.request<{ normalBuckets: { feerate: number }[]; priorityBucket: { feerate: number } }>("fee_estimate", "/info/fee-estimate"),
     ]);
     const amount = BigInt(post.priceSompi);
+    const fee = platformFeeSompi(amount);
+    const creatorAmount = amount - fee;
     const rate = estimate.normalBuckets[0]?.feerate ?? estimate.priorityBucket.feerate;
     const buyerScript = scriptFor(buyer);
     const selected: Utxo[] = [];
@@ -34,18 +38,21 @@ export class KaspaPaymentGateway implements PaymentGateway {
       if (`0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}` !== buyerScript) continue;
       selected.push(utxo);
       total += BigInt(utxo.utxoEntry.amount);
-      if (total >= amount + estimatedFee(selected.length, rate)) break;
+      if (total >= amount + estimatedFee(selected.length, rate, 3)) break;
     }
-    const fee = estimatedFee(selected.length, rate);
-    if (total < amount + fee) {
+    const networkFee = estimatedFee(selected.length, rate, 3);
+    if (total < amount + networkFee) {
       this.logger.warn("payment_prepare_insufficient_funds", {
         postId: post.id,
         amountSompi: post.priceSompi,
       });
       throw new Error("INSUFFICIENT_FUNDS");
     }
-    const outputs = [{ value: amount.toString(), scriptPublicKey: scriptFor(post.creator), covenant: null }];
-    const change = total - amount - fee;
+    const outputs = [
+      { value: creatorAmount.toString(), scriptPublicKey: scriptFor(post.creator), covenant: null },
+      { value: fee.toString(), scriptPublicKey: scriptFor(this.platformFeeAddress), covenant: null },
+    ];
+    const change = total - amount - networkFee;
     if (change > 0n) outputs.push({ value: change.toString(), scriptPublicKey: buyerScript, covenant: null });
     const transaction = JSON.stringify({ id: "0".repeat(64), version: 0, inputs: selected.map((utxo) => ({ transactionId: utxo.outpoint.transactionId, index: utxo.outpoint.index, sequence: "0", sigOpCount: 1, computeBudget: 0, signatureScript: "", utxo: { amount: utxo.utxoEntry.amount, scriptPublicKey: `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}`, blockDaaScore: utxo.utxoEntry.blockDaaScore, isCoinbase: utxo.utxoEntry.isCoinbase } })), outputs, subnetworkId: ZERO_SUBNETWORK, lockTime: "0", gas: "0", storageMass: "20000", payload: "" });
     this.logger.debug("payment_prepared", {
@@ -93,7 +100,10 @@ export class KaspaPaymentGateway implements PaymentGateway {
     if (!tx) return false;
     if (!tx.is_accepted || !tx.inputs?.length || !tx.outputs?.length) return false;
     if (!tx.inputs.every((input) => input.previous_outpoint_resolved?.script_public_key_address === buyer)) return false;
-    return tx.outputs.some((output) => String(output.amount) === amountSompi && output.script_public_key_address === creator);
+    const amount = BigInt(amountSompi);
+    const fee = platformFeeSompi(amount);
+    return tx.outputs.some((output) => String(output.amount) === (amount - fee).toString() && output.script_public_key_address === creator)
+      && tx.outputs.some((output) => String(output.amount) === fee.toString() && output.script_public_key_address === this.platformFeeAddress);
   }
 
   private async requestRetryingMissing<T>(operation: string, path: string): Promise<T | null> {
@@ -139,7 +149,7 @@ class KaspaRequestError extends Error {
 
 function scriptFor(address: string): string { const data = address.slice(address.lastIndexOf(":") + 1, -8).split("").map((char) => CHARSET.indexOf(char)); const bytes: number[] = []; let buffer = 0n; let bits = 0; for (const value of data) { buffer = (buffer << 5n) | BigInt(value); bits += 5; while (bits >= 8) { bits -= 8; bytes.push(Number((buffer >> BigInt(bits)) & 255n)); buffer &= (1n << BigInt(bits)) - 1n; } } if (bytes[0] !== 0 || bytes.length !== 33) throw new Error("INVALID_CREATOR_ADDRESS"); return `000020${bytes.slice(1).map((byte) => byte.toString(16).padStart(2, "0")).join("")}ac`; }
 function digest(value: string) { return createHash("sha256").update(value).digest("hex"); }
-function estimatedFee(inputs: number, rate: number) { if (!Number.isFinite(rate) || rate <= 0) throw new Error("INVALID_FEE_RATE"); return BigInt(Math.ceil((2036 + 1000 * inputs) * rate)); }
+function estimatedFee(inputs: number, rate: number, outputs: number) { if (!Number.isFinite(rate) || rate <= 0) throw new Error("INVALID_FEE_RATE"); return BigInt(Math.ceil((1836 + 1000 * inputs + 100 * outputs) * rate)); }
 function rejected(rejection: string, transactionId: string | null = null): PaymentSubmission { return { isAccepted: false, transactionId, rejection }; }
 function hasAllSignatures(transaction: Record<string, unknown>) { return Array.isArray(transaction.inputs) && transaction.inputs.length > 0 && transaction.inputs.every((input) => { const signature = (input as Record<string, unknown>).signatureScript; return typeof signature === "string" && signature.length > 0 && signature.length % 2 === 0 && /^[0-9a-f]+$/i.test(signature) && signature.endsWith("01"); }); }
 function isTransactionShape(transaction: Record<string, unknown>) { return transaction.version === 0 && Array.isArray(transaction.inputs) && transaction.inputs.length > 0 && Array.isArray(transaction.outputs) && transaction.outputs.length > 0 && typeof transaction.subnetworkId === "string" && typeof transaction.lockTime === "string" && typeof transaction.gas === "string" && typeof transaction.storageMass === "string" && typeof transaction.payload === "string"; }
