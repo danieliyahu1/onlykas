@@ -13,7 +13,7 @@ export class LibsqlStore implements Store {
     await this.client.batch([
       `CREATE TABLE IF NOT EXISTS auth_challenges (id TEXT PRIMARY KEY, nonce TEXT NOT NULL UNIQUE, address TEXT NOT NULL, origin TEXT NOT NULL, network TEXT NOT NULL, message TEXT NOT NULL, expires_at INTEGER NOT NULL, consumed_at INTEGER)`,
       `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, address TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
-      `CREATE TABLE IF NOT EXISTS profiles (address TEXT PRIMARY KEY, display_name TEXT, updated_at INTEGER NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS profiles (address TEXT PRIMARY KEY, display_name TEXT, is_public INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, creator TEXT NOT NULL, caption TEXT NOT NULL, price_sompi TEXT NOT NULL, media_type TEXT NOT NULL, media_size INTEGER NOT NULL, media_digest TEXT NOT NULL UNIQUE, media_key TEXT NOT NULL, published_at INTEGER NOT NULL)`,
       `CREATE INDEX IF NOT EXISTS posts_creator_date ON posts (creator, published_at DESC)`,
       `CREATE TABLE IF NOT EXISTS purchases (post_id TEXT NOT NULL, buyer TEXT NOT NULL, transaction_id TEXT NOT NULL UNIQUE, PRIMARY KEY (post_id, buyer))`,
@@ -24,6 +24,7 @@ export class LibsqlStore implements Store {
       `CREATE TABLE IF NOT EXISTS prepared_payments (id TEXT PRIMARY KEY, transaction_json TEXT NOT NULL, fingerprint TEXT NOT NULL, amount_sompi TEXT NOT NULL, creator TEXT NOT NULL, post_id TEXT NOT NULL, buyer TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS prepared_memberships (id TEXT PRIMARY KEY, transaction_json TEXT NOT NULL, fingerprint TEXT NOT NULL, covenant_id TEXT NOT NULL, sign_inputs TEXT NOT NULL, member_output_index INTEGER, creator TEXT NOT NULL, buyer TEXT NOT NULL, kind TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
     ], "write");
+     await this.execute({sql:`ALTER TABLE profiles ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0`,args:[]}).catch(() => undefined);
     this.logger.info("database_initialized");
   }
   async createChallenge(v: Challenge) { await this.execute({ sql: `INSERT INTO auth_challenges VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, args: [v.id,v.nonce,v.address,v.origin,v.network,v.message,v.expiresAt,v.consumedAt] }); }
@@ -43,8 +44,9 @@ export class LibsqlStore implements Store {
   async deleteSession(id: string) { await this.execute({sql:`DELETE FROM sessions WHERE id=?`,args:[id]}); }
   async pruneSessions(now: number) { await this.execute({sql:`DELETE FROM sessions WHERE expires_at<=?`,args:[now]}); }
   async getProfile(address: string) { const r=await this.execute({sql:`SELECT * FROM profiles WHERE address=?`,args:[address]}); return r.rows[0] ? profileFromRow(r.rows[0]) : null; }
-  async saveProfile(v: Profile) { await this.execute({sql:`INSERT INTO profiles VALUES (?,?,?) ON CONFLICT(address) DO UPDATE SET display_name=excluded.display_name,updated_at=excluded.updated_at`,args:[v.address,v.displayName,v.updatedAt]}); }
+  async saveProfile(v: Profile) { await this.execute({sql:`INSERT INTO profiles (address,display_name,is_public,updated_at) VALUES (?,?,?,?) ON CONFLICT(address) DO UPDATE SET display_name=excluded.display_name,is_public=excluded.is_public,updated_at=excluded.updated_at`,args:[v.address,v.displayName,v.isPublic?1:0,v.updatedAt]}); }
   async searchCreators(name: string, limit: number) { const r=await this.execute({sql:`SELECT p.* FROM profiles p WHERE p.display_name IS NOT NULL AND lower(p.display_name) LIKE lower(?) AND EXISTS (SELECT 1 FROM posts WHERE creator=p.address) ORDER BY p.display_name LIMIT ?`,args:[`%${name}%`,limit]}); return r.rows.map(profileFromRow); }
+  async publicCreators(limit: number) { const r=await this.execute({sql:`SELECT * FROM profiles WHERE is_public=1 ORDER BY COALESCE(display_name,address) LIMIT ?`,args:[limit]}); return r.rows.map(profileFromRow); }
   async publishPost(v: Post) { try { await this.execute({sql:`INSERT INTO posts (id,creator,caption,price_sompi,media_type,media_size,media_digest,media_key,published_at) VALUES (?,?,?,?,?,?,?,?,?)`,args:[v.id,v.creator,v.caption,v.priceSompi,v.mediaType,v.mediaSize,v.mediaDigest,v.mediaKey,v.publishedAt]}); return "COMMITTED"; } catch (e) { const r=await this.execute({sql:`SELECT 1 FROM posts WHERE media_digest=?`,args:[v.mediaDigest]}); if (r.rows[0]) return "MEDIA_DIGEST_CONFLICT"; throw e; } }
   async getPost(id: string) { const r=await this.execute({sql:`SELECT * FROM posts WHERE id=?`,args:[id]}); return r.rows[0] ? postFromRow(r.rows[0]) : null; }
   async creatorPosts(address: string) { const r=await this.execute({sql:`SELECT * FROM posts WHERE creator=? ORDER BY published_at DESC`,args:[address]}); return r.rows.map(postFromRow); }
@@ -58,7 +60,7 @@ export class LibsqlStore implements Store {
 }
 const text=(v:unknown)=>{if(typeof v!=="string")throw new Error("Invalid database text");return v;}; const number=(v:unknown)=>Number(v);
 const challengeFromRow=(r:Record<string,unknown>):Challenge=>({id:text(r.id),nonce:text(r.nonce),address:text(r.address),origin:text(r.origin),network:text(r.network),message:text(r.message),expiresAt:number(r.expires_at),consumedAt:r.consumed_at===null?null:number(r.consumed_at)});
-const profileFromRow=(r:Record<string,unknown>):Profile=>({address:text(r.address),displayName:r.display_name===null?null:text(r.display_name),updatedAt:number(r.updated_at)});
+const profileFromRow=(r:Record<string,unknown>):Profile=>({address:text(r.address),displayName:r.display_name===null?null:text(r.display_name),isPublic:Boolean(r.is_public),updatedAt:number(r.updated_at)});
 const postFromRow=(r:Record<string,unknown>):Post=>({id:text(r.id),creator:text(r.creator),caption:text(r.caption),priceSompi:text(r.price_sompi),mediaType:text(r.media_type) as Post["mediaType"],mediaSize:number(r.media_size),mediaDigest:text(r.media_digest),mediaKey:text(r.media_key),publishedAt:number(r.published_at)});
 const purchaseFromRow=(r:Record<string,unknown>):Purchase=>({postId:text(r.post_id),buyer:text(r.buyer),transactionId:text(r.transaction_id)});
 const creatorCovenantFromRow=(r:Record<string,unknown>):CreatorCovenant=>({creator:text(r.creator),covenantId:text(r.covenant_id)});

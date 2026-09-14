@@ -12,6 +12,7 @@ import { authenticate, kasware, WalletError, ApiError, api } from "./kasware.js"
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
+import { PublicCreatorsPage } from "./PublicCreatorsPage.js";
 import { FeedbackButton } from "./FeedbackButton.js";
 import { SocialLinks } from "./SocialLinks.js";
 import { Icon } from "./Icons.js";
@@ -117,6 +118,16 @@ export function App() {
     }
   }
 
+  async function saveVisibility(isPublic: boolean) {
+    const value = await api<ProfileResponse>("/api/profile", {
+      method: "PUT",
+      body: JSON.stringify({ isPublic }),
+    });
+    setProfile(value);
+    setProfileName(value.displayName ?? "");
+    return value;
+  }
+
   return (
     <BrowserRouter>
       <div className="shell">
@@ -126,6 +137,7 @@ export function App() {
           </Link>
           <div className="nav-group">
             <GlobalSearch />
+            <Link to="/creators" className="nav-link">Creators</Link>
             <SocialLinks />
             <FeedbackButton />
             {address && (
@@ -207,10 +219,11 @@ export function App() {
               }
             />
             <Route path="/find" element={<FindCreatorPage />} />
+            <Route path="/creators" element={<PublicCreatorsPage />} />
             <Route
               path="/creator/:address"
               element={
-                <CreatorPage address={address} signIn={signIn} signingIn={signingIn} />
+                <CreatorPage address={address} signIn={signIn} signingIn={signingIn} onVisibilityChange={saveVisibility} />
               }
             />
             <Route

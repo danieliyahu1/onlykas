@@ -860,6 +860,15 @@ button:disabled {
 .wallet-address:focus-visible {
   color: var(--acid);
 }
+.profile-visibility {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
 .post-grid {
   margin-top: 4rem;
   border-top: 1px solid var(--line);

@@ -2,7 +2,7 @@ import type { MediaType } from "@onlykas/shared";
 
 export interface Challenge { id: string; nonce: string; address: string; origin: string; network: string; message: string; expiresAt: number; consumedAt: number | null; }
 export interface Session { id: string; address: string; expiresAt: number; }
-export interface Profile { address: string; displayName: string | null; updatedAt: number; }
+export interface Profile { address: string; displayName: string | null; isPublic: boolean; updatedAt: number; }
 export interface Post { id: string; creator: string; caption: string; priceSompi: string; mediaType: MediaType; mediaSize: number; mediaDigest: string; mediaKey: string; publishedAt: number; }
 export interface Purchase { postId: string; buyer: string; transactionId: string; }
 export interface PreparedPayment { transaction: string; fingerprint: string; amountSompi: string; creator: string; }
@@ -46,6 +46,7 @@ export interface Store {
   getProfile(address: string): Promise<Profile | null>;
   saveProfile(value: Profile): Promise<void>;
   searchCreators(name: string, limit: number): Promise<Profile[]>;
+  publicCreators(limit: number): Promise<Profile[]>;
   publishPost(value: Post): Promise<"COMMITTED" | "MEDIA_DIGEST_CONFLICT">;
   getPost(id: string): Promise<Post | null>;
   creatorPosts(address: string): Promise<Post[]>;

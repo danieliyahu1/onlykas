@@ -20,6 +20,7 @@ function creator(isOwner: boolean, offered: boolean, active = false): CreatorRes
     address: creatorAddress,
     displayAddress: creatorAddress,
     displayName: "Creator",
+    isPublic: false,
     isOwner,
     membership: { offered, active },
     posts: [],
@@ -33,11 +34,11 @@ function unnamedCreator(): CreatorResponse {
   };
 }
 
-function renderProfile(address: string | null, signIn = vi.fn(async () => address)) {
+function renderProfile(address: string | null, signIn = vi.fn(async () => address), onVisibilityChange?: (isPublic: boolean) => Promise<unknown>) {
   render(
     <MemoryRouter initialEntries={[`/creator/${creatorAddress}`]}>
       <Routes>
-        <Route path="/creator/:address" element={<CreatorPage address={address} signIn={signIn} signingIn={false} />} />
+        <Route path="/creator/:address" element={<CreatorPage address={address} signIn={signIn} signingIn={false} onVisibilityChange={onVisibilityChange} />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -184,6 +185,22 @@ describe("creator membership actions", () => {
     expect(
       await screen.findByRole("heading", { name: COPY.serverDown }),
     ).toBeVisible();
+  });
+});
+
+describe("creator profile visibility", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("lets the owner make their profile public", async () => {
+    vi.mocked(api).mockResolvedValueOnce(creator(true, false));
+    const onVisibilityChange = vi.fn(async () => undefined);
+    const user = userEvent.setup();
+    renderProfile(creatorAddress, vi.fn(async () => creatorAddress), onVisibilityChange);
+
+    await user.click(await screen.findByRole("button", { name: "Make public" }));
+
+    expect(onVisibilityChange).toHaveBeenCalledWith(true);
+    expect(await screen.findByText("Your profile is now public.")).toBeVisible();
   });
 });
 

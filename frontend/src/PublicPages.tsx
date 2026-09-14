@@ -4,9 +4,9 @@ import type { CreatorResponse, PostResponse } from "@onlykas/shared";
 import { api, signPreparedPayment, WalletError, ApiError } from "./kasware.js";
 import { KaspaMark } from "./KaspaMark.js";
 
-type WalletProps = { address: string | null; signIn: () => Promise<string | null>; signingIn: boolean };
+type WalletProps = { address: string | null; signIn: () => Promise<string | null>; signingIn: boolean; onVisibilityChange?: (isPublic: boolean) => Promise<unknown> };
 
-export function CreatorPage({ address, signIn, signingIn }: WalletProps) {
+export function CreatorPage({ address, signIn, signingIn, onVisibilityChange }: WalletProps) {
   const { address: creatorAddress = "" } = useParams();
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -14,6 +14,7 @@ export function CreatorPage({ address, signIn, signingIn }: WalletProps) {
   const [addressCopied, setAddressCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [visibilityBusy, setVisibilityBusy] = useState(false);
   async function loadCreator() {
     setLoading(true);
     setCreator(null);
@@ -58,8 +59,23 @@ export function CreatorPage({ address, signIn, signingIn }: WalletProps) {
       setMessage("Address could not be copied.");
     }
   }
+  async function toggleVisibility() {
+    if (!onVisibilityChange) return;
+    setVisibilityBusy(true);
+    setMessage(null);
+    try {
+      const next = !currentCreator.isPublic;
+      await onVisibilityChange(next);
+      setCreator({ ...currentCreator, isPublic: next });
+      setMessage(next ? "Your profile is now public." : "Your profile is now private.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Profile visibility could not be saved.");
+    } finally {
+      setVisibilityBusy(false);
+    }
+  }
   const showAccess = owner || currentCreator.membership.offered || currentCreator.membership.active;
-  return <section className="profile"><div className="creator-identity"><h1 className={currentCreator.displayName ? undefined : "address-heading"}>{currentCreator.displayName ?? shorten(currentCreator.address)}</h1><button className="wallet-address" type="button" title={currentCreator.address} onClick={() => void copyAddress()}>{addressCopied ? "Copied" : shorten(currentCreator.address)}</button></div>{showAccess && <div className="access-strip"><div className="access-facts"><span>Every post</span><span>24 hours</span><span>10 KAS</span></div>{currentCreator.membership.active ? <span className="access-status">Subscribed</span> : owner && !currentCreator.membership.offered ? <button className="primary" disabled={busy || signingIn} onClick={() => void membershipAction()}>{busy ? "Opening..." : "Open access"}</button> : !owner && currentCreator.membership.offered ? <button className="primary" disabled={busy || signingIn} onClick={() => void membershipAction()}>{busy ? "Confirming..." : "Unlock all"}</button> : <span className="access-status">Access open</span>}{message && <p className="feedback inline" role="status">{message}</p>}</div>}<div className="post-grid">{currentCreator.posts.length ? currentCreator.posts.map((post) => <PostCard key={post.id} post={post} />) : <div className="empty-posts">{owner ? <><p>No posts yet.</p><Link className="secondary" to="/">Publish your first post</Link></> : <p>No posts yet.</p>}</div>}</div></section>;
+  return <section className="profile"><div className="creator-identity"><h1 className={currentCreator.displayName ? undefined : "address-heading"}>{currentCreator.displayName ?? shorten(currentCreator.address)}</h1><button className="wallet-address" type="button" title={currentCreator.address} onClick={() => void copyAddress()}>{addressCopied ? "Copied" : shorten(currentCreator.address)}</button>{owner && onVisibilityChange && <div className="profile-visibility"><span>{currentCreator.isPublic ? "Public profile" : "Private profile"}</span><button className="secondary" type="button" disabled={visibilityBusy} onClick={() => void toggleVisibility()}>{visibilityBusy ? "Saving..." : currentCreator.isPublic ? "Make private" : "Make public"}</button></div>}</div>{showAccess && <div className="access-strip"><div className="access-facts"><span>Every post</span><span>24 hours</span><span>10 KAS</span></div>{currentCreator.membership.active ? <span className="access-status">Subscribed</span> : owner && !currentCreator.membership.offered ? <button className="primary" disabled={busy || signingIn} onClick={() => void membershipAction()}>{busy ? "Opening..." : "Open access"}</button> : !owner && currentCreator.membership.offered ? <button className="primary" disabled={busy || signingIn} onClick={() => void membershipAction()}>{busy ? "Confirming..." : "Unlock all"}</button> : <span className="access-status">Access open</span>}{message && <p className="feedback inline" role="status">{message}</p>}</div>}{!showAccess && message && <p className="feedback inline" role="status">{message}</p>}<div className="post-grid">{currentCreator.posts.length ? currentCreator.posts.map((post) => <PostCard key={post.id} post={post} />) : <div className="empty-posts">{owner ? <><p>No posts yet.</p><Link className="secondary" to="/">Publish your first post</Link></> : <p>No posts yet.</p>}</div>}</div></section>;
 }
 
 export function PostPage({ address, signIn, signingIn }: WalletProps) {

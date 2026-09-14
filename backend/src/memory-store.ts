@@ -28,6 +28,7 @@ export class MemoryStore implements Store {
   async getProfile(address: string) { const v = this.profiles.get(address); return v ? structuredClone(v) : null; }
   async saveProfile(v: Profile) { this.profiles.set(v.address, structuredClone(v)); }
   async searchCreators(name: string, limit: number) { const q = name.toLocaleLowerCase(); return [...this.profiles.values()].filter(v => v.displayName?.toLocaleLowerCase().includes(q)).filter(v => [...this.posts.values()].some(p => p.creator === v.address)).slice(0, limit).map(v => structuredClone(v)); }
+  async publicCreators(limit: number) { return [...this.profiles.values()].filter(v => v.isPublic).sort((a, b) => (a.displayName ?? a.address).localeCompare(b.displayName ?? b.address)).slice(0, limit).map(v => structuredClone(v)); }
   async publishPost(v: Post) { if ([...this.posts.values()].some(p => p.mediaDigest === v.mediaDigest)) return "MEDIA_DIGEST_CONFLICT"; this.posts.set(v.id, structuredClone(v)); return "COMMITTED"; }
   async getPost(id: string) { const v = this.posts.get(id); return v ? structuredClone(v) : null; }
   async creatorPosts(address: string) { return [...this.posts.values()].filter(v => v.creator === address).sort((a,b) => b.publishedAt-a.publishedAt).map(v => structuredClone(v)); }

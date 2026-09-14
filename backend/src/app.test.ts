@@ -147,6 +147,42 @@ describe("request metrics", () => {
   });
 });
 
+describe("profile visibility", () => {
+  const address = `kaspatest:${"a".repeat(60)}`;
+  const otherAddress = `kaspatest:${"b".repeat(60)}`;
+
+  async function profileApp() {
+    const store = new MemoryStore();
+    await store.createSession({ id: "profile-session", address, expiresAt: Date.now() + 60_000 });
+    return { store, app: testApp(store).app };
+  }
+
+  it("defaults profiles to private and allows visibility-only updates", async () => {
+    const { app, store } = await profileApp();
+
+    const initial = await request(app).get("/api/profile").set("Cookie", "onlykas_session=profile-session");
+    expect(initial.body).toMatchObject({ address, displayName: null, isPublic: false });
+
+    const updated = await request(app)
+      .put("/api/profile")
+      .set("Cookie", "onlykas_session=profile-session")
+      .send({ isPublic: true });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({ address, isPublic: true });
+    expect((await store.getProfile(address))?.isPublic).toBe(true);
+  });
+
+  it("returns only public profiles from the public creators endpoint", async () => {
+    const { app, store } = await profileApp();
+    await store.saveProfile({ address, displayName: "Visible", isPublic: true, updatedAt: Date.now() });
+    await store.saveProfile({ address: otherAddress, displayName: "Hidden", isPublic: false, updatedAt: Date.now() });
+
+    const response = await request(app).get("/api/creators/public");
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([expect.objectContaining({ address, displayName: "Visible" })]);
+  });
+});
+
 describe("payment confirmation", () => {
   async function buyerSession(store: MemoryStore) {
     const buyer = `kaspatest:${"b".repeat(60)}`;

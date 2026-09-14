@@ -177,6 +177,7 @@ export interface CreatorResponse {
   address: string;
   displayAddress: string;
   displayName: string | null;
+  isPublic: boolean;
   isOwner: boolean;
   membership: { offered: boolean; active: boolean };
   posts: PostResponse[];
@@ -192,6 +193,7 @@ export interface ProfileResponse {
   address: string;
   displayAddress: string;
   displayName: string | null;
+  isPublic: boolean;
 }
 
 export type MembershipCheckStatus =
