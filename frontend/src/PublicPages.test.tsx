@@ -202,6 +202,50 @@ describe("creator profile visibility", () => {
     expect(onVisibilityChange).toHaveBeenCalledWith(true);
     expect(await screen.findByText("Your profile is now public.")).toBeVisible();
   });
+
+  it("refuses the visibility toggle to visitors and consumers", async () => {
+    vi.mocked(api).mockResolvedValueOnce(creator(false, false));
+    renderProfile(consumerAddress);
+
+    expect(await screen.findByRole("heading", { name: "Creator" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /make (public|private)/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the current public state on the owner profile", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ ...creator(true, false), isPublic: true });
+    renderProfile(creatorAddress, vi.fn(async () => creatorAddress), vi.fn(async () => undefined));
+
+    expect(await screen.findByText("Public profile")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Make private" })).toBeVisible();
+  });
+
+  it("lets the owner make their public profile private again", async () => {
+    vi.mocked(api).mockResolvedValueOnce({ ...creator(true, false), isPublic: true });
+    const onVisibilityChange = vi.fn(async () => undefined);
+    const user = userEvent.setup();
+    renderProfile(creatorAddress, vi.fn(async () => creatorAddress), onVisibilityChange);
+
+    await user.click(await screen.findByRole("button", { name: "Make private" }));
+
+    expect(onVisibilityChange).toHaveBeenCalledWith(false);
+    expect(await screen.findByText("Your profile is now private.")).toBeVisible();
+  });
+
+  it("keeps the previous state when saving visibility fails", async () => {
+    vi.mocked(api).mockResolvedValueOnce(creator(true, false));
+    const onVisibilityChange = vi.fn(async () => { throw new Error("Save failed"); });
+    const user = userEvent.setup();
+    renderProfile(creatorAddress, vi.fn(async () => creatorAddress), onVisibilityChange);
+
+    await user.click(await screen.findByRole("button", { name: "Make public" }));
+
+    expect(onVisibilityChange).toHaveBeenCalledWith(true);
+    expect(await screen.findByText("Save failed")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Make public" })).toBeVisible();
+    expect(screen.queryByText("Public profile")).not.toBeInTheDocument();
+  });
 });
 
 function shorten(address: string) {

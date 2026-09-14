@@ -181,6 +181,52 @@ describe("profile visibility", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual([expect.objectContaining({ address, displayName: "Visible" })]);
   });
+
+  it("keeps the display name when only visibility is toggled", async () => {
+    const { app, store } = await profileApp();
+
+    const named = await request(app)
+      .put("/api/profile")
+      .set("Cookie", "onlykas_session=profile-session")
+      .send({ displayName: "Maya" });
+    expect(named.body).toMatchObject({ address, displayName: "Maya", isPublic: false });
+
+    const toggled = await request(app)
+      .put("/api/profile")
+      .set("Cookie", "onlykas_session=profile-session")
+      .send({ isPublic: true });
+    expect(toggled.body).toMatchObject({ displayName: "Maya", isPublic: true });
+    expect(await store.getProfile(address)).toMatchObject({ displayName: "Maya", isPublic: true });
+  });
+
+  it("keeps the visibility state when the display name changes", async () => {
+    const { app, store } = await profileApp();
+
+    const madePublic = await request(app)
+      .put("/api/profile")
+      .set("Cookie", "onlykas_session=profile-session")
+      .send({ isPublic: true });
+    expect(madePublic.body).toMatchObject({ isPublic: true, displayName: null });
+
+    const renamed = await request(app)
+      .put("/api/profile")
+      .set("Cookie", "onlykas_session=profile-session")
+      .send({ displayName: "Maya" });
+    expect(renamed.body).toMatchObject({ displayName: "Maya", isPublic: true });
+    expect(await store.getProfile(address)).toMatchObject({ displayName: "Maya", isPublic: true });
+  });
+
+  it("still serves private profiles by direct address", async () => {
+    const { app, store } = await profileApp();
+    await store.saveProfile({ address, displayName: "Hidden", isPublic: false, updatedAt: Date.now() });
+
+    const direct = await request(app).get(`/api/creators/${address}`);
+    expect(direct.status).toBe(200);
+    expect(direct.body).toMatchObject({ address, displayName: "Hidden", isPublic: false });
+
+    const directory = await request(app).get("/api/creators/public");
+    expect(directory.body).toEqual([]);
+  });
 });
 
 describe("payment confirmation", () => {
