@@ -38,7 +38,7 @@ function renderProfile(address: string | null, signIn = vi.fn(async () => addres
   render(
     <MemoryRouter initialEntries={[`/creator/${creatorAddress}`]}>
       <Routes>
-        <Route path="/creator/:address" element={<CreatorPage address={address} signIn={signIn} signingIn={false} onVisibilityChange={onVisibilityChange} />} />
+        <Route path="/creator/:address" element={<CreatorPage address={address} signIn={signIn} signingIn={false} {...(onVisibilityChange ? { onVisibilityChange } : {})} />} />
       </Routes>
     </MemoryRouter>,
   );
