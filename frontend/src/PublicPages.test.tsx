@@ -12,8 +12,10 @@ vi.mock("./kasware.js", async () => ({
   signPreparedPayment: vi.fn(),
 }));
 
-const creatorAddress = "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
-const consumerAddress = "kaspatest:qzvp9r3gxg4wvcl44lm5phav2gz5zfx2de7qqqwd3hjlr53rtsn6wefhk0aj8";
+const creatorAddress =
+  "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
+const consumerAddress =
+  "kaspatest:qzvp9r3gxg4wvcl44lm5phav2gz5zfx2de7qqqwd3hjlr53rtsn6wefhk0aj8";
 
 function creator(isOwner: boolean, offered: boolean, active = false): CreatorResponse {
   return {
@@ -34,11 +36,25 @@ function unnamedCreator(): CreatorResponse {
   };
 }
 
-function renderProfile(address: string | null, signIn = vi.fn(async () => address), onVisibilityChange?: (isPublic: boolean) => Promise<unknown>) {
+function renderProfile(
+  address: string | null,
+  signIn = vi.fn(async () => address),
+  onVisibilityChange?: (isPublic: boolean) => Promise<unknown>,
+) {
   render(
     <MemoryRouter initialEntries={[`/creator/${creatorAddress}`]}>
       <Routes>
-        <Route path="/creator/:address" element={<CreatorPage address={address} signIn={signIn} signingIn={false} {...(onVisibilityChange ? { onVisibilityChange } : {})} />} />
+        <Route
+          path="/creator/:address"
+          element={
+            <CreatorPage
+              address={address}
+              signIn={signIn}
+              signingIn={false}
+              {...(onVisibilityChange ? { onVisibilityChange } : {})}
+            />
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -59,7 +75,9 @@ describe("creator membership actions", () => {
 
     await user.click(await screen.findByRole("button", { name: "Open access" }));
 
-    expect(api).toHaveBeenCalledWith("/api/membership/offers/prepare", { method: "POST" });
+    expect(api).toHaveBeenCalledWith("/api/membership/offers/prepare", {
+      method: "POST",
+    });
     expect(signPreparedPayment).toHaveBeenCalledWith("{}", [0]);
     expect(api).toHaveBeenCalledWith("/api/membership/offers/offer/finalize", {
       method: "POST",
@@ -80,7 +98,10 @@ describe("creator membership actions", () => {
 
     await user.click(await screen.findByRole("button", { name: "Unlock all" }));
 
-    expect(api).toHaveBeenCalledWith(`/api/membership/${encodeURIComponent(creatorAddress)}/prepare`, { method: "POST" });
+    expect(api).toHaveBeenCalledWith(
+      `/api/membership/${encodeURIComponent(creatorAddress)}/prepare`,
+      { method: "POST" },
+    );
     expect(signPreparedPayment).toHaveBeenCalledWith("{}", [1]);
     await waitFor(() => expect(screen.getByText("Subscribed")).toBeVisible());
   });
@@ -89,14 +110,19 @@ describe("creator membership actions", () => {
     vi.mocked(api).mockResolvedValueOnce(unnamedCreator());
     renderProfile(null);
 
-    expect(await screen.findByRole("heading", { name: shorten(creatorAddress) })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: shorten(creatorAddress) }),
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: shorten(creatorAddress) })).toBeVisible();
   });
 
   it("shows a lock state for every post on the creator profile", async () => {
     const locked = post("locked-post", "Locked one", false);
     const open = post("open-post", "Open one", true);
-    vi.mocked(api).mockResolvedValueOnce({ ...creator(false, true), posts: [locked, open] });
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(false, true),
+      posts: [locked, open],
+    });
     renderProfile(null);
 
     expect(await screen.findByText("Locked")).toBeVisible();
@@ -118,7 +144,9 @@ describe("creator membership actions", () => {
     vi.mocked(api).mockResolvedValueOnce(post);
     renderPost(post);
 
-    const player = await screen.findByRole("group", { name: "A moment for the circle video" });
+    const player = await screen.findByRole("group", {
+      name: "A moment for the circle video",
+    });
     const video = player.querySelector("video");
     expect(video).not.toBeNull();
     expect(video).toHaveAttribute("preload", "metadata");
@@ -130,7 +158,9 @@ describe("creator membership actions", () => {
   it("blocks the buyer until the payment response arrives", async () => {
     const locked = post("paid-post", "A paid moment", false);
     let resolveFinalize!: (value: { state: string; message?: string }) => void;
-    const finalize = new Promise<{ state: string; message?: string }>((resolve) => { resolveFinalize = resolve; });
+    const finalize = new Promise<{ state: string; message?: string }>((resolve) => {
+      resolveFinalize = resolve;
+    });
     vi.mocked(api)
       .mockResolvedValueOnce(locked)
       .mockResolvedValueOnce({ id: "pay-1", transaction: "{}" })
@@ -139,7 +169,16 @@ describe("creator membership actions", () => {
     render(
       <MemoryRouter initialEntries={["/post/paid-post"]}>
         <Routes>
-          <Route path="/post/:id" element={<PostPage address={consumerAddress} signIn={vi.fn(async () => consumerAddress)} signingIn={false} />} />
+          <Route
+            path="/post/:id"
+            element={
+              <PostPage
+                address={consumerAddress}
+                signIn={vi.fn(async () => consumerAddress)}
+                signingIn={false}
+              />
+            }
+          />
         </Routes>
       </MemoryRouter>,
     );
@@ -147,7 +186,9 @@ describe("creator membership actions", () => {
     await user.click(await screen.findByRole("button", { name: /unlock for/i }));
 
     expect(await screen.findByRole("button", { name: /working/i })).toBeDisabled();
-    expect(screen.queryByRole("img", { name: "A paid moment" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "A paid moment" }),
+    ).not.toBeInTheDocument();
 
     resolveFinalize({ state: "CONFIRMED", message: "Unlocked." });
     expect(await screen.findByRole("img", { name: "A paid moment" })).toBeVisible();
@@ -165,7 +206,16 @@ describe("creator membership actions", () => {
     render(
       <MemoryRouter initialEntries={["/post/paid-post"]}>
         <Routes>
-          <Route path="/post/:id" element={<PostPage address={consumerAddress} signIn={vi.fn(async () => consumerAddress)} signingIn={false} />} />
+          <Route
+            path="/post/:id"
+            element={
+              <PostPage
+                address={consumerAddress}
+                signIn={vi.fn(async () => consumerAddress)}
+                signingIn={false}
+              />
+            }
+          />
         </Routes>
       </MemoryRouter>,
     );
@@ -182,9 +232,64 @@ describe("creator membership actions", () => {
     );
     renderPost(post("paid-post", "A paid moment", false));
 
-    expect(
-      await screen.findByRole("heading", { name: COPY.serverDown }),
-    ).toBeVisible();
+    expect(await screen.findByRole("heading", { name: COPY.serverDown })).toBeVisible();
+  });
+});
+
+describe("post loading and authorization", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("shows loading instead of unavailable while the post is being fetched", () => {
+    vi.mocked(api).mockImplementationOnce(
+      () => new Promise<PostResponse>(() => undefined),
+    );
+    renderPost(post("pending-post", "A pending moment", false));
+
+    expect(screen.getByRole("heading", { name: "Loading post..." })).toBeVisible();
+    expect(screen.queryByText("Post unavailable.")).not.toBeInTheDocument();
+  });
+
+  it("refetches access after the viewer signs in without a page refresh", async () => {
+    const locked = post("auth-post", "A private moment", false);
+    const unlocked = post("auth-post", "A private moment", true);
+    vi.mocked(api).mockResolvedValueOnce(locked).mockResolvedValueOnce(unlocked);
+    const view = render(
+      <MemoryRouter initialEntries={["/post/auth-post"]}>
+        <Routes>
+          <Route
+            path="/post/:id"
+            element={
+              <PostPage
+                address={null}
+                signIn={vi.fn(async () => consumerAddress)}
+                signingIn={false}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: /unlock for/i })).toBeVisible();
+    view.rerender(
+      <MemoryRouter initialEntries={["/post/auth-post"]}>
+        <Routes>
+          <Route
+            path="/post/:id"
+            element={
+              <PostPage
+                address={consumerAddress}
+                signIn={vi.fn(async () => consumerAddress)}
+                signingIn={false}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("img", { name: "A private moment" })).toBeVisible();
+    expect(api).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -195,7 +300,11 @@ describe("creator profile visibility", () => {
     vi.mocked(api).mockResolvedValueOnce(creator(true, false));
     const onVisibilityChange = vi.fn(async () => undefined);
     const user = userEvent.setup();
-    renderProfile(creatorAddress, vi.fn(async () => creatorAddress), onVisibilityChange);
+    renderProfile(
+      creatorAddress,
+      vi.fn(async () => creatorAddress),
+      onVisibilityChange,
+    );
 
     await user.click(await screen.findByRole("button", { name: "Make public" }));
 
@@ -215,7 +324,11 @@ describe("creator profile visibility", () => {
 
   it("shows the current public state on the owner profile", async () => {
     vi.mocked(api).mockResolvedValueOnce({ ...creator(true, false), isPublic: true });
-    renderProfile(creatorAddress, vi.fn(async () => creatorAddress), vi.fn(async () => undefined));
+    renderProfile(
+      creatorAddress,
+      vi.fn(async () => creatorAddress),
+      vi.fn(async () => undefined),
+    );
 
     expect(await screen.findByText("Public profile")).toBeVisible();
     expect(screen.getByRole("button", { name: "Make private" })).toBeVisible();
@@ -225,7 +338,11 @@ describe("creator profile visibility", () => {
     vi.mocked(api).mockResolvedValueOnce({ ...creator(true, false), isPublic: true });
     const onVisibilityChange = vi.fn(async () => undefined);
     const user = userEvent.setup();
-    renderProfile(creatorAddress, vi.fn(async () => creatorAddress), onVisibilityChange);
+    renderProfile(
+      creatorAddress,
+      vi.fn(async () => creatorAddress),
+      onVisibilityChange,
+    );
 
     await user.click(await screen.findByRole("button", { name: "Make private" }));
 
@@ -235,9 +352,15 @@ describe("creator profile visibility", () => {
 
   it("keeps the previous state when saving visibility fails", async () => {
     vi.mocked(api).mockResolvedValueOnce(creator(true, false));
-    const onVisibilityChange = vi.fn(async () => { throw new Error("Save failed"); });
+    const onVisibilityChange = vi.fn(async () => {
+      throw new Error("Save failed");
+    });
     const user = userEvent.setup();
-    renderProfile(creatorAddress, vi.fn(async () => creatorAddress), onVisibilityChange);
+    renderProfile(
+      creatorAddress,
+      vi.fn(async () => creatorAddress),
+      onVisibilityChange,
+    );
 
     await user.click(await screen.findByRole("button", { name: "Make public" }));
 
@@ -268,7 +391,16 @@ function renderPost(post: PostResponse) {
   render(
     <MemoryRouter initialEntries={[`/post/${post.id}`]}>
       <Routes>
-        <Route path="/post/:id" element={<PostPage address={null} signIn={vi.fn(async () => null)} signingIn={false} />} />
+        <Route
+          path="/post/:id"
+          element={
+            <PostPage
+              address={null}
+              signIn={vi.fn(async () => null)}
+              signingIn={false}
+            />
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );

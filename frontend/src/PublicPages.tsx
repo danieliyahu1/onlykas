@@ -21,29 +21,43 @@ export function CreatorPage({
   const { address: creatorAddress = "" } = useParams();
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const { toast, showToast, dismissToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
-  async function loadCreator() {
-    setLoading(true);
-    setCreator(null);
+  const requestId = useRef(0);
+  async function loadCreator(initial = false) {
+    const currentRequest = ++requestId.current;
+    if (initial) {
+      setLoading(true);
+      setCreator(null);
+    } else {
+      setRefreshing(true);
+    }
     setLoadError(null);
     try {
-      setCreator(
-        await api<CreatorResponse>(
-          `/api/creators/${encodeURIComponent(creatorAddress)}`,
-        ),
+      const value = await api<CreatorResponse>(
+        `/api/creators/${encodeURIComponent(creatorAddress)}`,
       );
+      if (currentRequest === requestId.current) setCreator(value);
     } catch (error) {
-      setCreator(null);
-      setLoadError(error instanceof ApiError ? error.message : null);
+      if (currentRequest === requestId.current) {
+        setCreator(initial ? null : creator);
+        const message =
+          error instanceof ApiError ? error.message : "Creator could not be loaded.";
+        setLoadError(message);
+        if (!initial) showToast(message, "error");
+      }
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }
   useEffect(() => {
-    void loadCreator();
+    void loadCreator(true);
   }, [creatorAddress]);
   if (loading) return <Message title="Loading creator..." />;
   if (!creator) return <Message title={loadError ?? "Creator unavailable."} />;
@@ -189,6 +203,7 @@ export function CreatorPage({
             ) : (
               <span className="access-status">Access open</span>
             )}
+            {refreshing && <span className="access-status">Refreshing...</span>}
           </div>
         )}
         <div className="post-grid">
@@ -221,19 +236,33 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const { toast, showToast, dismissToast } = useToast();
   const [busy, setBusy] = useState(false);
   const [mediaError, setMediaError] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
+    let active = true;
     setPost(null);
+    setLoading(true);
     dismissToast();
     setMediaError(false);
     setLoadError(null);
     void api<PostResponse>(`/api/posts/${encodeURIComponent(id)}`)
-      .then(setPost)
+      .then((value) => {
+        if (!active) return;
+        setPost(value);
+      })
       .catch((error: unknown) => {
+        if (!active) return;
         setLoadError(error instanceof ApiError ? error.message : null);
         setPost(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
-  }, [dismissToast, id]);
+    return () => {
+      active = false;
+    };
+  }, [address, dismissToast, id]);
+  if (loading) return <Message title="Loading post..." />;
   if (!post) return <Message title={loadError ?? "Post unavailable."} />;
   const currentPost = post;
   async function unlock() {

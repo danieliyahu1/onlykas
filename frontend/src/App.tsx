@@ -22,7 +22,10 @@ import { Toast, useToast } from "./Toast.js";
 export function App() {
   const [address, setAddress] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
   const [savingName, setSavingName] = useState(false);
 
@@ -32,21 +35,42 @@ export function App() {
     if (!address) {
       setProfile(null);
       setProfileName("");
+      setLoadingProfile(false);
+      setProfileError(null);
       return;
     }
+    let active = true;
+    setLoadingProfile(true);
+    setProfileError(null);
     void api<ProfileResponse>("/api/profile")
       .then((value) => {
+        if (!active) return;
         setProfile(value);
         setProfileName(value.displayName ?? "");
       })
-      .catch(() => undefined);
-  }, [address]);
+      .catch((error: unknown) => {
+        if (active) {
+          const message =
+            error instanceof Error ? error.message : "Profile could not be loaded.";
+          setProfileError(message);
+          showToast(message, "error");
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingProfile(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [address, showToast]);
 
   useEffect(() => {
+    let active = true;
     let wallet;
     try {
       wallet = kasware();
     } catch {
+      if (active) setCheckingSession(false);
       return;
     }
     void (async () => {
@@ -55,9 +79,12 @@ export function App() {
           wallet.getAccounts(),
           api<{ address: string }>("/api/auth/session"),
         ]);
-        if (accounts[0] && accounts[0] === session.address) setAddress(session.address);
+        if (active && accounts[0] && accounts[0] === session.address)
+          setAddress(session.address);
       } catch {
         // A missing or expired server session simply requires sign-in.
+      } finally {
+        if (active) setCheckingSession(false);
       }
     })();
     const changed = () => {
@@ -68,6 +95,7 @@ export function App() {
     wallet.on("accountsChanged", changed);
     wallet.on("networkChanged", changed);
     return () => {
+      active = false;
       wallet.removeListener("accountsChanged", changed);
       wallet.removeListener("networkChanged", changed);
     };
@@ -151,22 +179,39 @@ export function App() {
             {address ? (
               <details className="account">
                 <summary
-                  aria-label={`Your account ${profile?.displayName ?? "Add your name"}`}
+                  aria-label={
+                    loadingProfile
+                      ? "Your account, checking profile"
+                      : profileError
+                        ? "Your account, profile unavailable"
+                        : `Your account ${profile?.displayName ?? "Add your name"}`
+                  }
                 >
-                  <Icon name="user" /> Hi, {profile?.displayName ?? "there"}!
+                  <Icon name="user" />{" "}
+                  {loadingProfile
+                    ? "Checking profile..."
+                    : profileError
+                      ? "Profile unavailable"
+                      : `Hi, ${profile?.displayName ?? "there"}!`}
                 </summary>
                 <div className="account-menu">
                   <label htmlFor="display-name">Your name</label>
-                  <input
-                    id="display-name"
-                    value={profileName}
-                    onChange={(event) => setProfileName(event.target.value)}
-                    placeholder="How should we call you?"
-                    maxLength={40}
-                  />
+                  {loadingProfile ? (
+                    <p className="account-loading">Loading profile...</p>
+                  ) : profileError ? (
+                    <p className="account-loading">{profileError}</p>
+                  ) : (
+                    <input
+                      id="display-name"
+                      value={profileName}
+                      onChange={(event) => setProfileName(event.target.value)}
+                      placeholder="How should we call you?"
+                      maxLength={40}
+                    />
+                  )}
                   <button
                     className="menu-button"
-                    disabled={savingName}
+                    disabled={savingName || loadingProfile || Boolean(profileError)}
                     onClick={() => void saveName()}
                   >
                     {savingName ? "Saving..." : "Save name"} <Icon name="check" />
@@ -180,12 +225,16 @@ export function App() {
             ) : (
               <button
                 className="nav-account-action"
-                disabled={signingIn}
+                disabled={signingIn || checkingSession}
                 onClick={() => void signIn()}
                 aria-label="Sign in with Kasware"
                 title="Sign in with Kasware"
               >
-                {signingIn ? "Signing in..." : "Sign in"}
+                {checkingSession
+                  ? "Checking session..."
+                  : signingIn
+                    ? "Signing in..."
+                    : "Sign in"}
               </button>
             )}
           </div>
