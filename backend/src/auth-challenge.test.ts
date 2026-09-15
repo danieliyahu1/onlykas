@@ -4,7 +4,8 @@ import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
 import type { Challenge } from "./domain/models.js";
 
-const address = "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
+const address =
+  "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
 const publicOrigin = "https://onlykas.test";
 const now = 1_000_000;
 
@@ -67,7 +68,11 @@ describe("challenge pruning on sign-in", () => {
       store,
       storage: {
         putFile: async () => undefined,
-        readRange: async () => ({ bytes: new Uint8Array(), size: 0, contentType: "image/jpeg" }),
+        readRange: async () => ({
+          bytes: new Uint8Array(),
+          size: 0,
+          contentType: "image/jpeg",
+        }),
         delete: async () => undefined,
       },
       walletVerifier: { verify: async () => false },
@@ -82,5 +87,83 @@ describe("challenge pruning on sign-in", () => {
       .expect(201);
 
     expect(store.challenges.has(expired.id)).toBe(false);
+  });
+});
+
+describe("authentication outcomes", () => {
+  function appFor(store: MemoryStore, verify: boolean) {
+    return createApp({
+      store,
+      storage: {
+        putFile: async () => undefined,
+        readRange: async () => ({
+          bytes: new Uint8Array(),
+          size: 0,
+          contentType: "image/jpeg",
+        }),
+        delete: async () => undefined,
+      },
+      walletVerifier: { verify: async () => verify },
+      publicOrigin,
+      now: () => now,
+    });
+  }
+
+  it("returns a typed verification failure and consumes no session", async () => {
+    const store = new MemoryStore();
+    const app = appFor(store, false);
+    const challengeResponse = await request(app)
+      .post("/api/auth/challenge")
+      .set("Origin", publicOrigin)
+      .send({ address })
+      .expect(201);
+
+    const response = await request(app)
+      .post("/api/auth/session")
+      .set("Origin", publicOrigin)
+      .send({
+        challengeId: challengeResponse.body.challengeId,
+        address,
+        publicKey: "a".repeat(64),
+        signature: "signature",
+      })
+      .expect(401);
+
+    expect(response.body.error).toBe("WALLET_VERIFICATION_FAILED");
+    expect(store.sessions.size).toBe(0);
+  });
+
+  it("rejects replaying a consumed challenge", async () => {
+    const store = new MemoryStore();
+    const app = appFor(store, true);
+    const challengeResponse = await request(app)
+      .post("/api/auth/challenge")
+      .set("Origin", publicOrigin)
+      .send({ address })
+      .expect(201);
+    const body = {
+      challengeId: challengeResponse.body.challengeId,
+      address,
+      publicKey: "a".repeat(64),
+      signature: "signature",
+    };
+
+    await request(app)
+      .post("/api/auth/session")
+      .set("Origin", publicOrigin)
+      .send(body)
+      .expect(201);
+    await request(app)
+      .post("/api/auth/session")
+      .set("Origin", publicOrigin)
+      .send(body)
+      .expect(401);
+    expect(store.sessions.size).toBe(1);
+  });
+
+  it("rejects an empty creator search at the HTTP boundary", async () => {
+    await request(appFor(new MemoryStore(), true))
+      .get("/api/creators/search?q=   ")
+      .expect(400);
   });
 });

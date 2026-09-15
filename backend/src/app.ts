@@ -22,6 +22,11 @@ import {
   PREPARED_TTL_MS,
   SESSION_IDLE_TTL_MS,
 } from "./application/constants.js";
+import {
+  createDiscoveryUseCases,
+  createProfileUseCases,
+  createSessionUseCases,
+} from "./application/auth-use-cases.js";
 import { API_COPY as COPY } from "./adapters/http/api-copy.js";
 import type { CreatorCovenant, Post, Profile, Session } from "./domain/models.js";
 import type {
@@ -80,6 +85,22 @@ export function createApp(d: AppDependencies) {
   // Long-window per-client cap for anonymous feedback.
   const feedbackLimiter =
     d.feedbackRateLimiter ?? new RateLimiter({ limit: 5, windowMs: 10 * 60_000 });
+  const sessions = createSessionUseCases({
+    challenges: d.store,
+    sessions: d.store,
+    walletVerifier: d.walletVerifier,
+    now,
+    createId: () => randomUUID(),
+    createNonce: () => randomBytes(32).toString("hex"),
+    challengeTtlMs: CHALLENGE_TTL_MS,
+    sessionIdleTtlMs: SESSION_IDLE_TTL_MS,
+  });
+  const profiles = createProfileUseCases({
+    profiles: d.store,
+    normalizeDisplayName,
+    validateDisplayName,
+  });
+  const discovery = createDiscoveryUseCases({ profiles: d.store });
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     const startedHr = process.hrtime.bigint();
@@ -137,14 +158,18 @@ export function createApp(d: AppDependencies) {
     try {
       const id = req.cookies[sessionCookie] as string | undefined;
       if (!id) return next();
-      const session = await d.store.getSession(id, now());
+      const session = await sessions.getSession(id, now());
       if (!session) {
         res.clearCookie(sessionCookie);
         return next();
       }
       const expiresAt = now() + SESSION_IDLE_TTL_MS;
-      await d.store.rollSession(id, expiresAt);
-      req.walletSession = { ...session, expiresAt };
+      const refreshed = await sessions.refreshSession(id, now(), expiresAt);
+      if (!refreshed) {
+        res.clearCookie(sessionCookie);
+        return next();
+      }
+      req.walletSession = refreshed;
       setCookie(res, id, Boolean(d.production));
       next();
     } catch (e) {
@@ -158,36 +183,26 @@ export function createApp(d: AppDependencies) {
     asyncHandler(async (req, res) => {
       const b = z.object({ address: z.string().regex(addressPattern) }).parse(req.body);
       trusted(req, d.publicOrigin);
-      await d.store.pruneChallenges(now());
-      const issued = now(),
-        id = randomUUID(),
-        nonce = randomBytes(32).toString("hex"),
-        message = `${COPY.authPrompt}\n\nWallet: ${b.address}\nNetwork: ${NETWORK}\nOrigin: ${d.publicOrigin}\nNonce: ${nonce}`;
-      await d.store.createChallenge({
-        id,
-        nonce,
+      await sessions.pruneChallenges(now());
+      const result = await sessions.issueChallenge({
         address: b.address,
         origin: d.publicOrigin,
         network: NETWORK,
-        message,
-        expiresAt: issued + CHALLENGE_TTL_MS,
-        consumedAt: null,
+        prompt: COPY.authPrompt,
       });
       metrics.authChallengeAttempt("created");
-      res
-        .status(201)
-        .json({
-          challengeId: id,
-          message,
-          expiresAt: new Date(issued + CHALLENGE_TTL_MS).toISOString(),
-        });
+      res.status(201).json({
+        challengeId: result.challenge.id,
+        message: result.challenge.message,
+        expiresAt: new Date(result.expiresAt).toISOString(),
+      });
     }),
   );
   app.post(
     "/api/auth/session",
     asyncHandler(async (req, res) => {
       trusted(req, d.publicOrigin);
-      await d.store.pruneSessions(now());
+      await sessions.pruneSessions(now());
       const b = z
         .object({
           challengeId: z.string().uuid(),
@@ -196,36 +211,24 @@ export function createApp(d: AppDependencies) {
           signature: z.string().min(1),
         })
         .parse(req.body);
-      const c = await d.store.consumeChallenge(b.challengeId, now());
-      if (
-        !c ||
-        c.address !== b.address ||
-        c.origin !== d.publicOrigin ||
-        c.network !== NETWORK ||
-        !(await d.walletVerifier.verify(c.message, b.signature, b.publicKey, b.address))
-      ) {
+      const result = await sessions.authenticate({
+        ...b,
+        origin: d.publicOrigin,
+        network: NETWORK,
+      });
+      if (result.kind === "VERIFICATION_FAILED") {
         metrics.authSessionAttempt("verification_failed");
-        return res
-          .status(401)
-          .json({
-            error: "WALLET_VERIFICATION_FAILED",
-            message: COPY.verificationFailed,
-          });
-      }
-      const session = {
-        id: randomBytes(32).toString("base64url"),
-        address: b.address,
-        expiresAt: now() + SESSION_IDLE_TTL_MS,
-      };
-      await d.store.createSession(session);
-      setCookie(res, session.id, Boolean(d.production));
-      metrics.authSessionAttempt("created");
-      res
-        .status(201)
-        .json({
-          address: session.address,
-          expiresAt: new Date(session.expiresAt).toISOString(),
+        return res.status(401).json({
+          error: "WALLET_VERIFICATION_FAILED",
+          message: COPY.verificationFailed,
         });
+      }
+      setCookie(res, result.session.id, Boolean(d.production));
+      metrics.authSessionAttempt("created");
+      res.status(201).json({
+        address: result.session.address,
+        expiresAt: new Date(result.session.expiresAt).toISOString(),
+      });
     }),
   );
   app.get(
@@ -236,7 +239,7 @@ export function createApp(d: AppDependencies) {
       res.json({
         address: req.walletSession.address,
         displayName:
-          (await d.store.getProfile(req.walletSession.address))?.displayName ?? null,
+          (await profiles.get(req.walletSession.address))?.displayName ?? null,
         expiresAt: new Date(req.walletSession.expiresAt).toISOString(),
       });
     }),
@@ -246,7 +249,7 @@ export function createApp(d: AppDependencies) {
     optional,
     asyncHandler(async (req, res) => {
       const id = req.cookies[sessionCookie] as string | undefined;
-      if (id) await d.store.deleteSession(id);
+      if (id) await sessions.logout(id);
       res.clearCookie(sessionCookie, cookieOptions(Boolean(d.production)));
       res.status(204).end();
     }),
@@ -258,7 +261,7 @@ export function createApp(d: AppDependencies) {
     asyncHandler(async (req, res) =>
       res.json(
         profileResponse(
-          await d.store.getProfile(req.walletSession!.address),
+          await profiles.get(req.walletSession!.address),
           req.walletSession!.address,
         ),
       ),
@@ -270,29 +273,23 @@ export function createApp(d: AppDependencies) {
     required,
     asyncHandler(async (req, res) => {
       const b = z
-          .object({
-            displayName: z.string().max(80).optional(),
-            isPublic: z.boolean().optional(),
-          })
-          .refine(
-            (value) => value.displayName !== undefined || value.isPublic !== undefined,
-          )
-          .parse(req.body),
-        existing = await d.store.getProfile(req.walletSession!.address),
-        name =
-          b.displayName === undefined
-            ? (existing?.displayName ?? null)
-            : normalizeDisplayName(b.displayName);
-      if (b.displayName !== undefined && name !== null && [...name].length > 40)
-        return apiError(res, 400, "INVALID_DISPLAY_NAME");
-      const profile: Profile = {
+        .object({
+          displayName: z.string().max(80).optional(),
+          isPublic: z.boolean().optional(),
+        })
+        .refine(
+          (value) => value.displayName !== undefined || value.isPublic !== undefined,
+        )
+        .parse(req.body);
+      const result = await profiles.update({
         address: req.walletSession!.address,
-        displayName: validateDisplayName(name ?? ""),
-        isPublic: b.isPublic ?? existing?.isPublic ?? false,
-        updatedAt: now(),
-      };
-      await d.store.saveProfile(profile);
-      res.json(profileResponse(profile, profile.address));
+        ...(b.displayName !== undefined ? { displayName: b.displayName } : {}),
+        ...(b.isPublic !== undefined ? { isPublic: b.isPublic } : {}),
+        now: now(),
+      });
+      if (result.kind === "INVALID_DISPLAY_NAME")
+        return apiError(res, 400, "INVALID_DISPLAY_NAME");
+      res.json(profileResponse(result.profile, result.profile.address));
     }),
   );
   app.get(
@@ -300,7 +297,7 @@ export function createApp(d: AppDependencies) {
     asyncHandler(async (req, res) => {
       const q = z.string().trim().min(1).max(40).parse(req.query.q);
       res.json(
-        (await d.store.searchCreators(q, 20)).map((p) => ({
+        (await discovery.search(q, 20)).map((p) => ({
           address: p.address,
           displayAddress: shorten(p.address),
           displayName: p.displayName,
@@ -312,7 +309,7 @@ export function createApp(d: AppDependencies) {
     "/api/creators/public",
     asyncHandler(async (_, res) =>
       res.json(
-        (await d.store.publicCreators(100)).map((p) => ({
+        (await discovery.publicCreators(100)).map((p) => ({
           address: p.address,
           displayAddress: shorten(p.address),
           displayName: p.displayName,
@@ -398,7 +395,7 @@ export function createApp(d: AppDependencies) {
         active = Boolean(
           viewer && !isOwner && (await membershipAccess(d, address, viewer)),
         ),
-        profile = await d.store.getProfile(address);
+        profile = await profiles.get(address);
       const unlocked =
         isOwner || active
           ? new Set(posts.map((p) => p.id))
@@ -471,13 +468,11 @@ export function createApp(d: AppDependencies) {
           expiresAt: now() + PREPARED_TTL_MS,
         });
         metrics.paymentPrepareAttempt("prepared");
-        res
-          .status(201)
-          .json({
-            id,
-            transaction: prepared.transaction,
-            amountSompi: prepared.amountSompi,
-          });
+        res.status(201).json({
+          id,
+          transaction: prepared.transaction,
+          amountSompi: prepared.amountSompi,
+        });
       } catch (e) {
         if (e instanceof Error && e.message === "INSUFFICIENT_FUNDS") {
           metrics.paymentPrepareAttempt("insufficient_funds");
@@ -505,22 +500,18 @@ export function createApp(d: AppDependencies) {
         await d.store.deletePreparedPayment(id);
         if (submission.isAccepted === null) {
           metrics.paymentFinalizeAttempt("pending");
-          return res
-            .status(202)
-            .json({
-              state: "PENDING",
-              message: COPY.purchasePending,
-              transactionId: submission.transactionId,
-            });
+          return res.status(202).json({
+            state: "PENDING",
+            message: COPY.purchasePending,
+            transactionId: submission.transactionId,
+          });
         }
         metrics.paymentFinalizeAttempt("rejected");
-        return res
-          .status(422)
-          .json({
-            state: "REJECTED",
-            message: COPY.transactionRejected,
-            rejection: submission.rejection,
-          });
+        return res.status(422).json({
+          state: "REJECTED",
+          message: COPY.transactionRejected,
+          rejection: submission.rejection,
+        });
       }
       const purchase = {
         postId: prepared.postId,
@@ -533,13 +524,11 @@ export function createApp(d: AppDependencies) {
         return apiError(res, 409, "PURCHASE_EXISTS");
       }
       metrics.paymentFinalizeAttempt("confirmed");
-      res
-        .status(201)
-        .json({
-          state: "CONFIRMED",
-          transactionId: purchase.transactionId,
-          message: COPY.unlocked,
-        });
+      res.status(201).json({
+        state: "CONFIRMED",
+        transactionId: purchase.transactionId,
+        message: COPY.unlocked,
+      });
     }),
   );
   app.post(
@@ -607,13 +596,11 @@ export function createApp(d: AppDependencies) {
           "offer",
           submission.isAccepted === null ? "pending" : "rejected",
         );
-        return res
-          .status(submission.isAccepted === null ? 202 : 422)
-          .json({
-            state: submission.isAccepted === null ? "PENDING" : "REJECTED",
-            transactionId: submission.transactionId,
-            rejection: submission.rejection,
-          });
+        return res.status(submission.isAccepted === null ? 202 : 422).json({
+          state: submission.isAccepted === null ? "PENDING" : "REJECTED",
+          transactionId: submission.transactionId,
+          rejection: submission.rejection,
+        });
       }
       const mapping: CreatorCovenant = {
         creator: value.creator,
@@ -622,13 +609,11 @@ export function createApp(d: AppDependencies) {
       const outcome = await d.store.finalizeOffer(id, mapping);
       if (outcome === "DUPLICATE") return apiError(res, 409, "MEMBERSHIP_OFFER_EXISTS");
       metrics.membershipFinalizeAttempt("offer", "confirmed");
-      res
-        .status(201)
-        .json({
-          state: "CONFIRMED",
-          transactionId: submission.transactionId,
-          covenantId: value.covenantId,
-        });
+      res.status(201).json({
+        state: "CONFIRMED",
+        transactionId: submission.transactionId,
+        covenantId: value.covenantId,
+      });
     }),
   );
   app.post(
@@ -711,13 +696,11 @@ export function createApp(d: AppDependencies) {
           "purchase",
           submission.isAccepted === null ? "pending" : "rejected",
         );
-        return res
-          .status(submission.isAccepted === null ? 202 : 422)
-          .json({
-            state: submission.isAccepted === null ? "PENDING" : "REJECTED",
-            transactionId: submission.transactionId,
-            rejection: submission.rejection,
-          });
+        return res.status(submission.isAccepted === null ? 202 : 422).json({
+          state: submission.isAccepted === null ? "PENDING" : "REJECTED",
+          transactionId: submission.transactionId,
+          rejection: submission.rejection,
+        });
       }
       const check = await d.membershipVerifier.verifyUtxo(
         submission.transactionId,
@@ -729,13 +712,11 @@ export function createApp(d: AppDependencies) {
       if (check.status !== "VALID") {
         await d.store.deletePreparedMembership(id);
         metrics.membershipFinalizeAttempt("purchase", "not_confirmed");
-        return res
-          .status(422)
-          .json({
-            state: "REJECTED",
-            error: "MEMBERSHIP_NOT_CONFIRMED",
-            membership: check,
-          });
+        return res.status(422).json({
+          state: "REJECTED",
+          error: "MEMBERSHIP_NOT_CONFIRMED",
+          membership: check,
+        });
       }
       const outcome = await d.store.finalizeMembershipPurchase(id, {
         transactionId: submission.transactionId,
@@ -744,13 +725,11 @@ export function createApp(d: AppDependencies) {
       if (outcome === "DUPLICATE")
         return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS");
       metrics.membershipFinalizeAttempt("purchase", "confirmed");
-      res
-        .status(201)
-        .json({
-          state: "CONFIRMED",
-          transactionId: submission.transactionId,
-          membership: check,
-        });
+      res.status(201).json({
+        state: "CONFIRMED",
+        transactionId: submission.transactionId,
+        membership: check,
+      });
     }),
   );
   app.post(
@@ -1011,12 +990,10 @@ function cookieOptions(production: boolean) {
 }
 function apiError(res: Response, status: number, code: string, message?: string) {
   res.locals.apiErrorCode = code;
-  return res
-    .status(status)
-    .json({
-      error: code,
-      message: message ?? `${code.toLowerCase().replaceAll("_", " ")}.`,
-    });
+  return res.status(status).json({
+    error: code,
+    message: message ?? `${code.toLowerCase().replaceAll("_", " ")}.`,
+  });
 }
 function routePattern(req: Request) {
   const route = req.route?.path;
