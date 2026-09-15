@@ -1,25 +1,16 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CreatorSearchResult } from "@onlykas/shared";
 import { api, ApiError } from "./kasware.js";
-import { useAutoDismiss } from "./useAutoDismiss.js";
+import { useAsyncResource } from "./useAsyncResource.js";
 
 export function PublicCreatorsPage() {
   const navigate = useNavigate();
-  const [creators, setCreators] = useState<CreatorSearchResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useAutoDismiss(error, () => setError(null));
-
-  useEffect(() => {
-    void api<CreatorSearchResult[]>("/api/creators/public")
-      .then(setCreators)
-      .catch((reason: unknown) => {
-        setError(reason instanceof ApiError ? reason.message : "Creators could not be loaded.");
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, loading, error: loadError } = useAsyncResource(
+    (signal) => api<CreatorSearchResult[]>("/api/creators/public", { signal }),
+    [],
+  );
+  const creators = data ?? [];
+  const error = loadError instanceof ApiError ? loadError.message : loadError ? "Creators could not be loaded." : null;
 
   return (
     <section className="find-page">
