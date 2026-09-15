@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
+import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import type { ProfileResponse } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { authenticate, kasware, api } from "./kasware.js";
@@ -17,6 +18,7 @@ import { errorText } from "./errors.js";
 import { Toast, useToast } from "./Toast.js";
 
 export function App() {
+  const mainRef = useRef<HTMLElement>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -147,6 +149,7 @@ export function App() {
   return (
     <BrowserRouter>
       <div className="shell">
+        <ScrollReset target={mainRef} />
         <nav>
           <Link to="/" className="brand">
             ONLY<span>KAS</span>
@@ -182,7 +185,7 @@ export function App() {
           </div>
         </nav>
         <Toast toast={toast} />
-        <main>
+        <main ref={mainRef}>
           <Routes>
             <Route
               path="/"
@@ -228,6 +231,14 @@ export function App() {
       </div>
     </BrowserRouter>
   );
+}
+
+function ScrollReset({ target }: { target: RefObject<HTMLElement | null> }) {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    if (target.current) target.current.scrollTop = 0;
+  }, [pathname, target]);
+  return null;
 }
 
 function MessageNotFound() {
