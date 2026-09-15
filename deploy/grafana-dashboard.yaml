@@ -15,15 +15,149 @@ data:
       "editable": false,
       "schemaVersion": 39,
       "refresh": "30s",
-      "time": { "from": "now-3h", "to": "now" },
+      "time": { "from": "now-24h", "to": "now" },
       "templating": { "list": [] },
       "panels": [
+        {
+          "id": 18,
+          "type": "stat",
+          "title": "Homepage opens",
+          "description": "Full document loads of the homepage. Counts visits, not unique people.",
+          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__range]))",
+              "legendFormat": "homepage opens"
+            }
+          ]
+        },
+        {
+          "id": 19,
+          "type": "stat",
+          "title": "Sign-ins",
+          "description": "Successful wallet sign-ins. Counts sessions created, not unique people.",
+          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+          "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "sum(increase(onlykas_auth_session_total{job=\"onlykas\",outcome=\"created\"}[$__range]))",
+              "legendFormat": "sign-ins"
+            }
+          ]
+        },
+        {
+          "id": 20,
+          "type": "stat",
+          "title": "Reached the creators page",
+          "description": "Times the public creators page was opened. Counts visits, not unique people.",
+          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+          "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/public\"}[$__range]))",
+              "legendFormat": "creators page opens"
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "type": "stat",
+          "title": "Reached a creator page",
+          "description": "Times any creator profile page was opened. Counts visits, not unique people.",
+          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+          "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/:address\"}[$__range]))",
+              "legendFormat": "creator page opens"
+            }
+          ]
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Audience over time",
+          "description": "Open/sign-in count per time interval. The y-axis is visits, not a per-second rate.",
+          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+          "gridPos": { "h": 8, "w": 18, "x": 0, "y": 6 },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 0,
+              "custom": {
+                "axisLabel": "visits",
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "lineWidth": 2,
+                "stacking": { "mode": "none" },
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__interval]))",
+              "legendFormat": "homepage"
+            },
+            {
+              "refId": "B",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "sum(increase(onlykas_auth_session_total{job=\"onlykas\",outcome=\"created\"}[$__interval]))",
+              "legendFormat": "sign-ins"
+            },
+            {
+              "refId": "C",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/public\"}[$__interval]))",
+              "legendFormat": "creators page"
+            },
+            {
+              "refId": "D",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/:address\"}[$__interval]))",
+              "legendFormat": "creator page"
+            }
+          ]
+        },
+        {
+          "id": 23,
+          "type": "stat",
+          "title": "Sign-in conversion (vs homepage)",
+          "description": "Successful sign-ins as a share of homepage opens.",
+          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 6 },
+          "fieldConfig": { "defaults": { "unit": "percent", "decimals": 1 }, "overrides": [] },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
+              "expr": "100 * sum(increase(onlykas_auth_session_total{job=\"onlykas\",outcome=\"created\"}[$__range])) / clamp_min(sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__range])), 1)",
+              "legendFormat": "conversion"
+            }
+          ]
+        },
         {
           "id": 1,
           "type": "stat",
           "title": "Scrape targets up",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 14 },
           "targets": [
             {
               "refId": "A",
@@ -38,7 +172,7 @@ data:
           "type": "stat",
           "title": "Requests / sec",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 14 },
           "targets": [
             {
               "refId": "A",
@@ -53,7 +187,7 @@ data:
           "type": "stat",
           "title": "5xx / sec",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+          "gridPos": { "h": 4, "w": 6, "x": 12, "y": 14 },
           "targets": [
             {
               "refId": "A",
@@ -68,7 +202,7 @@ data:
           "type": "stat",
           "title": "Requests in flight",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+          "gridPos": { "h": 4, "w": 6, "x": 18, "y": 14 },
           "targets": [
             {
               "refId": "A",
@@ -83,7 +217,7 @@ data:
           "type": "timeseries",
           "title": "Request rate by route",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
           "targets": [
             {
               "refId": "A",
@@ -94,43 +228,11 @@ data:
           ]
         },
         {
-          "id": 16,
-          "type": "stat",
-          "title": "Homepage visits",
-          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 4 },
-          "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__range]))",
-              "legendFormat": "homepage visits"
-            }
-          ]
-        },
-        {
-          "id": 17,
-          "type": "timeseries",
-          "title": "Homepage visit rate",
-          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 4 },
-          "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(rate(onlykas_page_visits_total{job=\"onlykas\"}[$__rate_interval]))",
-              "legendFormat": "visits/s"
-            }
-          ]
-        },
-        {
           "id": 6,
           "type": "timeseries",
           "title": "Request duration p95",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
           "targets": [
             {
               "refId": "A",
@@ -145,7 +247,7 @@ data:
           "type": "timeseries",
           "title": "Media publish by outcome",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
           "targets": [
             {
               "refId": "A",
@@ -160,7 +262,7 @@ data:
           "type": "timeseries",
           "title": "Media delivery bytes / sec",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 34 },
           "targets": [
             {
               "refId": "A",
@@ -175,7 +277,7 @@ data:
           "type": "timeseries",
           "title": "Payment finalization by state",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 34 },
           "targets": [
             {
               "refId": "A",
@@ -190,7 +292,7 @@ data:
           "type": "timeseries",
           "title": "Membership finalization by state",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 42 },
           "targets": [
             {
               "refId": "A",
@@ -205,7 +307,7 @@ data:
           "type": "timeseries",
           "title": "Dependency errors / sec",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 42 },
           "targets": [
             {
               "refId": "A",
@@ -220,7 +322,7 @@ data:
           "type": "timeseries",
           "title": "Dependency duration p95",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 36 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 50 },
           "targets": [
             {
               "refId": "A",
@@ -235,7 +337,7 @@ data:
           "type": "timeseries",
           "title": "CPU cores",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 36 },
+          "gridPos": { "h": 8, "w": 6, "x": 12, "y": 50 },
           "targets": [
             {
               "refId": "A",
@@ -250,7 +352,7 @@ data:
           "type": "timeseries",
           "title": "Resident memory",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 36 },
+          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 50 },
           "targets": [
             {
               "refId": "A",
@@ -265,7 +367,7 @@ data:
           "type": "timeseries",
           "title": "Event loop lag",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 58 },
           "targets": [
             {
               "refId": "A",
