@@ -30,7 +30,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__range]))",
+              "expr": "sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__range])) or vector(0)",
               "legendFormat": "homepage opens"
             }
           ]
@@ -47,7 +47,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_auth_session_total{job=\"onlykas\",outcome=\"created\"}[$__range]))",
+              "expr": "sum(increase(onlykas_auth_session_total{job=\"onlykas\",outcome=\"created\"}[$__range])) or vector(0)",
               "legendFormat": "sign-ins"
             }
           ]
@@ -64,7 +64,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/public\"}[$__range]))",
+              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/public\"}[$__range])) or vector(0)",
               "legendFormat": "creators page opens"
             }
           ]
@@ -81,7 +81,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/:address\"}[$__range]))",
+              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/:address\"}[$__range])) or vector(0)",
               "legendFormat": "creator page opens"
             }
           ]
@@ -112,26 +112,26 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__interval]))",
-              "legendFormat": "homepage"
+              "expr": "sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__interval])) or vector(0)",
+              "legendFormat": "GET /"
             },
             {
               "refId": "B",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_auth_session_total{job=\"onlykas\",outcome=\"created\"}[$__interval]))",
-              "legendFormat": "sign-ins"
+              "expr": "sum(increase(onlykas_auth_session_total{job=\"onlykas\",outcome=\"created\"}[$__interval])) or vector(0)",
+              "legendFormat": "POST /api/auth/session"
             },
             {
               "refId": "C",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/public\"}[$__interval]))",
-              "legendFormat": "creators page"
+              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/public\"}[$__interval])) or vector(0)",
+              "legendFormat": "GET /api/creators/public"
             },
             {
               "refId": "D",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/:address\"}[$__interval]))",
-              "legendFormat": "creator page"
+              "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/:address\"}[$__interval])) or vector(0)",
+              "legendFormat": "GET /api/creators/:address"
             }
           ]
         },
