@@ -113,6 +113,18 @@ export const migrations: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 4,
+    name: "membership_workflows",
+    statements: [
+      `CREATE TABLE membership_workflows (
+        prepared_membership_id TEXT PRIMARY KEY NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('SUBMITTED', 'CONFIRMED', 'REJECTED')),
+        transaction_id TEXT NOT NULL,
+        rejection TEXT
+      )`,
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {
@@ -147,6 +159,7 @@ export async function applyMigrations(client: Client): Promise<void> {
 
 export async function resetDatabase(client: Client): Promise<void> {
   const tables = [
+    "membership_workflows",
     "payment_workflows",
     "pending_publications",
     "prepared_memberships",

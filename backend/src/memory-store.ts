@@ -6,6 +6,7 @@ import type {
   PreparedMembershipRecord,
   PreparedPaymentRecord,
   PaymentWorkflow,
+  MembershipWorkflow,
   Profile,
   Purchase,
   Session,
@@ -23,6 +24,7 @@ export class MemoryStore implements Repositories {
   readonly membershipPurchaseRecords = new Map<string, MembershipPurchase>();
   readonly preparedPaymentRecords = new Map<string, PreparedPaymentRecord>();
   readonly paymentWorkflows = new Map<string, PaymentWorkflow>();
+  readonly membershipWorkflows = new Map<string, MembershipWorkflow>();
   readonly preparedMembershipRecords = new Map<string, PreparedMembershipRecord>();
   async initialize() {}
   async createChallenge(v: Challenge) {
@@ -61,6 +63,16 @@ export class MemoryStore implements Repositories {
   }
   async deletePaymentWorkflow(id: string) {
     this.paymentWorkflows.delete(id);
+  }
+  async saveMembershipWorkflow(v: MembershipWorkflow) {
+    this.membershipWorkflows.set(v.preparedMembershipId, structuredClone(v));
+  }
+  async getMembershipWorkflow(id: string) {
+    const v = this.membershipWorkflows.get(id);
+    return v ? structuredClone(v) : null;
+  }
+  async deleteMembershipWorkflow(id: string) {
+    this.membershipWorkflows.delete(id);
   }
   async savePreparedMembership(v: PreparedMembershipRecord) {
     this.preparedMembershipRecords.set(v.id, structuredClone(v));

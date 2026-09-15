@@ -622,7 +622,17 @@ export function createApp(d: AppDependencies) {
         body.signedTransaction,
       );
       if (submission.isAccepted !== true || !submission.transactionId) {
-        await d.store.deletePreparedMembership(id);
+        if (submission.isAccepted === null && submission.transactionId) {
+          await d.store.saveMembershipWorkflow({
+            preparedMembershipId: id,
+            state: "SUBMITTED",
+            transactionId: submission.transactionId,
+            rejection: null,
+          });
+        } else {
+          await d.store.deleteMembershipWorkflow(id);
+          await d.store.deletePreparedMembership(id);
+        }
         metrics.membershipFinalizeAttempt(
           "offer",
           submission.isAccepted === null ? "pending" : "rejected",
@@ -638,7 +648,17 @@ export function createApp(d: AppDependencies) {
         covenantId: value.covenantId,
       };
       const outcome = await d.store.finalizeOffer(id, mapping);
-      if (outcome === "DUPLICATE") return apiError(res, 409, "MEMBERSHIP_OFFER_EXISTS");
+      await d.store.saveMembershipWorkflow({
+        preparedMembershipId: id,
+        state: "CONFIRMED",
+        transactionId: submission.transactionId,
+        rejection: null,
+      });
+      if (outcome === "DUPLICATE") {
+        await d.store.deleteMembershipWorkflow(id);
+        return apiError(res, 409, "MEMBERSHIP_OFFER_EXISTS");
+      }
+      await d.store.deleteMembershipWorkflow(id);
       metrics.membershipFinalizeAttempt("offer", "confirmed");
       res.status(201).json({
         state: "CONFIRMED",
@@ -722,7 +742,17 @@ export function createApp(d: AppDependencies) {
         body.signedTransaction,
       );
       if (submission.isAccepted !== true || !submission.transactionId) {
-        await d.store.deletePreparedMembership(id);
+        if (submission.isAccepted === null && submission.transactionId) {
+          await d.store.saveMembershipWorkflow({
+            preparedMembershipId: id,
+            state: "SUBMITTED",
+            transactionId: submission.transactionId,
+            rejection: null,
+          });
+        } else {
+          await d.store.deleteMembershipWorkflow(id);
+          await d.store.deletePreparedMembership(id);
+        }
         metrics.membershipFinalizeAttempt(
           "purchase",
           submission.isAccepted === null ? "pending" : "rejected",
@@ -741,6 +771,7 @@ export function createApp(d: AppDependencies) {
         value.creator,
       );
       if (check.status !== "VALID") {
+        await d.store.deleteMembershipWorkflow(id);
         await d.store.deletePreparedMembership(id);
         metrics.membershipFinalizeAttempt("purchase", "not_confirmed");
         return res.status(422).json({
@@ -753,6 +784,13 @@ export function createApp(d: AppDependencies) {
         transactionId: submission.transactionId,
         buyer: value.buyer,
       });
+      await d.store.saveMembershipWorkflow({
+        preparedMembershipId: id,
+        state: "CONFIRMED",
+        transactionId: submission.transactionId,
+        rejection: null,
+      });
+      await d.store.deleteMembershipWorkflow(id);
       if (outcome === "DUPLICATE")
         return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS");
       metrics.membershipFinalizeAttempt("purchase", "confirmed");
@@ -795,7 +833,12 @@ export function createApp(d: AppDependencies) {
           .status(422)
           .json({ error: "MEMBERSHIP_NOT_CONFIRMED", membership: check });
       }
-      await d.store.createMembershipPurchase({ transactionId: b.transactionId, buyer });
+      const outcome = await d.store.createMembershipPurchase({
+        transactionId: b.transactionId,
+        buyer,
+      });
+      if (outcome === "DUPLICATE")
+        return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS");
       metrics.membershipFinalizeAttempt("purchase", "confirmed");
       res.status(201).json(check);
     }),

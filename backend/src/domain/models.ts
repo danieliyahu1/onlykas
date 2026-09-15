@@ -106,6 +106,15 @@ export interface PreparedMembershipRecord {
   expiresAt: number;
 }
 
+export type MembershipWorkflowState = "SUBMITTED" | "CONFIRMED" | "REJECTED";
+
+export interface MembershipWorkflow {
+  preparedMembershipId: string;
+  state: MembershipWorkflowState;
+  transactionId: string;
+  rejection: string | null;
+}
+
 export type MembershipCheckStatus =
   "VALID" | "EXPIRED" | "OWNER_MISMATCH" | "NOT_MEMBERSHIP";
 

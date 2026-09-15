@@ -6,6 +6,7 @@ import type {
   Post,
   PreparedMembershipRecord,
   PreparedMembershipTransaction,
+  MembershipWorkflow,
   PreparedPaymentRecord,
   PreparedPayment,
   PaymentSubmission,
@@ -49,6 +50,11 @@ export interface PreparedMembershipRepository {
   ): Promise<PreparedMembershipRecord | null>;
   deletePreparedMembership(id: string): Promise<void>;
   prunePreparedMemberships(now: number): Promise<void>;
+  saveMembershipWorkflow(value: MembershipWorkflow): Promise<void>;
+  getMembershipWorkflow(
+    preparedMembershipId: string,
+  ): Promise<MembershipWorkflow | null>;
+  deleteMembershipWorkflow(preparedMembershipId: string): Promise<void>;
 }
 
 export interface ProfileRepository {
