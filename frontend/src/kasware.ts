@@ -1,4 +1,5 @@
-import { COPY, NETWORK } from "@onlykas/shared";
+import { NETWORK } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 import { logger } from "./logger.js";
 
 export interface Kasware {

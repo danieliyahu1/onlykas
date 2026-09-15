@@ -1,4 +1,5 @@
-import type { MembershipCheck, MembershipVerifier } from "./domain.js";
+import type { MembershipCheck } from "./domain/models.js";
+import type { MembershipVerifier } from "./application/ports.js";
 import { XOnlyPublicKey } from "@kluster/kaspa-wasm";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";

@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { CreatorResponse, PostResponse } from "@onlykas/shared";
-import { COPY } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";
 import { api, ApiError, signPreparedPayment } from "./kasware.js";
 

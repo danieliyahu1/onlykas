@@ -13,7 +13,7 @@ import {
   FeedbackService,
   FeedbackSpill,
   TelegramFeedback,
-} from "./feedback.js";
+} from "./adapters/feedback/feedback.js";
 
 async function readVersion(): Promise<string> {
   try {

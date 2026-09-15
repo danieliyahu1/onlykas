@@ -1,5 +1,5 @@
 import { PublicKey, verifyMessage } from "kaspa-wasm";
-import type { WalletVerifier } from "./domain.js";
+import type { WalletVerifier } from "./application/ports.js";
 
 export class KaspaWalletVerifier implements WalletVerifier {
   async verify(

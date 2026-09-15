@@ -7,10 +7,10 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  COPY,
   mediaHintError,
   validatePost,
 } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 import { uploadMedia } from "./upload.js";
 import { KaspaMark } from "./KaspaMark.js";
 import { Icon } from "./Icons.js";

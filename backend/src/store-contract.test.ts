@@ -1,6 +1,7 @@
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
-import type { Post, Store } from "./domain.js";
+import type { Post } from "./domain/models.js";
+import type { Store } from "./application/ports.js";
 
 const now = 1_000_000;
 const creator = "kaspatest:creator";

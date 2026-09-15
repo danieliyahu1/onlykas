@@ -2,7 +2,7 @@ import request from "supertest";
 import { createApp } from "./app.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
-import type { Challenge } from "./domain.js";
+import type { Challenge } from "./domain/models.js";
 
 const address = "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
 const publicOrigin = "https://onlykas.test";

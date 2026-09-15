@@ -7,7 +7,7 @@ import {
   type HeadObjectCommandOutput,
   S3Client,
 } from "@aws-sdk/client-s3";
-import type { ObjectStorage } from "./domain.js";
+import type { ObjectStorage } from "./application/ports.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 
 export type StorageFailureCategory =

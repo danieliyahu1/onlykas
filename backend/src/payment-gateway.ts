@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import type { PaymentGateway, PaymentSubmission, Post, PreparedPayment } from "./domain.js";
+import type { Post, PreparedPayment, PaymentSubmission } from "./domain/models.js";
+import type { PaymentGateway } from "./application/ports.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 import { platformFeeSompi } from "./payment-fee.js";

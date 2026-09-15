@@ -1,10 +1,9 @@
 import {
-  COPY,
+  MEDIA_COPY,
   MAX_IMAGE_BYTES,
   isKaspaTestnetAddress,
   mediaHintError,
   parseKasToSompi,
-  validateMembershipOffer,
   validatePost,
 } from "./index.js";
 
@@ -25,28 +24,10 @@ describe("post validation", () => {
     expect(validatePost(" caption ", "2")).toEqual([]);
     expect(validatePost(" ", "0")).toEqual([
       "Caption must be between 1 and 280 characters.",
-      COPY.invalidPrice,
+      MEDIA_COPY.invalidPrice,
     ]);
     expect(validatePost("x".repeat(281), "1")).toEqual([
       "Caption must be between 1 and 280 characters.",
-    ]);
-  });
-});
-
-describe("membership offer validation", () => {
-  it("accepts a price and description", () => {
-    expect(
-      validateMembershipOffer("1.5", "A private look behind the scenes"),
-    ).toEqual([]);
-  });
-
-  it("rejects missing price or description and oversize descriptions", () => {
-    expect(validateMembershipOffer("0", "  ")).toEqual([
-      "Descriptions must be up to 280 characters.",
-      COPY.invalidPrice,
-    ]);
-    expect(validateMembershipOffer("1", "x".repeat(281))).toEqual([
-      "Descriptions must be up to 280 characters.",
     ]);
   });
 });
@@ -63,9 +44,9 @@ describe("Kaspa testnet address validation", () => {
 
 describe("media hint validation", () => {
   it("rejects unsupported and oversized media before upload", () => {
-    expect(mediaHintError("text/plain", 1)).toBe(COPY.unsupportedMedia);
+    expect(mediaHintError("text/plain", 1)).toBe(MEDIA_COPY.unsupportedMedia);
     expect(mediaHintError("image/png", MAX_IMAGE_BYTES + 1)).toBe(
-      COPY.imageTooLarge,
+      MEDIA_COPY.imageTooLarge,
     );
     expect(mediaHintError("image/png", MAX_IMAGE_BYTES)).toBeNull();
   });

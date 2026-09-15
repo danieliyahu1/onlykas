@@ -1,6 +1,7 @@
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
-import type { Purchase, Store } from "./domain.js";
+import type { Purchase } from "./domain/models.js";
+import type { Store } from "./application/ports.js";
 
 describe.each([
   ["memory", () => new MemoryStore()],

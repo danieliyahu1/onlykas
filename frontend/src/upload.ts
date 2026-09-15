@@ -1,4 +1,4 @@
-import { COPY } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 
 export function uploadMedia(
   file: File,

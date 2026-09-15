@@ -14,7 +14,6 @@ import {
   MAX_VIDEO_BYTES,
   MEDIA_TYPES,
   type MediaType,
-  type UploadError,
 } from "@onlykas/shared";
 
 const execFileAsync = promisify(execFile);
@@ -32,8 +31,15 @@ export interface VerifiedMedia {
   size: number;
 }
 
+type MediaErrorCategory =
+  | "UNSUPPORTED_MEDIA"
+  | "IMAGE_TOO_LARGE"
+  | "VIDEO_TOO_LARGE"
+  | "MALFORMED_MEDIA"
+  | "STORAGE_FAILURE";
+
 export class MediaValidationError extends Error {
-  constructor(readonly category: Exclude<UploadError, null>) {
+  constructor(readonly category: MediaErrorCategory) {
     super(category);
   }
 }

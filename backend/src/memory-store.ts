@@ -1,4 +1,15 @@
-import type { Challenge, CreatorCovenant, MembershipPurchase, Post, PreparedMembershipRecord, PreparedPaymentRecord, Profile, Purchase, Session, Store } from "./domain.js";
+import type {
+  Challenge,
+  CreatorCovenant,
+  MembershipPurchase,
+  Post,
+  PreparedMembershipRecord,
+  PreparedPaymentRecord,
+  Profile,
+  Purchase,
+  Session,
+} from "./domain/models.js";
+import type { Store } from "./application/ports.js";
 
 export class MemoryStore implements Store {
   readonly challenges = new Map<string, Challenge>(); readonly sessions = new Map<string, Session>();

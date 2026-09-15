@@ -6,16 +6,31 @@ import cookieParser from "cookie-parser";
 import express, { type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
 import { z } from "zod";
-import { CHALLENGE_TTL_MS, COPY, KASPA_TESTNET_ADDRESS_PATTERN, mediaHintError, NETWORK, normalizeDisplayName, normalizePostText, parseKasToSompi, PREPARED_TTL_MS, SESSION_IDLE_TTL_MS, validateDisplayName, type MembershipAddressVerificationResponse, type PostResponse } from "@onlykas/shared";
-import type { CreatorCovenant, MembershipGateway, MembershipVerifier, ObjectStorage, PaymentGateway, Post, PreparedMembershipRecord, PreparedPaymentRecord, Profile, Session, Store, WalletVerifier } from "./domain.js";
+import { KASPA_TESTNET_ADDRESS_PATTERN, mediaHintError, NETWORK, normalizeDisplayName, normalizePostText, parseKasToSompi, validateDisplayName, type MembershipAddressVerificationResponse, type PostResponse } from "@onlykas/shared";
+import { CHALLENGE_TTL_MS, PREPARED_TTL_MS, SESSION_IDLE_TTL_MS } from "./application/constants.js";
+import { API_COPY as COPY } from "./adapters/http/api-copy.js";
+import type {
+  CreatorCovenant,
+  Post,
+  Profile,
+  Session,
+} from "./domain/models.js";
+import type {
+  MembershipGateway,
+  MembershipVerifier,
+  ObjectStorage,
+  PaymentGateway,
+  Store,
+  WalletVerifier,
+} from "./application/ports.js";
 import { safeError, logger as defaultLogger, requestId, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
-import { MediaValidationError, verifyMediaFile } from "./media.js";
+import { MediaValidationError, verifyMediaFile } from "./adapters/media/media.js";
 import {
   FeedbackError,
   type FeedbackService,
-} from "./feedback.js";
-import { RateLimiter } from "./rate-limit.js";
+} from "./adapters/feedback/feedback.js";
+import { RateLimiter } from "./adapters/http/rate-limit.js";
 
 const sessionCookie="onlykas_session"; const addressPattern=KASPA_TESTNET_ADDRESS_PATTERN;
 export interface AppDependencies { store: Store; storage: ObjectStorage; walletVerifier: WalletVerifier; paymentGateway?: PaymentGateway; membershipGateway?: MembershipGateway; membershipVerifier?: MembershipVerifier; publicOrigin: string; production?: boolean; now?:()=>number; readinessCheck?:()=>boolean|Promise<boolean>; logger?:Logger; metrics?:Metrics; feedbackService?:FeedbackService; feedbackRateLimiter?:RateLimiter; }
@@ -29,9 +44,6 @@ export function createApp(d: AppDependencies) {
    const app=express(); const now=d.now??Date.now; const logger=d.logger??defaultLogger; const metrics=d.metrics??defaultMetrics;
   // Long-window per-client cap for anonymous feedback.
   const feedbackLimiter=d.feedbackRateLimiter??new RateLimiter({limit:5,windowMs:10*60_000});
-  // TODO(remove): superseded by the store-backed prepared_payments/prepared_memberships tables.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const preparedPayments=new Map<string, PreparedPaymentRecord>(); const preparedMemberships=new Map<string,PreparedMembershipRecord>();
   app.disable("x-powered-by"); app.use((req,res,next)=>{const startedHr=process.hrtime.bigint();if(req.method==="GET"&&req.path==="/")metrics.recordHomepageVisit();metrics.httpRequestStarted();res.on("finish",()=>{metrics.httpRequestFinished({method:req.method,route:routePattern(req)??"unmatched",statusCode:res.statusCode,durationSeconds:Number(process.hrtime.bigint()-startedHr)/1e9});});next();}); app.use((req,res,next)=>{req.requestId=requestId(req.get("x-request-id"));res.setHeader("X-Request-Id",req.requestId);const startedAt=Date.now();res.on("finish",()=>{if(req.path.startsWith("/api/")){const write=res.statusCode>=500?logger.error:res.statusCode>=400?logger.warn:logger.info;write("request_completed",{requestId:req.requestId,method:req.method,path:req.path,route:routePattern(req),statusCode:res.statusCode,durationMs:Date.now()-startedAt,authenticated:Boolean(req.walletSession),...(res.locals.apiErrorCode?{errorCode:res.locals.apiErrorCode}:{}),...(req.params?.id?{postId:req.params.id}: {})});}});next();}); app.use(helmet({contentSecurityPolicy:false})); app.use(express.json({limit:"1mb"})); app.use(cookieParser());
   app.get("/healthz",(_,res)=>res.json({status:"ok"})); app.get("/readyz",asyncHandler(async(_,res)=>{const ready=await(d.readinessCheck?.()??true);res.status(ready?200:503).json({status:ready?"ok":"unready"});}));
   async function optional(req:Request,res:Response,next:NextFunction){try{const id=req.cookies[sessionCookie] as string|undefined;if(!id)return next();const session=await d.store.getSession(id,now());if(!session){res.clearCookie(sessionCookie);return next();}const expiresAt=now()+SESSION_IDLE_TTL_MS;await d.store.rollSession(id,expiresAt);req.walletSession={...session,expiresAt};setCookie(res,id,Boolean(d.production));next();}catch(e){next(e);}}

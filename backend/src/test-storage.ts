@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { ObjectStorage } from "./domain.js";
+import type { ObjectStorage } from "./application/ports.js";
 
 export class TestStorage implements ObjectStorage {
   readonly objects = new Map<

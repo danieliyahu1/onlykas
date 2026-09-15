@@ -4,9 +4,7 @@ packages:
   - shared
 onlyBuiltDependencies:
   - esbuild
-  - ffmpeg-static
   - sharp
 allowBuilds:
   esbuild: true
-  ffmpeg-static: true
   sharp: true

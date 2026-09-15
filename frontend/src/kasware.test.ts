@@ -1,4 +1,5 @@
-import { COPY, NETWORK } from "@onlykas/shared";
+import { NETWORK } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 import { api, authenticate, signPreparedPayment } from "./kasware.js";
 
 const address = `kaspatest:${"q".repeat(60)}`;

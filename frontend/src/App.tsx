@@ -7,7 +7,8 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { COPY, type ProfileResponse } from "@onlykas/shared";
+import type { ProfileResponse } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 import { authenticate, kasware, WalletError, ApiError, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage, PostPage } from "./PublicPages.js";

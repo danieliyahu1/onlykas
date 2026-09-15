@@ -30,9 +30,6 @@ const environmentSchema = z.object({
   TELEGRAM_FEEDBACK_BOT_TOKEN: z.string().min(1).optional(),
   TELEGRAM_FEEDBACK_CHAT_ID: z.string().min(1).optional(),
   FEEDBACK_TELEGRAM_SEND_URL: z.string().url().optional(),
-  MEDIA_JOB_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
-  PAYMENT_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().positive().default(3_000),
-  MEDIA_JOB_STALE_MS: z.coerce.number().int().positive().default(300_000),
 });
 
 export type Environment = z.infer<typeof environmentSchema> & {

@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
 import { createApp } from "./app.js";
-import { FeedbackService, FeedbackSpill } from "./feedback.js";
+import { FeedbackService, FeedbackSpill } from "./adapters/feedback/feedback.js";
 import { createMetrics } from "./metrics.js";
 import { MemoryStore } from "./memory-store.js";
-import type { ObjectStorage } from "./domain.js";
-import { RateLimiter } from "./rate-limit.js";
+import type { ObjectStorage } from "./application/ports.js";
+import { RateLimiter } from "./adapters/http/rate-limit.js";
 
 async function testFeedbackApp() {
   const dir = await mkdtemp(join(tmpdir(), "onlykas-feedback-route-"));

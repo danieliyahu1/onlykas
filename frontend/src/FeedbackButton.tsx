@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
-import { COPY, FEEDBACK_MAX_MESSAGE } from "@onlykas/shared";
+import { FEEDBACK_MAX_MESSAGE } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 import { api, ApiError } from "./kasware.js";
 import { logger } from "./logger.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";

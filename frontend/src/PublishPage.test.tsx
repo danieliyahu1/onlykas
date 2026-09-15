@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { COPY } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 import { PublishPage } from "./PublishPage.js";
 import { api } from "./kasware.js";
 import { uploadMedia } from "./upload.js";

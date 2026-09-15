@@ -9,7 +9,7 @@ import {
   TelegramFeedback,
   formatFeedbackMessage,
   validateFeedback,
-} from "./feedback.js";
+} from "./adapters/feedback/feedback.js";
 import { createMetrics, type Metrics } from "./metrics.js";
 
 function tempDir(prefix: string): Promise<string> {

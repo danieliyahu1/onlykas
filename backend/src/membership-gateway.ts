@@ -18,7 +18,7 @@ import type {
   MembershipGateway,
   PaymentSubmission,
   PreparedMembershipTransaction,
-} from "./domain.js";
+} from "./application/ports.js";
 import {
   addressPublicKey,
   addressScript,

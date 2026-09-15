@@ -3,7 +3,8 @@ import { createApp } from "./app.js";
 import { createMetrics, type Metrics } from "./metrics.js";
 import { MemoryStore } from "./memory-store.js";
 import type { EventLogger, Logger } from "./observability.js";
-import type { ObjectStorage, PaymentGateway, Post, Store } from "./domain.js";
+import type { Post } from "./domain/models.js";
+import type { ObjectStorage, PaymentGateway, Store } from "./application/ports.js";
 
 describe("API request diagnostics", () => {
   it("logs enough context to diagnose a missing post", async () => {

@@ -1,5 +1,16 @@
 import { createClient, type Client, type InStatement, type ResultSet } from "@libsql/client";
-import type { Challenge, CreatorCovenant, MembershipPurchase, Post, PreparedMembershipRecord, PreparedPaymentRecord, Profile, Purchase, Session, Store } from "./domain.js";
+import type {
+  Challenge,
+  CreatorCovenant,
+  MembershipPurchase,
+  Post,
+  PreparedMembershipRecord,
+  PreparedPaymentRecord,
+  Profile,
+  Purchase,
+  Session,
+} from "./domain/models.js";
+import type { Store } from "./application/ports.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 

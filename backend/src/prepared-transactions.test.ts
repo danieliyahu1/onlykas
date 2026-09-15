@@ -3,8 +3,8 @@ import { MemoryStore } from "./memory-store.js";
 import type {
   PreparedMembershipRecord,
   PreparedPaymentRecord,
-  Store,
-} from "./domain.js";
+} from "./domain/models.js";
+import type { Store } from "./application/ports.js";
 
 const now = 1_000_000;
 
