@@ -9,13 +9,16 @@ vi.mock("./kasware.js", async () => ({
   api: vi.fn(),
 }));
 
-const address = "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
+const address =
+  "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
 
 describe("PublicCreatorsPage", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("lists public wallets and links to their profiles", async () => {
-    vi.mocked(api).mockResolvedValue([{ address, displayAddress: "kaspatest:...", displayName: "Maya" }]);
+    vi.mocked(api).mockResolvedValue([
+      { address, displayAddress: "kaspatest:...", displayName: "Maya" },
+    ]);
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={["/creators"]}>
@@ -33,15 +36,25 @@ describe("PublicCreatorsPage", () => {
 
   it("shows an empty state", async () => {
     vi.mocked(api).mockResolvedValue([]);
-    render(<MemoryRouter><PublicCreatorsPage /></MemoryRouter>);
-    expect(await screen.findByText("No public creators yet.")).toBeVisible();
+    render(
+      <MemoryRouter>
+        <PublicCreatorsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("No creators yet.")).toBeVisible();
   });
 
   it("shows an error when the directory cannot be loaded", async () => {
-    vi.mocked(api).mockRejectedValue(new ApiError("SERVER_UNAVAILABLE", "Server down", 0));
-    render(<MemoryRouter><PublicCreatorsPage /></MemoryRouter>);
+    vi.mocked(api).mockRejectedValue(
+      new ApiError("SERVER_UNAVAILABLE", "Server down", 0),
+    );
+    render(
+      <MemoryRouter>
+        <PublicCreatorsPage />
+      </MemoryRouter>,
+    );
 
     expect(await screen.findByText("Server down")).toBeVisible();
-    expect(screen.queryByText("No public creators yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No creators yet.")).not.toBeInTheDocument();
   });
 });

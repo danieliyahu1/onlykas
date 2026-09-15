@@ -169,13 +169,6 @@ export function App() {
             <Link to="/creators" className="nav-link">
               Creators
             </Link>
-            <SocialLinks />
-            <FeedbackButton />
-            {address && (
-              <Link to={`/creator/${address}`} className="nav-link">
-                My page
-              </Link>
-            )}
             {address ? (
               <details className="account">
                 <summary
@@ -195,7 +188,7 @@ export function App() {
                       : `Hi, ${profile?.displayName ?? "there"}!`}
                 </summary>
                 <div className="account-menu">
-                  <label htmlFor="display-name">Your name</label>
+                  <label htmlFor="display-name">Display name</label>
                   {loadingProfile ? (
                     <p className="account-loading">Loading profile...</p>
                   ) : profileError ? (
@@ -205,7 +198,7 @@ export function App() {
                       id="display-name"
                       value={profileName}
                       onChange={(event) => setProfileName(event.target.value)}
-                      placeholder="How should we call you?"
+                      placeholder="Add a display name"
                       maxLength={40}
                     />
                   )}
@@ -214,9 +207,12 @@ export function App() {
                     disabled={savingName || loadingProfile || Boolean(profileError)}
                     onClick={() => void saveName()}
                   >
-                    {savingName ? "Saving..." : "Save name"} <Icon name="check" />
+                    {savingName ? "Saving..." : "Save"} <Icon name="check" />
                   </button>
                   <p className="account-address">{shorten(address)}</p>
+                  <Link className="menu-button" to={`/creator/${address}`}>
+                    Your page
+                  </Link>
                   <button className="menu-button" onClick={() => void signOut()}>
                     Sign out
                   </button>
@@ -277,8 +273,11 @@ export function App() {
           </Routes>
         </main>
         <footer>
-          <span>Test environment</span>
-          <span>Private by design</span>
+          <span>Kaspa testnet</span>
+          <div className="footer-links">
+            <SocialLinks />
+            <FeedbackButton />
+          </div>
         </footer>
       </div>
     </BrowserRouter>
@@ -293,6 +292,8 @@ function GlobalSearch() {
   useEffect(() => {
     setQuery(new URLSearchParams(location.search).get("q") ?? "");
   }, [location.search]);
+
+  if (location.pathname === "/find") return null;
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -328,10 +329,9 @@ function shorten(address: string) {
 function MessageNotFound() {
   return (
     <section className="message">
-      <p className="eyebrow">ONLYKAS</p>
-      <h1>That link is gone.</h1>
+      <h1 className="message-title">Page not found.</h1>
       <Link className="secondary" to="/">
-        Back home
+        Go home
       </Link>
     </section>
   );

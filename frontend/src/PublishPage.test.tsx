@@ -31,10 +31,12 @@ function renderPage({
 }
 
 function prepareSuccessfulPublish() {
-  vi.mocked(uploadMedia).mockImplementation(async (_file, _caption, _price, progress) => {
-    progress(100);
-    return "upload-id";
-  });
+  vi.mocked(uploadMedia).mockImplementation(
+    async (_file, _caption, _price, progress) => {
+      progress(100);
+      return "upload-id";
+    },
+  );
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -51,12 +53,8 @@ describe("creator publish experience", () => {
       new File(["image"], "release.png", { type: "image/png" }),
     );
 
-    expect(
-      screen.getByRole("img", { name: /selected image preview/i }),
-    ).toBeVisible();
-    expect(screen.getByLabelText(/Caption/)).toHaveValue(
-      "Shared just for supporters.",
-    );
+    expect(screen.getByRole("img", { name: /selected image preview/i })).toBeVisible();
+    expect(screen.getByLabelText(/Caption/)).toHaveValue("Shared just for supporters.");
     expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^publish/i }));
@@ -91,21 +89,15 @@ describe("creator publish experience", () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(screen.getByLabelText(/Caption/)).toHaveValue(
-      "Shared just for supporters.",
-    );
+    expect(screen.getByLabelText(/Caption/)).toHaveValue("Shared just for supporters.");
     expect(screen.getByLabelText(/Price/)).toHaveValue("1");
 
     await user.clear(screen.getByLabelText(/Caption/));
     await user.type(screen.getByLabelText(/Caption/), "Custom captions");
-    expect(
-      screen.getByRole("button", { name: "Restore defaults" }),
-    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reset" })).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Restore defaults" }));
-    expect(screen.getByLabelText(/Caption/)).toHaveValue(
-      "Shared just for supporters.",
-    );
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.getByLabelText(/Caption/)).toHaveValue("Shared just for supporters.");
     expect(screen.getByLabelText(/Price/)).toHaveValue("1");
   });
 
@@ -141,15 +133,13 @@ describe("creator publish experience", () => {
     expect(await screen.findByText(COPY.mediaAlreadyPublished)).toBeVisible();
     expect(screen.getByRole("button", { name: /^publish/i })).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Change media" }));
+    await user.click(screen.getByRole("button", { name: "Replace" }));
     await user.upload(
       mediaInput,
       new File(["new image"], "new.png", { type: "image/png" }),
     );
 
-    expect(
-      screen.queryByText(COPY.mediaAlreadyPublished),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(COPY.mediaAlreadyPublished)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^publish/i }));
     expect(uploadMedia).toHaveBeenCalledTimes(2);
   });
@@ -159,10 +149,7 @@ describe("creator publish experience", () => {
     renderPage();
     const oversized = new File(["image"], "huge.png", { type: "image/png" });
     Object.defineProperty(oversized, "size", { value: 25_000_001 });
-    await user.upload(
-      screen.getByLabelText(/choose image or video/i),
-      oversized,
-    );
+    await user.upload(screen.getByLabelText(/choose image or video/i), oversized);
     expect(screen.getByText(COPY.imageTooLarge)).toBeVisible();
     expect(screen.getByRole("button", { name: /^publish/i })).toBeDisabled();
   });

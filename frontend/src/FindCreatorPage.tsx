@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { isKaspaTestnetAddress, type CreatorSearchResult } from "@onlykas/shared";
 import { api, ApiError } from "./kasware.js";
-import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
 export function FindCreatorPage() {
@@ -25,7 +24,7 @@ export function FindCreatorPage() {
       return;
     }
     if (value.startsWith("kaspatest:")) {
-      setError("Enter a complete Kaspa testnet address.");
+      setError("Enter the full address.");
       return;
     }
     setError(null);
@@ -41,9 +40,7 @@ export function FindCreatorPage() {
       })
       .catch((error: unknown) =>
         setError(
-          error instanceof ApiError
-            ? error.message
-            : "Profiles could not be found. Try again.",
+          error instanceof ApiError ? error.message : "Search failed. Try again.",
         ),
       )
       .finally(() => setSearching(false));
@@ -59,13 +56,11 @@ export function FindCreatorPage() {
   return (
     <section className="find-page">
       <header>
-        <p className="eyebrow">SEARCH</p>
-        <h1>Find someone.</h1>
-        <p className="find-intro">Search by name or paste a Kaspa address.</p>
+        <h1>Find a creator.</h1>
       </header>
       <form onSubmit={search} noValidate>
         <label htmlFor="creator-query">
-          Name or Kaspa address
+          Name or address
           <input
             id="creator-query"
             name="creator-query"
@@ -77,10 +72,9 @@ export function FindCreatorPage() {
               setError(null);
               setSearched(false);
             }}
-            placeholder="Maya or kaspatest:..."
+            placeholder="Name or Kaspa address"
             autoComplete="off"
             spellCheck={false}
-            aria-label="Name or Kaspa address"
           />
         </label>
         {error && (
@@ -89,11 +83,11 @@ export function FindCreatorPage() {
           </p>
         )}
         <button className="primary" type="submit" disabled={searching}>
-          {searching ? "Searching..." : "Search"} <Icon name="search" />
+          {searching ? "Searching..." : "Search"}
         </button>
       </form>
       {searched && !searching && results.length === 0 && !error && (
-        <p className="feedback">No profiles found.</p>
+        <p className="feedback">No creators found.</p>
       )}
       <div className="creator-results">
         {results.map((result) => (
@@ -102,8 +96,8 @@ export function FindCreatorPage() {
             key={result.address}
             onClick={() => navigate(`/creator/${encodeURIComponent(result.address)}`)}
           >
-            <strong>{result.displayName}</strong>
-            <span>{result.displayAddress}</span>
+            <strong>{result.displayName ?? result.displayAddress}</strong>
+            {result.displayName && <span>{result.displayAddress}</span>}
           </button>
         ))}
       </div>

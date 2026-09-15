@@ -73,7 +73,9 @@ describe("creator membership actions", () => {
     const user = userEvent.setup();
     renderProfile(creatorAddress);
 
-    await user.click(await screen.findByRole("button", { name: "Open access" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Offer 24-hour access" }),
+    );
 
     expect(api).toHaveBeenCalledWith("/api/membership/offers/prepare", {
       method: "POST",
@@ -83,7 +85,7 @@ describe("creator membership actions", () => {
       method: "POST",
       body: JSON.stringify({ signedTransaction: "signed" }),
     });
-    expect(await screen.findByText("Membership offer created.")).toBeVisible();
+    expect(await screen.findByText("24-hour access is ready.")).toBeVisible();
   });
 
   it("lets a consumer subscribe from the creator profile", async () => {
@@ -96,14 +98,14 @@ describe("creator membership actions", () => {
     const user = userEvent.setup();
     renderProfile(consumerAddress);
 
-    await user.click(await screen.findByRole("button", { name: "Unlock all" }));
+    await user.click(await screen.findByRole("button", { name: "Unlock every post" }));
 
     expect(api).toHaveBeenCalledWith(
       `/api/membership/${encodeURIComponent(creatorAddress)}/prepare`,
       { method: "POST" },
     );
     expect(signPreparedPayment).toHaveBeenCalledWith("{}", [1]);
-    await waitFor(() => expect(screen.getByText("Subscribed")).toBeVisible());
+    await waitFor(() => expect(screen.getByText("Access active")).toBeVisible());
   });
 
   it("uses the wallet address as identity when the creator has no name", async () => {
@@ -113,7 +115,7 @@ describe("creator membership actions", () => {
     expect(
       await screen.findByRole("heading", { name: shorten(creatorAddress) }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: shorten(creatorAddress) })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Copy Kaspa address" })).toBeVisible();
   });
 
   it("shows a lock state for every post on the creator profile", async () => {
@@ -185,7 +187,7 @@ describe("creator membership actions", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: /unlock for/i }));
 
-    expect(await screen.findByRole("button", { name: /working/i })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Unlocking..." })).toBeDisabled();
     expect(
       screen.queryByRole("img", { name: "A paid moment" }),
     ).not.toBeInTheDocument();
@@ -245,8 +247,8 @@ describe("post loading and authorization", () => {
     );
     renderPost(post("pending-post", "A pending moment", false));
 
-    expect(screen.getByRole("heading", { name: "Loading post..." })).toBeVisible();
-    expect(screen.queryByText("Post unavailable.")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Loading..." })).toBeVisible();
+    expect(screen.queryByText("This post isn't available.")).not.toBeInTheDocument();
   });
 
   it("refetches access after the viewer signs in without a page refresh", async () => {
@@ -306,10 +308,10 @@ describe("creator profile visibility", () => {
       onVisibilityChange,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Make public" }));
+    await user.click(await screen.findByRole("button", { name: "Change" }));
 
     expect(onVisibilityChange).toHaveBeenCalledWith(true);
-    expect(await screen.findByText("Your profile is now public.")).toBeVisible();
+    expect(await screen.findByText("Profile is public.")).toBeVisible();
   });
 
   it("refuses the visibility toggle to visitors and consumers", async () => {
@@ -317,9 +319,7 @@ describe("creator profile visibility", () => {
     renderProfile(consumerAddress);
 
     expect(await screen.findByRole("heading", { name: "Creator" })).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: /make (public|private)/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change" })).not.toBeInTheDocument();
   });
 
   it("shows the current public state on the owner profile", async () => {
@@ -330,8 +330,8 @@ describe("creator profile visibility", () => {
       vi.fn(async () => undefined),
     );
 
-    expect(await screen.findByText("Public profile")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Make private" })).toBeVisible();
+    expect(await screen.findByText("Visibility: Public")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Change" })).toBeVisible();
   });
 
   it("lets the owner make their public profile private again", async () => {
@@ -344,10 +344,10 @@ describe("creator profile visibility", () => {
       onVisibilityChange,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Make private" }));
+    await user.click(await screen.findByRole("button", { name: "Change" }));
 
     expect(onVisibilityChange).toHaveBeenCalledWith(false);
-    expect(await screen.findByText("Your profile is now private.")).toBeVisible();
+    expect(await screen.findByText("Profile is private.")).toBeVisible();
   });
 
   it("keeps the previous state when saving visibility fails", async () => {
@@ -362,12 +362,12 @@ describe("creator profile visibility", () => {
       onVisibilityChange,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Make public" }));
+    await user.click(await screen.findByRole("button", { name: "Change" }));
 
     expect(onVisibilityChange).toHaveBeenCalledWith(true);
     expect(await screen.findByText("Save failed")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Make public" })).toBeVisible();
-    expect(screen.queryByText("Public profile")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change" })).toBeVisible();
+    expect(screen.queryByText("Visibility: Public")).not.toBeInTheDocument();
   });
 });
 

@@ -24,10 +24,7 @@ describe("FindCreatorPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(
-      screen.getByLabelText("Name or Kaspa address"),
-      `  ${address}  `,
-    );
+    await user.type(screen.getByLabelText("Name or address"), `  ${address}  `);
     await user.click(screen.getByRole("button", { name: /^search/i }));
 
     expect(await screen.findByText("Profile opened")).toBeVisible();
@@ -37,15 +34,10 @@ describe("FindCreatorPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(
-      screen.getByLabelText("Name or Kaspa address"),
-      "kaspatest:wrong",
-    );
+    await user.type(screen.getByLabelText("Name or address"), "kaspatest:wrong");
     await user.click(screen.getByRole("button", { name: /^search/i }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "complete Kaspa testnet address",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("full address");
     expect(screen.queryByText("Profile opened")).not.toBeInTheDocument();
   });
 
@@ -53,9 +45,9 @@ describe("FindCreatorPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(screen.getByLabelText("Name or Kaspa address"), "maya");
+    await user.type(screen.getByLabelText("Name or address"), "maya");
 
-    expect(screen.queryByText("No profiles found.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No creators found.")).not.toBeInTheDocument();
     expect(api).not.toHaveBeenCalled();
   });
 
@@ -64,10 +56,10 @@ describe("FindCreatorPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(screen.getByLabelText("Name or Kaspa address"), "maya");
+    await user.type(screen.getByLabelText("Name or address"), "maya");
     await user.click(screen.getByRole("button", { name: /^search/i }));
 
-    expect(await screen.findByText("No profiles found.")).toBeVisible();
+    expect(await screen.findByText("No creators found.")).toBeVisible();
     expect(api).toHaveBeenCalledWith("/api/creators/search?q=maya");
   });
 
@@ -81,8 +73,8 @@ describe("FindCreatorPage", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText("No profiles found.")).toBeVisible();
-    expect(screen.getByLabelText("Name or Kaspa address")).toHaveValue("maya");
+    expect(await screen.findByText("No creators found.")).toBeVisible();
+    expect(screen.getByLabelText("Name or address")).toHaveValue("maya");
     expect(api).toHaveBeenCalledWith("/api/creators/search?q=maya");
   });
 });

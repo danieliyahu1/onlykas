@@ -104,14 +104,14 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
   const actionLabel = signingIn
     ? "Signing in..."
     : uploading
-      ? `Uploading ${progress}%`
+      ? "Publishing..."
       : "Publish";
 
   return (
     <>
       <section className="publish-card">
         <header className="publish-intro">
-          <h1>Share with your fans</h1>
+          <h1>Publish a post.</h1>
         </header>
         <form onSubmit={(event) => void publishSelected(event)}>
           <div className="publish-upload">
@@ -152,11 +152,10 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
                 <button
                   className="change-media"
                   type="button"
-                  aria-label="Change media"
                   title="Choose another"
                   onClick={chooseAnother}
                 >
-                  Change media <Icon name="image-plus" />
+                  Replace <Icon name="image-plus" />
                 </button>
               </div>
             )}
@@ -196,13 +195,15 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
                   type="button"
                   onClick={restoreDefaults}
                 >
-                  Restore defaults
+                  Reset
                 </button>
               )}
             </div>
 
             {selectedFile && (
-              <p className="permanence-note">Published posts cannot be changed.</p>
+              <p className="permanence-note">
+                You can&apos;t edit a post after publishing.
+              </p>
             )}
             <button className="primary publish-action" disabled={!selectedFile || busy}>
               {selectedFile

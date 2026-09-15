@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { CreatorResponse, PostResponse } from "@onlykas/shared";
 import { api, signPreparedPayment, WalletError, ApiError } from "./kasware.js";
-import { KaspaMark } from "./KaspaMark.js";
 import { Toast, useToast } from "./Toast.js";
 
 type WalletProps = {
@@ -59,8 +58,9 @@ export function CreatorPage({
   useEffect(() => {
     void loadCreator(true);
   }, [creatorAddress]);
-  if (loading) return <Message title="Loading creator..." />;
-  if (!creator) return <Message title={loadError ?? "Creator unavailable."} />;
+  if (loading) return <Message title="Loading..." />;
+  if (!creator)
+    return <Message title={loadError ?? "This creator isn't available."} action />;
   const currentCreator = creator;
   const owner = currentCreator.isOwner || address === currentCreator.address;
   async function membershipAction() {
@@ -92,15 +92,15 @@ export function CreatorPage({
       showToast(
         result.state === "CONFIRMED"
           ? isOwner
-            ? "Membership offer created."
-            : "Membership active for 24 hours."
-          : "Transaction is still confirming.",
+            ? "24-hour access is ready."
+            : "You have access for 24 hours."
+          : "Your payment is confirming. Don't pay again.",
         result.state === "CONFIRMED" ? "success" : "info",
       );
       if (result.state === "CONFIRMED") await loadCreator();
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : "Membership transaction failed.",
+        error instanceof Error ? error.message : "Payment failed. Nothing was charged.",
         "error",
       );
     } finally {
@@ -112,7 +112,7 @@ export function CreatorPage({
       await navigator.clipboard.writeText(currentCreator.address);
       showToast("Address copied.", "success");
     } catch {
-      showToast("Address could not be copied.", "error");
+      showToast("Couldn't copy the address.", "error");
     }
   }
   async function toggleVisibility() {
@@ -123,15 +123,10 @@ export function CreatorPage({
       const next = !currentCreator.isPublic;
       await onVisibilityChange(next);
       setCreator({ ...currentCreator, isPublic: next });
-      showToast(
-        next ? "Your profile is now public." : "Your profile is now private.",
-        "success",
-      );
+      showToast(next ? "Profile is public." : "Profile is private.", "success");
     } catch (error) {
       showToast(
-        error instanceof Error
-          ? error.message
-          : "Profile visibility could not be saved.",
+        error instanceof Error ? error.message : "Couldn't save visibility.",
         "error",
       );
     } finally {
@@ -151,46 +146,37 @@ export function CreatorPage({
             className="wallet-address"
             type="button"
             title={currentCreator.address}
+            aria-label="Copy Kaspa address"
             onClick={() => void copyAddress()}
           >
             {shorten(currentCreator.address)}
           </button>
           {owner && onVisibilityChange && (
             <div className="profile-visibility">
-              <span>
-                {currentCreator.isPublic ? "Public profile" : "Private profile"}
-              </span>
+              <span>Visibility: {currentCreator.isPublic ? "Public" : "Private"}</span>
               <button
-                className="secondary"
+                className="text-button"
                 type="button"
                 disabled={visibilityBusy}
                 onClick={() => void toggleVisibility()}
               >
-                {visibilityBusy
-                  ? "Saving..."
-                  : currentCreator.isPublic
-                    ? "Make private"
-                    : "Make public"}
+                {visibilityBusy ? "Saving..." : "Change"}
               </button>
             </div>
           )}
         </div>
         {showAccess && (
           <div className="access-strip">
-            <div className="access-facts">
-              <span>Every post</span>
-              <span>24 hours</span>
-              <span>10 KAS</span>
-            </div>
+            <p className="access-facts">Every post for 24 hours · 10 KAS</p>
             {currentCreator.membership.active ? (
-              <span className="access-status">Subscribed</span>
+              <span className="access-status">Access active</span>
             ) : owner && !currentCreator.membership.offered ? (
               <button
                 className="primary"
                 disabled={busy || signingIn}
                 onClick={() => void membershipAction()}
               >
-                {busy ? "Opening..." : "Open access"}
+                {busy ? "Creating offer..." : "Offer 24-hour access"}
               </button>
             ) : !owner && currentCreator.membership.offered ? (
               <button
@@ -198,10 +184,10 @@ export function CreatorPage({
                 disabled={busy || signingIn}
                 onClick={() => void membershipAction()}
               >
-                {busy ? "Confirming..." : "Unlock all"}
+                {busy ? "Confirming payment..." : "Unlock every post"}
               </button>
             ) : (
-              <span className="access-status">Access open</span>
+              <span className="access-status">Offer live</span>
             )}
             {refreshing && <span className="access-status">Refreshing...</span>}
           </div>
@@ -215,7 +201,7 @@ export function CreatorPage({
                 <>
                   <p>No posts yet.</p>
                   <Link className="secondary" to="/">
-                    Publish your first post
+                    Publish a post
                   </Link>
                 </>
               ) : (
@@ -234,7 +220,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const { id = "" } = useParams();
   const [post, setPost] = useState<PostResponse | null>(null);
   const { toast, showToast, dismissToast } = useToast();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<null | "unlock" | "membership">(null);
   const [mediaError, setMediaError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -262,13 +248,14 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
       active = false;
     };
   }, [address, dismissToast, id]);
-  if (loading) return <Message title="Loading post..." />;
-  if (!post) return <Message title={loadError ?? "Post unavailable."} />;
+  if (loading) return <Message title="Loading..." />;
+  if (!post)
+    return <Message title={loadError ?? "This post isn't available."} action />;
   const currentPost = post;
   async function unlock() {
     const buyer = address ?? (await signIn());
     if (!buyer) return;
-    setBusy(true);
+    setBusy("unlock");
     dismissToast();
     try {
       const prepared = await api<{ id: string; transaction: string }>(
@@ -282,27 +269,27 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
       );
       if (result.state === "CONFIRMED") {
         setPost({ ...currentPost, canView: true });
-        showToast(result.message ?? "Post unlocked.", "success");
+        showToast(result.message ?? "Unlocked.", "success");
         return;
       }
-      showToast(result.message ?? "Payment is still confirming.");
+      showToast(result.message ?? "Your payment is confirming. Don't pay again.");
     } catch (error) {
       showToast(
         error instanceof WalletError
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Payment could not be completed.",
+            : "Payment failed. Nothing was charged.",
         "error",
       );
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
   async function useMembership() {
     const buyer = address ?? (await signIn());
     if (!buyer) return;
-    setBusy(true);
+    setBusy("membership");
     dismissToast();
     try {
       const refreshed = await api<PostResponse>(
@@ -310,21 +297,21 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
       );
       setPost(refreshed);
       if (!refreshed.canView)
-        showToast("You are not a member of this creator.", "error");
+        showToast("Your access doesn't include this creator.", "error");
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : "Membership could not be checked.",
+        error instanceof Error ? error.message : "Couldn't check access. Try again.",
         "error",
       );
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
   const mediaLabel = currentPost.mediaType.startsWith("video/") ? "Video" : "Photo";
   return (
     <>
       <article className="single-post">
-        <p className="caption">{currentPost.caption}</p>
+        <h1 className="caption">{currentPost.caption}</h1>
         {currentPost.canView && !mediaError ? (
           currentPost.mediaType.startsWith("video/") ? (
             <VideoPlayer
@@ -342,34 +329,30 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
           )
         ) : mediaError ? (
           <p className="feedback inline" role="alert">
-            Media is temporarily unavailable.
+            This media isn&apos;t available right now.
           </p>
         ) : (
           <div className="post-actions">
             <button
               className="primary"
-              disabled={busy || signingIn}
+              disabled={busy !== null || signingIn}
               onClick={() => void unlock()}
             >
-              {busy ? (
-                "Working..."
-              ) : (
-                <>
-                  Unlock for {formatKas(currentPost.priceSompi)} <KaspaMark />
-                </>
-              )}
+              {busy === "unlock"
+                ? "Unlocking..."
+                : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
             </button>
             <button
               className="secondary"
-              disabled={busy || signingIn}
+              disabled={busy !== null || signingIn}
               onClick={() => void useMembership()}
             >
-              Use membership
+              {busy === "membership" ? "Checking access..." : "Already have access?"}
             </button>
           </div>
         )}
         <Link className="creator-link" to={`/creator/${currentPost.creator}`}>
-          By {shorten(currentPost.creator)}
+          View creator · {shorten(currentPost.creator)}
         </Link>
       </article>
       <Toast toast={toast} />
@@ -552,13 +535,15 @@ function VideoIcon({
   );
 }
 
-function Message({ title }: { title: string }) {
+function Message({ title, action }: { title: string; action?: boolean }) {
   return (
     <section className="message">
-      <h1>{title}</h1>
-      <Link className="secondary" to="/">
-        Back home
-      </Link>
+      <h1 className="message-title">{title}</h1>
+      {action && (
+        <Link className="secondary" to="/">
+          Go home
+        </Link>
+      )}
     </section>
   );
 }
