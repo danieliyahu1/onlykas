@@ -9,6 +9,7 @@ import type {
   PreparedPaymentRecord,
   PreparedPayment,
   PaymentSubmission,
+  PaymentWorkflow,
   Profile,
   Purchase,
   Session,
@@ -35,6 +36,9 @@ export interface PreparedPaymentRepository {
   getPreparedPayment(id: string, now: number): Promise<PreparedPaymentRecord | null>;
   deletePreparedPayment(id: string): Promise<void>;
   prunePreparedPayments(now: number): Promise<void>;
+  savePaymentWorkflow(value: PaymentWorkflow): Promise<void>;
+  getPaymentWorkflow(preparedPaymentId: string): Promise<PaymentWorkflow | null>;
+  deletePaymentWorkflow(preparedPaymentId: string): Promise<void>;
 }
 
 export interface PreparedMembershipRepository {

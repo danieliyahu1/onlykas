@@ -12,6 +12,7 @@ import type {
   Post,
   PreparedMembershipRecord,
   PreparedPaymentRecord,
+  PaymentWorkflow,
   Profile,
   Purchase,
   Session,
@@ -101,6 +102,25 @@ export class LibsqlStore implements Repositories {
     await this.execute({
       sql: `DELETE FROM prepared_payments WHERE expires_at<=?`,
       args: [now],
+    });
+  }
+  async savePaymentWorkflow(v: PaymentWorkflow) {
+    await this.execute({
+      sql: `INSERT INTO payment_workflows (prepared_payment_id,state,transaction_id,rejection) VALUES (?,?,?,?) ON CONFLICT(prepared_payment_id) DO UPDATE SET state=excluded.state,transaction_id=excluded.transaction_id,rejection=excluded.rejection`,
+      args: [v.preparedPaymentId, v.state, v.transactionId, v.rejection],
+    });
+  }
+  async getPaymentWorkflow(id: string) {
+    const r = await this.execute({
+      sql: `SELECT * FROM payment_workflows WHERE prepared_payment_id=?`,
+      args: [id],
+    });
+    return r.rows[0] ? paymentWorkflowFromRow(r.rows[0]) : null;
+  }
+  async deletePaymentWorkflow(id: string) {
+    await this.execute({
+      sql: `DELETE FROM payment_workflows WHERE prepared_payment_id=?`,
+      args: [id],
     });
   }
   async savePreparedMembership(v: PreparedMembershipRecord) {
@@ -458,6 +478,12 @@ const purchaseFromRow = (r: Record<string, unknown>): Purchase => ({
   buyer: text(r.buyer),
   transactionId: text(r.transaction_id),
 });
+const paymentWorkflowFromRow = (r: Record<string, unknown>): PaymentWorkflow => ({
+  preparedPaymentId: text(r.prepared_payment_id),
+  state: paymentWorkflowState(text(r.state)),
+  transactionId: text(r.transaction_id),
+  rejection: r.rejection === null ? null : text(r.rejection),
+});
 const creatorCovenantFromRow = (r: Record<string, unknown>): CreatorCovenant => ({
   creator: text(r.creator),
   covenantId: text(r.covenant_id),
@@ -516,6 +542,11 @@ const signInputs = (value: string): number[] => {
 const membershipKind = (value: string): PreparedMembershipRecord["kind"] => {
   if (value !== "offer" && value !== "purchase")
     throw new Error("INVALID_MEMBERSHIP_KIND");
+  return value;
+};
+const paymentWorkflowState = (value: string): PaymentWorkflow["state"] => {
+  if (value !== "SUBMITTED" && value !== "CONFIRMED" && value !== "REJECTED")
+    throw new Error("INVALID_PAYMENT_WORKFLOW_STATE");
   return value;
 };
 const isUniqueConstraint = (error: unknown) =>

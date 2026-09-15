@@ -84,6 +84,15 @@ export interface PreparedPaymentRecord {
   expiresAt: number;
 }
 
+export type PaymentWorkflowState = "SUBMITTED" | "CONFIRMED" | "REJECTED";
+
+export interface PaymentWorkflow {
+  preparedPaymentId: string;
+  state: PaymentWorkflowState;
+  transactionId: string;
+  rejection: string | null;
+}
+
 export interface PreparedMembershipRecord {
   id: string;
   transaction: string;

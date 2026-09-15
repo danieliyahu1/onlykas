@@ -497,11 +497,29 @@ export function createApp(d: AppDependencies) {
         metrics.paymentFinalizeAttempt("not_found");
         return apiError(res, 404, "PAYMENT_NOT_FOUND");
       }
-      const body = z.object({ signedTransaction: z.string().min(1) }).parse(req.body),
-        submission = await d.paymentGateway.submit(prepared, body.signedTransaction);
+      const workflow = await d.store.getPaymentWorkflow(id);
+      const submission = workflow
+        ? workflow.state === "CONFIRMED"
+          ? {
+              isAccepted: true as const,
+              transactionId: workflow.transactionId,
+              rejection: workflow.rejection,
+            }
+          : await d.paymentGateway.status(workflow.transactionId)
+        : await (async () => {
+            const body = z
+              .object({ signedTransaction: z.string().min(1) })
+              .parse(req.body);
+            return d.paymentGateway!.submit(prepared, body.signedTransaction);
+          })();
       if (submission.isAccepted !== true || !submission.transactionId) {
-        await d.store.deletePreparedPayment(id);
         if (submission.isAccepted === null) {
+          await d.store.savePaymentWorkflow({
+            preparedPaymentId: id,
+            state: "SUBMITTED",
+            transactionId: submission.transactionId ?? workflow?.transactionId ?? "",
+            rejection: null,
+          });
           metrics.paymentFinalizeAttempt("pending");
           return res.status(202).json({
             state: "PENDING",
@@ -509,6 +527,8 @@ export function createApp(d: AppDependencies) {
             transactionId: submission.transactionId,
           });
         }
+        await d.store.deletePaymentWorkflow(id);
+        await d.store.deletePreparedPayment(id);
         metrics.paymentFinalizeAttempt("rejected");
         return res.status(422).json({
           state: "REJECTED",
@@ -521,11 +541,19 @@ export function createApp(d: AppDependencies) {
         buyer: prepared.buyer,
         transactionId: submission.transactionId,
       };
+      await d.store.savePaymentWorkflow({
+        preparedPaymentId: id,
+        state: "CONFIRMED",
+        transactionId: submission.transactionId,
+        rejection: null,
+      });
       const outcome = await d.store.finalizePurchase(id, purchase);
       if (outcome === "DUPLICATE") {
+        await d.store.deletePaymentWorkflow(id);
         metrics.paymentFinalizeAttempt("purchase_exists");
         return apiError(res, 409, "PURCHASE_EXISTS");
       }
+      await d.store.deletePaymentWorkflow(id);
       metrics.paymentFinalizeAttempt("confirmed");
       res.status(201).json({
         state: "CONFIRMED",

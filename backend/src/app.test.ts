@@ -316,6 +316,7 @@ describe("payment confirmation", () => {
     const buyer = await buyerSession(store);
     const target = post("paid-post");
     await store.publishPost(target);
+    let indexed = false;
     const gateway: PaymentGateway = {
       prepare: async () => ({
         transaction: "{}",
@@ -329,7 +330,7 @@ describe("payment confirmation", () => {
         rejection: null,
       }),
       status: async () => ({
-        isAccepted: null,
+        isAccepted: indexed ? true : null,
         transactionId: "tx-1",
         rejection: null,
       }),
@@ -349,7 +350,19 @@ describe("payment confirmation", () => {
     expect(finalized.body.state).toBe("PENDING");
     expect(finalized.body.transactionId).toBe("tx-1");
     expect(await store.getPurchase("paid-post", buyer)).toBeNull();
-    expect(await store.getPreparedPayment(prepared.body.id, Date.now())).toBeNull();
+    expect(await store.getPreparedPayment(prepared.body.id, Date.now())).not.toBeNull();
+    expect(await store.getPaymentWorkflow(prepared.body.id)).toMatchObject({
+      state: "SUBMITTED",
+      transactionId: "tx-1",
+    });
+
+    indexed = true;
+    const retried = await request(app)
+      .post(`/api/payments/${prepared.body.id}/finalize`)
+      .set("Cookie", cookie)
+      .send({});
+    expect(retried.status).toBe(201);
+    expect(await store.getPurchase("paid-post", buyer)).not.toBeNull();
   });
 });
 
