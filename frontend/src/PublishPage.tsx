@@ -176,18 +176,18 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
               </label>
               <label className="price-field">
                 Price
-                <span className="unit">
+                <span className="price-input">
                   <KaspaMark />
                   <span className="sr-only">KAS</span>
+                  <input
+                    inputMode="decimal"
+                    value={form.priceKas}
+                    onChange={(event) => {
+                      setDetailsEdited(true);
+                      setForm({ ...form, priceKas: event.target.value });
+                    }}
+                  />
                 </span>
-                <input
-                  inputMode="decimal"
-                  value={form.priceKas}
-                  onChange={(event) => {
-                    setDetailsEdited(true);
-                    setForm({ ...form, priceKas: event.target.value });
-                  }}
-                />
               </label>
               {detailsEdited && (
                 <button

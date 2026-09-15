@@ -439,18 +439,26 @@ textarea {
   min-height: 4.5rem;
   resize: vertical;
 }
-.unit {
-  position: absolute;
-  right: 0;
-  bottom: 1rem;
-  color: var(--acid);
+.price-input {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-bottom: 1px solid var(--line);
 }
-.price-field .unit {
-  right: auto;
-  left: 0;
+.price-input:focus-within {
+  border-color: var(--acid);
 }
-.price-field input {
-  padding-left: 2rem;
+.price-input input {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-bottom: 0;
+}
+.price-input .kaspa-mark {
+  flex: 0 0 auto;
+  width: 1.15em;
+  height: 1.15em;
 }
 .kaspa-mark {
   display: inline-flex;
