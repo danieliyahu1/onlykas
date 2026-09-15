@@ -30,13 +30,11 @@
   border: 0;
 }
 html {
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
+  overflow: hidden;
 }
 body {
   margin: 0;
   min-width: 320px;
-  min-height: 100vh;
   background: var(--ink);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -89,9 +87,10 @@ textarea:focus-visible {
   vertical-align: -0.15em;
 }
 .shell {
-  min-height: 100vh;
+  position: fixed;
+  inset: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 /* Header and footer */
@@ -335,6 +334,10 @@ footer {
 main {
   display: grid;
   place-items: start center;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: clamp(2rem, 6vh, 4rem) clamp(1rem, 4vw, 3rem) clamp(3rem, 8vh, 5rem);
 }
 @supports (align-items: safe center) {
