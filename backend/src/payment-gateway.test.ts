@@ -34,6 +34,23 @@ describe("KaspaPaymentGateway preparation", () => {
       { value: "1000000", scriptPublicKey: addressScript(feeAddress), covenant: null },
     ]);
   });
+
+  it("prefers the smallest sufficient UTXO to limit transaction storage mass", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/utxos")) return Response.json([
+        { outpoint: { transactionId: "11".repeat(32), index: 0 }, utxoEntry: { amount: "200000000", scriptPublicKey: { scriptPublicKey: addressScript(buyer).slice(4) }, blockDaaScore: "1", isCoinbase: false } },
+        { outpoint: { transactionId: "22".repeat(32), index: 0 }, utxoEntry: { amount: "110000000", scriptPublicKey: { scriptPublicKey: addressScript(buyer).slice(4) }, blockDaaScore: "1", isCoinbase: false } },
+      ]);
+      if (url.endsWith("/info/fee-estimate")) return Response.json({ normalBuckets: [{ feerate: 1 }], priorityBucket: { feerate: 1 } });
+      return new Response("not found", { status: 404 });
+    }));
+    const gateway = new KaspaPaymentGateway(feeAddress, "https://node.test", undefined, undefined, undefined);
+    const prepared = await gateway.prepare({ id: "post-1", creator, caption: "", priceSompi: "100000000", mediaType: "image/jpeg", mediaSize: 1, mediaDigest: "digest", mediaKey: "key", publishedAt: 0 }, buyer);
+    const transaction = JSON.parse(prepared.transaction) as { inputs: { transactionId: string }[] };
+    expect(transaction.inputs).toHaveLength(1);
+    expect(transaction.inputs[0]!.transactionId).toBe("22".repeat(32));
+  });
 });
 
 describe("KaspaPaymentGateway purchase verification", () => {

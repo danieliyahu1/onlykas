@@ -35,13 +35,13 @@ constructor(
     const buyerScript = scriptFor(buyer);
     const selected: Utxo[] = [];
     let total = 0n;
-    for (const utxo of [...utxos].sort((a, b) => Number(BigInt(b.utxoEntry.amount) - BigInt(a.utxoEntry.amount)))) {
+    for (const utxo of [...utxos].sort((a, b) => Number(BigInt(a.utxoEntry.amount) - BigInt(b.utxoEntry.amount)))) {
       if (`0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}` !== buyerScript) continue;
       selected.push(utxo);
       total += BigInt(utxo.utxoEntry.amount);
-      if (total >= amount + estimatedFee(selected.length, rate, 3)) break;
+      if (total >= amount + estimatedFee(selected, rate, 3)) break;
     }
-    const networkFee = estimatedFee(selected.length, rate, 3);
+    const networkFee = estimatedFee(selected, rate, 3);
     if (total < amount + networkFee) {
       this.logger.warn("payment_prepare_insufficient_funds", {
         postId: post.id,
@@ -153,7 +153,7 @@ class KaspaRequestError extends Error {
 
 function scriptFor(address: string): string { const data = address.slice(address.lastIndexOf(":") + 1, -8).split("").map((char) => CHARSET.indexOf(char)); const bytes: number[] = []; let buffer = 0n; let bits = 0; for (const value of data) { buffer = (buffer << 5n) | BigInt(value); bits += 5; while (bits >= 8) { bits -= 8; bytes.push(Number((buffer >> BigInt(bits)) & 255n)); buffer &= (1n << BigInt(bits)) - 1n; } } if (bytes[0] !== 0 || bytes.length !== 33) throw new Error("INVALID_CREATOR_ADDRESS"); return `000020${bytes.slice(1).map((byte) => byte.toString(16).padStart(2, "0")).join("")}ac`; }
 function digest(value: string) { return createHash("sha256").update(value).digest("hex"); }
-function estimatedFee(inputs: number, rate: number, outputs: number) { if (!Number.isFinite(rate) || rate <= 0) throw new Error("INVALID_FEE_RATE"); return BigInt(Math.ceil((1836 + 1000 * inputs + 100 * outputs) * rate)); }
+function estimatedFee(inputs: Utxo[], rate: number, outputs: number) { if (!Number.isFinite(rate) || rate <= 0) throw new Error("INVALID_FEE_RATE"); const inputSize = inputs.length * (32 + 4 + 8 + 66 + 8 + 2); const outputSize = outputs * (8 + 2 + 8 + 34); const transactionSize = 2 + 8 + inputSize + 8 + outputSize + 8 + 20 + 8 + 32 + 8; const scriptPublicKeyMass = 10 * outputs * (2 + 34); const computeMass = transactionSize + scriptPublicKeyMass + 100 * inputs.length * 50; const estimated = BigInt(Math.ceil(computeMass * rate)); const relayFloor = 100n * BigInt(computeMass); return estimated > relayFloor ? estimated : relayFloor; }
 function rejected(rejection: string, transactionId: string | null = null): PaymentSubmission { return { isAccepted: false, transactionId, rejection }; }
 function hasAllSignatures(transaction: Record<string, unknown>) { return Array.isArray(transaction.inputs) && transaction.inputs.length > 0 && transaction.inputs.every((input) => { const signature = (input as Record<string, unknown>).signatureScript; return typeof signature === "string" && signature.length > 0 && signature.length % 2 === 0 && /^[0-9a-f]+$/i.test(signature) && signature.endsWith("01"); }); }
 function isTransactionShape(transaction: Record<string, unknown>) { return transaction.version === 0 && Array.isArray(transaction.inputs) && transaction.inputs.length > 0 && Array.isArray(transaction.outputs) && transaction.outputs.length > 0 && typeof transaction.subnetworkId === "string" && typeof transaction.lockTime === "string" && typeof transaction.gas === "string" && typeof transaction.storageMass === "string" && typeof transaction.payload === "string"; }
