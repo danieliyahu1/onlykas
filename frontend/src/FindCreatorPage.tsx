@@ -1,9 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  isKaspaTestnetAddress,
-  type CreatorSearchResult,
-} from "@onlykas/shared";
+import { isKaspaTestnetAddress, type CreatorSearchResult } from "@onlykas/shared";
 import { api, ApiError } from "./kasware.js";
 import { Icon } from "./Icons.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
@@ -87,7 +84,7 @@ export function FindCreatorPage() {
           />
         </label>
         {error && (
-          <p className="feedback error" role="alert">
+          <p className="feedback inline error" role="alert">
             {error}
           </p>
         )}
@@ -103,9 +100,7 @@ export function FindCreatorPage() {
           <button
             className="creator-result"
             key={result.address}
-            onClick={() =>
-              navigate(`/creator/${encodeURIComponent(result.address)}`)
-            }
+            onClick={() => navigate(`/creator/${encodeURIComponent(result.address)}`)}
           >
             <strong>{result.displayName}</strong>
             <span>{result.displayAddress}</span>

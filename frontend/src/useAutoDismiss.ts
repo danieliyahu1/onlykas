@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 export function useAutoDismiss(
   message: string | null,
   clear: () => void,
-  delay = 6_000,
+  delay = 5_000,
 ) {
   const clearRef = useRef(clear);
   clearRef.current = clear;

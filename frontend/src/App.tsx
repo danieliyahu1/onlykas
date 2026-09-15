@@ -17,17 +17,16 @@ import { PublicCreatorsPage } from "./PublicCreatorsPage.js";
 import { FeedbackButton } from "./FeedbackButton.js";
 import { SocialLinks } from "./SocialLinks.js";
 import { Icon } from "./Icons.js";
-import { useAutoDismiss } from "./useAutoDismiss.js";
+import { Toast, useToast } from "./Toast.js";
 
 export function App() {
   const [address, setAddress] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
-  const [walletError, setWalletError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [profileName, setProfileName] = useState("");
   const [savingName, setSavingName] = useState(false);
 
-  useAutoDismiss(walletError, () => setWalletError(null));
+  const { toast, showToast, dismissToast } = useToast();
 
   useEffect(() => {
     if (!address) {
@@ -56,15 +55,14 @@ export function App() {
           wallet.getAccounts(),
           api<{ address: string }>("/api/auth/session"),
         ]);
-        if (accounts[0] && accounts[0] === session.address)
-          setAddress(session.address);
+        if (accounts[0] && accounts[0] === session.address) setAddress(session.address);
       } catch {
         // A missing or expired server session simply requires sign-in.
       }
     })();
     const changed = () => {
       setAddress(null);
-      setWalletError(null);
+      dismissToast();
       void api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
     };
     wallet.on("accountsChanged", changed);
@@ -78,16 +76,17 @@ export function App() {
   async function signIn(): Promise<string | null> {
     if (signingIn) return null;
     setSigningIn(true);
-    setWalletError(null);
+    dismissToast();
     try {
       const authenticatedAddress = await authenticate();
       setAddress(authenticatedAddress);
       return authenticatedAddress;
     } catch (error) {
-      setWalletError(
+      showToast(
         error instanceof WalletError || error instanceof ApiError
           ? error.message
           : COPY.verificationFailed,
+        "error",
       );
       return null;
     } finally {
@@ -97,7 +96,7 @@ export function App() {
 
   async function signOut() {
     setAddress(null);
-    setWalletError(null);
+    dismissToast();
     await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
   }
 
@@ -111,8 +110,9 @@ export function App() {
       setProfile(value);
       setProfileName(value.displayName ?? "");
     } catch (error) {
-      setWalletError(
+      showToast(
         error instanceof Error ? error.message : "Name could not be saved.",
+        "error",
       );
     } finally {
       setSavingName(false);
@@ -138,7 +138,9 @@ export function App() {
           </Link>
           <div className="nav-group">
             <GlobalSearch />
-            <Link to="/creators" className="nav-link">Creators</Link>
+            <Link to="/creators" className="nav-link">
+              Creators
+            </Link>
             <SocialLinks />
             <FeedbackButton />
             {address && (
@@ -167,14 +169,10 @@ export function App() {
                     disabled={savingName}
                     onClick={() => void saveName()}
                   >
-                    {savingName ? "Saving..." : "Save name"}{" "}
-                    <Icon name="check" />
+                    {savingName ? "Saving..." : "Save name"} <Icon name="check" />
                   </button>
                   <p className="account-address">{shorten(address)}</p>
-                  <button
-                    className="menu-button"
-                    onClick={() => void signOut()}
-                  >
+                  <button className="menu-button" onClick={() => void signOut()}>
                     Sign out
                   </button>
                 </div>
@@ -192,31 +190,19 @@ export function App() {
             )}
           </div>
         </nav>
-        {walletError && (
-          <div className="global-error" role="alert">
-            {walletError}
-          </div>
-        )}
+        <Toast toast={toast} />
         <main>
           <Routes>
             <Route
               path="/"
               element={
-                <PublishPage
-                  address={address}
-                  signIn={signIn}
-                  signingIn={signingIn}
-                />
+                <PublishPage address={address} signIn={signIn} signingIn={signingIn} />
               }
             />
             <Route
               path="/publish"
               element={
-                <PublishPage
-                  address={address}
-                  signIn={signIn}
-                  signingIn={signingIn}
-                />
+                <PublishPage address={address} signIn={signIn} signingIn={signingIn} />
               }
             />
             <Route path="/find" element={<FindCreatorPage />} />
@@ -224,7 +210,12 @@ export function App() {
             <Route
               path="/creator/:address"
               element={
-                <CreatorPage address={address} signIn={signIn} signingIn={signingIn} onVisibilityChange={saveVisibility} />
+                <CreatorPage
+                  address={address}
+                  signIn={signIn}
+                  signingIn={signingIn}
+                  onVisibilityChange={saveVisibility}
+                />
               }
             />
             <Route

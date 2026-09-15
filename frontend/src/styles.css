@@ -595,12 +595,8 @@ button:disabled {
   border: 1px solid var(--line);
 }
 .feedback {
-  position: fixed;
-  right: auto;
-  bottom: 1.5rem;
-  left: 1.5rem;
-  z-index: 20;
-  width: min(calc(100% - 2rem), 42rem);
+  position: static;
+  width: auto;
   margin: 0;
   padding: 0.9rem 1rem;
   border: 1px solid var(--line);
@@ -799,6 +795,17 @@ button:disabled {
   pointer-events: none;
   z-index: 40;
 }
+.toast-error {
+  border-left: 3px solid #ff8a70;
+  color: #ff826f;
+}
+.toast-info {
+  color: var(--muted);
+}
+.toast-success {
+  border-left: 3px solid var(--acid);
+  color: var(--paper);
+}
 .dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -852,7 +859,9 @@ button:disabled {
   padding: 0.25rem 0;
   color: var(--muted);
   background: transparent;
-  font: 0.75rem "DM Mono", monospace;
+  font:
+    0.75rem "DM Mono",
+    monospace;
   text-align: left;
   overflow-wrap: anywhere;
 }
@@ -917,7 +926,9 @@ button:disabled {
 }
 .post-price {
   color: var(--acid);
-  font: 500 0.72rem "DM Mono", monospace;
+  font:
+    500 0.72rem "DM Mono",
+    monospace;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -1009,7 +1020,9 @@ button:disabled {
   padding: 0.45rem 0.6rem;
   color: var(--acid);
   background: transparent;
-  font: 0.68rem "DM Mono", monospace;
+  font:
+    0.68rem "DM Mono",
+    monospace;
   text-transform: uppercase;
 }
 .video-controls button:hover,
@@ -1023,7 +1036,9 @@ button:disabled {
 }
 .video-time {
   color: var(--muted);
-  font: 0.68rem "DM Mono", monospace;
+  font:
+    0.68rem "DM Mono",
+    monospace;
   white-space: nowrap;
 }
 .post-actions {
@@ -1083,9 +1098,6 @@ footer {
 @media (max-width: 720px) {
   .feedback,
   .global-error {
-    right: 1rem;
-    bottom: 1rem;
-    left: 1rem;
     width: auto;
   }
   .feedback.inline {
@@ -1214,7 +1226,9 @@ footer {
   flex-wrap: wrap;
   gap: 1.25rem;
   color: var(--paper);
-  font: 500 0.8rem "DM Mono", monospace;
+  font:
+    500 0.8rem "DM Mono",
+    monospace;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -1225,7 +1239,9 @@ footer {
 }
 .access-status {
   color: var(--acid);
-  font: 500 0.75rem "DM Mono", monospace;
+  font:
+    500 0.75rem "DM Mono",
+    monospace;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -1259,8 +1275,7 @@ footer {
   border: 1px solid var(--line);
   border-radius: 0.75rem;
   background:
-    radial-gradient(160% 140% at 100% 0%, #143029 0%, transparent 55%),
-    var(--surface);
+    radial-gradient(160% 140% at 100% 0%, #143029 0%, transparent 55%), var(--surface);
 }
 .membership-head {
   display: flex;

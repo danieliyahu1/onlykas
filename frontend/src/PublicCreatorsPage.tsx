@@ -5,12 +5,21 @@ import { useAsyncResource } from "./useAsyncResource.js";
 
 export function PublicCreatorsPage() {
   const navigate = useNavigate();
-  const { data, loading, error: loadError } = useAsyncResource(
+  const {
+    data,
+    loading,
+    error: loadError,
+  } = useAsyncResource(
     (signal) => api<CreatorSearchResult[]>("/api/creators/public", { signal }),
     [],
   );
   const creators = data ?? [];
-  const error = loadError instanceof ApiError ? loadError.message : loadError ? "Creators could not be loaded." : null;
+  const error =
+    loadError instanceof ApiError
+      ? loadError.message
+      : loadError
+        ? "Creators could not be loaded."
+        : null;
 
   return (
     <section className="find-page">
@@ -19,9 +28,15 @@ export function PublicCreatorsPage() {
         <h1>Meet the creators.</h1>
         <p className="find-intro">Wallets that chose to be visible on OnlyKas.</p>
       </header>
-      {error && <p className="feedback error" role="alert">{error}</p>}
-      {loading && <p className="feedback">Loading creators...</p>}
-      {!loading && !error && creators.length === 0 && <p className="feedback">No public creators yet.</p>}
+      {error && (
+        <p className="feedback inline error" role="alert">
+          {error}
+        </p>
+      )}
+      {loading && <p className="feedback inline">Loading creators...</p>}
+      {!loading && !error && creators.length === 0 && (
+        <p className="feedback inline">No public creators yet.</p>
+      )}
       <div className="creator-results">
         {creators.map((creator) => (
           <button

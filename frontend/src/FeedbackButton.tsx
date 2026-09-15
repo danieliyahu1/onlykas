@@ -3,16 +3,14 @@ import { FEEDBACK_MAX_MESSAGE } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { api, ApiError } from "./kasware.js";
 import { logger } from "./logger.js";
-import { useAutoDismiss } from "./useAutoDismiss.js";
+import { Toast, useToast } from "./Toast.js";
 
 export function FeedbackButton() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-
-  useAutoDismiss(toast, () => setToast(null), 2600);
+  const { toast, showToast } = useToast();
 
   function open() {
     setNote(null);
@@ -41,7 +39,7 @@ export function FeedbackButton() {
         body: JSON.stringify({ message }),
       });
       closeDialog();
-      setToast(COPY.feedbackThanks);
+      showToast(COPY.feedbackThanks, "success");
     } catch (error) {
       setSending(false);
       logger.error("feedback_submit_failed", {
@@ -110,7 +108,7 @@ export function FeedbackButton() {
           </div>
         </form>
       </dialog>
-      {toast && <div className="toast">{toast}</div>}
+      <Toast toast={toast} />
     </>
   );
 }
