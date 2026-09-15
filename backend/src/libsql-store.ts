@@ -200,6 +200,67 @@ export class LibsqlStore implements Repositories {
     });
     return r.rows.map(profileFromRow);
   }
+  async reservePublication(v: Post, expiresAt: number) {
+    try {
+      await this.execute({
+        sql: `INSERT INTO pending_publications (post_id,media_digest,media_key,expires_at) VALUES (?,?,?,?)`,
+        args: [v.id, v.mediaDigest, v.mediaKey, expiresAt],
+      });
+      return "RESERVED" as const;
+    } catch (error) {
+      if (isUniqueConstraint(error)) return "DUPLICATE" as const;
+      throw error;
+    }
+  }
+  async commitPublication(v: Post) {
+    const transaction = await this.client.transaction("write");
+    try {
+      const pending = await transaction.execute({
+        sql: `SELECT media_digest FROM pending_publications WHERE post_id=?`,
+        args: [v.id],
+      });
+      if (!pending.rows[0] || text(pending.rows[0].media_digest) !== v.mediaDigest) {
+        await transaction.rollback();
+        return "DUPLICATE" as const;
+      }
+      await transaction.execute({
+        sql: `INSERT INTO posts (id,creator,caption,price_sompi,media_type,media_size,media_digest,media_key,published_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+        args: [
+          v.id,
+          v.creator,
+          v.caption,
+          v.priceSompi,
+          v.mediaType,
+          v.mediaSize,
+          v.mediaDigest,
+          v.mediaKey,
+          v.publishedAt,
+        ],
+      });
+      await transaction.execute({
+        sql: `DELETE FROM pending_publications WHERE post_id=?`,
+        args: [v.id],
+      });
+      await transaction.commit();
+      return "COMMITTED" as const;
+    } catch (error) {
+      await transaction.rollback();
+      if (isUniqueConstraint(error)) return "DUPLICATE" as const;
+      throw error;
+    }
+  }
+  async releasePublication(postId: string) {
+    await this.execute({
+      sql: `DELETE FROM pending_publications WHERE post_id=?`,
+      args: [postId],
+    });
+  }
+  async prunePendingPublications(now: number) {
+    await this.execute({
+      sql: `DELETE FROM pending_publications WHERE expires_at<=?`,
+      args: [now],
+    });
+  }
   async publishPost(v: Post) {
     try {
       await this.execute({

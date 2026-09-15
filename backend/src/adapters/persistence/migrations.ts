@@ -88,6 +88,19 @@ export const migrations: Migration[] = [
       "CREATE INDEX prepared_memberships_expiry ON prepared_memberships (expires_at)",
     ],
   },
+  {
+    version: 2,
+    name: "pending_publications",
+    statements: [
+      `CREATE TABLE pending_publications (
+        post_id TEXT PRIMARY KEY NOT NULL,
+        media_digest TEXT NOT NULL UNIQUE,
+        media_key TEXT NOT NULL,
+        expires_at INTEGER NOT NULL CHECK (expires_at > 0)
+      )`,
+      "CREATE INDEX pending_publications_expiry ON pending_publications (expires_at)",
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {
@@ -122,6 +135,7 @@ export async function applyMigrations(client: Client): Promise<void> {
 
 export async function resetDatabase(client: Client): Promise<void> {
   const tables = [
+    "pending_publications",
     "prepared_memberships",
     "prepared_payments",
     "membership_purchases",

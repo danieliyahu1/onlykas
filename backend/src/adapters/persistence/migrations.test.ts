@@ -11,9 +11,12 @@ describe("database migrations", () => {
     const versions = await client.execute(
       "SELECT version, name FROM schema_migrations ORDER BY version",
     );
-    expect(versions.rows).toEqual([
-      { version: migrations[0]!.version, name: migrations[0]!.name },
-    ]);
+    expect(versions.rows).toEqual(
+      migrations.map((migration) => ({
+        version: migration.version,
+        name: migration.name,
+      })),
+    );
     const tables = await client.execute(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'posts'",
     );

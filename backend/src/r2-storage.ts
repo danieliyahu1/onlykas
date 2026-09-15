@@ -11,10 +11,7 @@ import type { ObjectStorage } from "./application/ports.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 
 export type StorageFailureCategory =
-  | "OBJECT_NOT_FOUND"
-  | "STORAGE_FORBIDDEN"
-  | "STORAGE_TIMEOUT"
-  | "STORAGE_FAILURE";
+  "OBJECT_NOT_FOUND" | "STORAGE_FORBIDDEN" | "STORAGE_TIMEOUT" | "STORAGE_FAILURE";
 
 export class StorageError extends Error {
   constructor(
@@ -55,12 +52,14 @@ export class R2Storage implements ObjectStorage {
   }
   async putFile(key: string, sourcePath: string, contentType: string): Promise<void> {
     await this.metrics.observeDependency("r2", "put_object", () =>
-      this.client.send(new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: createReadStream(sourcePath),
-        ContentType: contentType,
-      })),
+      this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: createReadStream(sourcePath),
+          ContentType: contentType,
+        }),
+      ),
     );
   }
   async readRange(
@@ -71,9 +70,7 @@ export class R2Storage implements ObjectStorage {
     let head: HeadObjectCommandOutput;
     try {
       head = await this.metrics.observeDependency("r2", "head_object", () =>
-        this.client.send(
-          new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
-        ),
+        this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key })),
       );
     } catch (error) {
       throw toStorageError("head_object", key, error);
@@ -85,9 +82,7 @@ export class R2Storage implements ObjectStorage {
           new GetObjectCommand({
             Bucket: this.bucket,
             Key: key,
-            ...(start === undefined
-              ? {}
-              : { Range: `bytes=${start}-${end ?? ""}` }),
+            ...(start === undefined ? {} : { Range: `bytes=${start}-${end ?? ""}` }),
           }),
         ),
       );
@@ -102,20 +97,52 @@ export class R2Storage implements ObjectStorage {
       contentType: head.ContentType ?? "application/octet-stream",
     };
   }
+  async streamRange(
+    key: string,
+    start?: number,
+    end?: number,
+  ): Promise<{
+    body: AsyncIterable<Uint8Array>;
+    size: number;
+    contentType: string;
+  }> {
+    let head: HeadObjectCommandOutput;
+    try {
+      head = await this.metrics.observeDependency("r2", "head_object", () =>
+        this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key })),
+      );
+    } catch (error) {
+      throw toStorageError("head_object", key, error);
+    }
+    try {
+      const result = await this.metrics.observeDependency("r2", "get_object", () =>
+        this.client.send(
+          new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+            ...(start === undefined ? {} : { Range: `bytes=${start}-${end ?? ""}` }),
+          }),
+        ),
+      );
+      if (!result.Body || head.ContentLength === undefined)
+        throw new Error("R2 object unavailable");
+      return {
+        body: result.Body as AsyncIterable<Uint8Array>,
+        size: head.ContentLength,
+        contentType: head.ContentType ?? "application/octet-stream",
+      };
+    } catch (error) {
+      throw toStorageError("get_object", key, error);
+    }
+  }
   async delete(key: string): Promise<void> {
     await this.metrics.observeDependency("r2", "delete_object", () =>
-      this.client.send(
-        new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
-      ),
+      this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })),
     );
   }
 }
 
-function toStorageError(
-  operation: string,
-  key: string,
-  error: unknown,
-): StorageError {
+function toStorageError(operation: string, key: string, error: unknown): StorageError {
   const details = error as {
     name?: unknown;
     Code?: unknown;

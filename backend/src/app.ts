@@ -1,7 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import cookieParser from "cookie-parser";
 import express, { type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
@@ -16,6 +19,7 @@ import {
   validateDisplayName,
   type MembershipAddressVerificationResponse,
   type PostResponse,
+  MAX_VIDEO_BYTES,
 } from "@onlykas/shared";
 import {
   CHALLENGE_TTL_MS,
@@ -47,6 +51,7 @@ import { defaultMetrics, type Metrics } from "./metrics.js";
 import { MediaValidationError, verifyMediaFile } from "./adapters/media/media.js";
 import { FeedbackError, type FeedbackService } from "./adapters/feedback/feedback.js";
 import { RateLimiter } from "./adapters/http/rate-limit.js";
+import { createPublishPostUseCase } from "./application/publication-use-cases.js";
 
 const sessionCookie = "onlykas_session";
 const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
@@ -101,6 +106,13 @@ export function createApp(d: AppDependencies) {
     validateDisplayName,
   });
   const discovery = createDiscoveryUseCases({ profiles: d.store });
+  const publishPost = createPublishPostUseCase({
+    posts: d.store,
+    storage: d.storage,
+    verifyMedia: verifyMediaFile,
+    createId: randomUUID,
+    pendingTtlMs: PREPARED_TTL_MS,
+  });
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     const startedHr = process.hrtime.bigint();
@@ -321,14 +333,14 @@ export function createApp(d: AppDependencies) {
     "/api/posts/publish",
     optional,
     required,
-    express.raw({ limit: "100mb", type: "*/*" }),
     asyncHandler(async (req, res) => {
-      if (!Buffer.isBuffer(req.body) || !req.body.length)
-        return apiError(res, 400, "INVALID_MEDIA");
       const type = req.get("content-type")?.split(";", 1)[0] ?? "",
         caption = req.get("x-onlykas-caption") ?? "",
         price = req.get("x-onlykas-price") ?? "",
-        hint = mediaHintError(type, req.body.length);
+        contentLength = Number(req.get("content-length")),
+        hint = Number.isSafeInteger(contentLength)
+          ? mediaHintError(type, contentLength)
+          : undefined;
       if (hint) {
         metrics.mediaPublishAttempt("invalid", "unknown");
         return apiError(res, 422, "INVALID_MEDIA", hint);
@@ -344,30 +356,22 @@ export function createApp(d: AppDependencies) {
       }
       const dir = await mkdtemp(join(tmpdir(), "onlykas-publish-")),
         source = join(dir, "media");
-      let key: string | undefined;
       try {
-        await writeFile(source, req.body);
-        const media = await verifyMediaFile(source);
-        key = `media/blake3/${media.digest.slice(0, 2)}/${media.digest}`;
-        await d.storage.putFile(key, source, media.mediaType);
-        const post: Post = {
-          id: randomUUID(),
+        const bytesWritten = await writeUpload(req, source, MAX_VIDEO_BYTES);
+        if (!bytesWritten) return apiError(res, 400, "INVALID_MEDIA");
+        const result = await publishPost({
           creator: req.walletSession!.address,
           caption: normalizePostText(caption),
           priceSompi: priceSompi!.toString(),
-          mediaType: media.mediaType,
-          mediaSize: media.size,
-          mediaDigest: media.digest,
-          mediaKey: key,
-          publishedAt: now(),
-        };
-        if ((await d.store.publishPost(post)) === "MEDIA_DIGEST_CONFLICT") {
-          metrics.mediaPublishAttempt("conflict", media.mediaType);
-          await d.storage.delete(key).catch(() => undefined);
+          sourcePath: source,
+          now: now(),
+        });
+        if (result.kind === "DUPLICATE") {
+          metrics.mediaPublishAttempt("conflict", type || "unknown");
           return apiError(res, 409, "MEDIA_ALREADY_PUBLISHED");
         }
-        metrics.mediaPublished(media.mediaType, media.size);
-        res.status(201).json({ id: post.id });
+        metrics.mediaPublished(result.post.mediaType, result.post.mediaSize);
+        res.status(201).json({ id: result.post.id });
       } catch (e) {
         if (e instanceof MediaValidationError) {
           metrics.mediaValidationFailure(e.category);
@@ -375,7 +379,6 @@ export function createApp(d: AppDependencies) {
           return apiError(res, 422, e.category);
         }
         metrics.mediaPublishAttempt("error", "unknown");
-        if (key) await d.storage.delete(key).catch(() => undefined);
         throw e;
       } finally {
         await rm(dir, { recursive: true, force: true });
@@ -832,11 +835,32 @@ export function createApp(d: AppDependencies) {
         res.setHeader("Content-Range", `bytes */${p.mediaSize}`);
         return res.status(416).end();
       }
-      const object = await d.storage.readRange(p.mediaKey, range?.start, range?.end);
+      const streamed =
+        req.method === "GET" && d.storage.streamRange
+          ? await d.storage.streamRange(p.mediaKey, range?.start, range?.end)
+          : undefined;
       metrics.mediaDeliveryAttempt(req.method, "served", range ? "partial" : "none");
-      metrics.mediaDelivered(p.mediaType, object.bytes.byteLength);
       res.setHeader("Accept-Ranges", "bytes");
       res.setHeader("Content-Type", p.mediaType);
+      if (streamed) {
+        res.setHeader(
+          "Content-Length",
+          String(range ? range.end - range.start + 1 : streamed.size),
+        );
+        if (range) {
+          res.status(206);
+          res.setHeader(
+            "Content-Range",
+            `bytes ${range.start}-${range.end}/${p.mediaSize}`,
+          );
+        }
+        const body = Readable.from(streamed.body);
+        body.on("data", (chunk: Uint8Array) =>
+          metrics.mediaDelivered(p.mediaType, chunk.byteLength),
+        );
+        return body.pipe(res);
+      }
+      const object = await d.storage.readRange(p.mediaKey, range?.start, range?.end);
       res.setHeader("Content-Length", object.bytes.byteLength);
       if (range) {
         res.status(206);
@@ -846,6 +870,7 @@ export function createApp(d: AppDependencies) {
         );
       }
       if (req.method === "HEAD") return res.end();
+      metrics.mediaDelivered(p.mediaType, object.bytes.byteLength);
       res.send(Buffer.from(object.bytes));
     }),
   );
@@ -1039,4 +1064,24 @@ function parseRange(
   )
     return "invalid";
   return { start, end: Math.min(end, size - 1) };
+}
+
+async function writeUpload(
+  request: Request,
+  destination: string,
+  maxBytes: number,
+): Promise<number> {
+  let written = 0;
+  const bounded = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      written += chunk.byteLength;
+      if (written > maxBytes) {
+        callback(new MediaValidationError("VIDEO_TOO_LARGE"));
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+  await pipeline(request, bounded, createWriteStream(destination, { flags: "wx" }));
+  return written;
 }

@@ -55,6 +55,10 @@ export interface ProfileRepository {
 }
 
 export interface PostRepository {
+  reservePublication(value: Post, expiresAt: number): Promise<"RESERVED" | "DUPLICATE">;
+  commitPublication(value: Post): Promise<"COMMITTED" | "DUPLICATE">;
+  releasePublication(postId: string): Promise<void>;
+  prunePendingPublications(now: number): Promise<void>;
   publishPost(value: Post): Promise<"COMMITTED" | "MEDIA_DIGEST_CONFLICT">;
   getPost(id: string): Promise<Post | null>;
   creatorPosts(address: string): Promise<Post[]>;
@@ -137,6 +141,15 @@ export interface ObjectStorage {
     start?: number,
     end?: number,
   ): Promise<{ bytes: Uint8Array; size: number; contentType: string }>;
+  streamRange?: (
+    key: string,
+    start?: number,
+    end?: number,
+  ) => Promise<{
+    body: AsyncIterable<Uint8Array>;
+    size: number;
+    contentType: string;
+  }>;
   delete(key: string): Promise<void>;
 }
 

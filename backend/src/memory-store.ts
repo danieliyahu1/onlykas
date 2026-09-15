@@ -16,6 +16,7 @@ export class MemoryStore implements Repositories {
   readonly sessions = new Map<string, Session>();
   readonly profiles = new Map<string, Profile>();
   readonly posts = new Map<string, Post>();
+  readonly pendingPosts = new Map<string, { post: Post; expiresAt: number }>();
   readonly purchases = new Map<string, Purchase>();
   readonly creatorCovenants = new Map<string, CreatorCovenant>();
   readonly membershipPurchaseRecords = new Map<string, MembershipPurchase>();
@@ -110,6 +111,32 @@ export class MemoryStore implements Repositories {
       return "MEDIA_DIGEST_CONFLICT" as const;
     this.posts.set(v.id, structuredClone(v));
     return "COMMITTED" as const;
+  }
+  async reservePublication(v: Post, expiresAt: number) {
+    if (
+      [
+        ...this.posts.values(),
+        ...[...this.pendingPosts.values()].map((x) => x.post),
+      ].some((post) => post.mediaDigest === v.mediaDigest)
+    )
+      return "DUPLICATE" as const;
+    this.pendingPosts.set(v.id, { post: structuredClone(v), expiresAt });
+    return "RESERVED" as const;
+  }
+  async commitPublication(v: Post) {
+    const pending = this.pendingPosts.get(v.id);
+    if (!pending || pending.post.mediaDigest !== v.mediaDigest)
+      return "DUPLICATE" as const;
+    this.pendingPosts.delete(v.id);
+    this.posts.set(v.id, structuredClone(v));
+    return "COMMITTED" as const;
+  }
+  async releasePublication(postId: string) {
+    this.pendingPosts.delete(postId);
+  }
+  async prunePendingPublications(now: number) {
+    for (const [id, pending] of this.pendingPosts)
+      if (pending.expiresAt <= now) this.pendingPosts.delete(id);
   }
   async getPost(id: string) {
     const v = this.posts.get(id);
