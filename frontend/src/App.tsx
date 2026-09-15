@@ -1,22 +1,19 @@
-import { useEffect, useState, type FormEvent } from "react";
-import {
-  BrowserRouter,
-  Link,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
+import { useEffect, useState } from "react";
+import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import type { ProfileResponse } from "@onlykas/shared";
 import { COPY } from "./copy.js";
-import { authenticate, kasware, WalletError, ApiError, api } from "./kasware.js";
+import { authenticate, kasware, api } from "./kasware.js";
 import { PublishPage } from "./PublishPage.js";
-import { CreatorPage, PostPage } from "./PublicPages.js";
+import { CreatorPage } from "./CreatorPage.js";
+import { PostPage } from "./PostPage.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
 import { PublicCreatorsPage } from "./PublicCreatorsPage.js";
 import { FeedbackButton } from "./FeedbackButton.js";
 import { SocialLinks } from "./SocialLinks.js";
-import { Icon } from "./Icons.js";
+import { GlobalSearch } from "./GlobalSearch.js";
+import { AccountMenu } from "./AccountMenu.js";
+import { HomeLink, Message } from "./Message.js";
+import { errorText } from "./errors.js";
 import { Toast, useToast } from "./Toast.js";
 
 export function App() {
@@ -49,12 +46,10 @@ export function App() {
         setProfileName(value.displayName ?? "");
       })
       .catch((error: unknown) => {
-        if (active) {
-          const message =
-            error instanceof Error ? error.message : "Profile could not be loaded.";
-          setProfileError(message);
-          showToast(message, "error");
-        }
+        if (!active) return;
+        const message = errorText(error, "Profile could not be loaded.");
+        setProfileError(message);
+        showToast(message, "error");
       })
       .finally(() => {
         if (active) setLoadingProfile(false);
@@ -110,12 +105,7 @@ export function App() {
       setAddress(authenticatedAddress);
       return authenticatedAddress;
     } catch (error) {
-      showToast(
-        error instanceof WalletError || error instanceof ApiError
-          ? error.message
-          : COPY.verificationFailed,
-        "error",
-      );
+      showToast(errorText(error, COPY.verificationFailed), "error");
       return null;
     } finally {
       setSigningIn(false);
@@ -138,10 +128,7 @@ export function App() {
       setProfile(value);
       setProfileName(value.displayName ?? "");
     } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Name could not be saved.",
-        "error",
-      );
+      showToast(errorText(error, "Name could not be saved."), "error");
     } finally {
       setSavingName(false);
     }
@@ -170,54 +157,17 @@ export function App() {
               Creators
             </Link>
             {address ? (
-              <details className="account">
-                <summary
-                  aria-label={
-                    loadingProfile
-                      ? "Your account, checking profile"
-                      : profileError
-                        ? "Your account, profile unavailable"
-                        : `Your account ${profile?.displayName ?? "Add your name"}`
-                  }
-                >
-                  <Icon name="user" />{" "}
-                  {loadingProfile
-                    ? "Checking profile..."
-                    : profileError
-                      ? "Profile unavailable"
-                      : `Hi, ${profile?.displayName ?? "there"}!`}
-                </summary>
-                <div className="account-menu">
-                  <label htmlFor="display-name">Display name</label>
-                  {loadingProfile ? (
-                    <p className="account-loading">Loading profile...</p>
-                  ) : profileError ? (
-                    <p className="account-loading">{profileError}</p>
-                  ) : (
-                    <input
-                      id="display-name"
-                      value={profileName}
-                      onChange={(event) => setProfileName(event.target.value)}
-                      placeholder="Add a display name"
-                      maxLength={40}
-                    />
-                  )}
-                  <button
-                    className="menu-button"
-                    disabled={savingName || loadingProfile || Boolean(profileError)}
-                    onClick={() => void saveName()}
-                  >
-                    {savingName ? "Saving..." : "Save"} <Icon name="check" />
-                  </button>
-                  <p className="account-address">{shorten(address)}</p>
-                  <Link className="menu-button" to={`/creator/${address}`}>
-                    Your page
-                  </Link>
-                  <button className="menu-button" onClick={() => void signOut()}>
-                    Sign out
-                  </button>
-                </div>
-              </details>
+              <AccountMenu
+                address={address}
+                displayName={profile?.displayName ?? null}
+                name={profileName}
+                loading={loadingProfile}
+                error={profileError}
+                saving={savingName}
+                onNameChange={setProfileName}
+                onSaveName={() => void saveName()}
+                onSignOut={() => void signOut()}
+              />
             ) : (
               <button
                 className="nav-account-action"
@@ -226,11 +176,7 @@ export function App() {
                 aria-label="Sign in with Kasware"
                 title="Sign in with Kasware"
               >
-                {checkingSession
-                  ? "Checking session..."
-                  : signingIn
-                    ? "Signing in..."
-                    : "Sign in"}
+                {signInLabel(checkingSession, signingIn)}
               </button>
             )}
           </div>
@@ -284,55 +230,16 @@ export function App() {
   );
 }
 
-function GlobalSearch() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    setQuery(new URLSearchParams(location.search).get("q") ?? "");
-  }, [location.search]);
-
-  if (location.pathname === "/find") return null;
-
-  function submitSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = query.trim();
-    if (value) navigate(`/find?q=${encodeURIComponent(value)}`);
-  }
-
-  return (
-    <form className="global-search" onSubmit={submitSearch} role="search">
-      <label htmlFor="global-search-input" className="sr-only">
-        Search by name or Kaspa address
-      </label>
-      <input
-        id="global-search-input"
-        type="search"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Name or Kaspa address"
-        autoComplete="off"
-        spellCheck={false}
-      />
-      <button type="submit" aria-label="Search">
-        <Icon name="search" />
-      </button>
-    </form>
-  );
-}
-
-function shorten(address: string) {
-  return `${address.slice(0, 10)}...${address.slice(-6)}`;
-}
-
 function MessageNotFound() {
   return (
-    <section className="message">
-      <h1 className="message-title">Page not found.</h1>
-      <Link className="secondary" to="/">
-        Go home
-      </Link>
-    </section>
+    <Message title="Page not found.">
+      <HomeLink />
+    </Message>
   );
+}
+
+function signInLabel(checkingSession: boolean, signingIn: boolean): string {
+  if (checkingSession) return "Checking session...";
+  if (signingIn) return "Signing in...";
+  return "Sign in";
 }

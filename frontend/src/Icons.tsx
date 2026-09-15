@@ -32,3 +32,34 @@ export function Icon({ name }: { name: IconName }) {
     </svg>
   );
 }
+
+export function LockIcon({ open }: { open: boolean }) {
+  return (
+    <svg className="post-lock-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 11h14v9H5z" />
+      {open ? (
+        <path d="M8 11V7a4 4 0 0 1 7.7-1.5" />
+      ) : (
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      )}
+    </svg>
+  );
+}
+
+export type VideoIconName = "fullscreen" | "mute" | "pause" | "play" | "unmute";
+
+const videoPaths: Record<VideoIconName, ReactNode> = {
+  fullscreen: <path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6" />,
+  mute: <path d="M3 10v4h4l5 4V6l-5 4H3M16 9l5 6M21 9l-5 6" />,
+  pause: <path d="M7 4v16M17 4v16" />,
+  play: <path d="m8 5 11 7-11 7V5Z" fill="currentColor" stroke="none" />,
+  unmute: <path d="M3 10v4h4l5 4V6l-5 4H3M16 9c2 2 2 4 0 6M19 6c4 4 4 8 0 12" />,
+};
+
+export function VideoIcon({ name }: { name: VideoIconName }) {
+  return (
+    <svg className="video-icon" viewBox="0 0 24 24" aria-hidden="true">
+      {videoPaths[name]}
+    </svg>
+  );
+}

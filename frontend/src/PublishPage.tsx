@@ -3,17 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { mediaHintError, validatePost } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { uploadMedia } from "./upload.js";
-import { KaspaMark } from "./KaspaMark.js";
 import { Icon } from "./Icons.js";
+import { errorText } from "./errors.js";
 import { Toast, useToast } from "./Toast.js";
+import type { WalletProps } from "./wallet.js";
 
-interface Props {
-  address: string | null;
-  signIn: () => Promise<string | null>;
-  signingIn: boolean;
-}
+const DEFAULT_CAPTION = "Shared just for supporters.";
+const DEFAULT_PRICE_KAS = "1";
 
-export function PublishPage({ address, signIn, signingIn }: Props) {
+export function PublishPage({ address, signIn, signingIn }: WalletProps) {
   const navigate = useNavigate();
   const mediaInput = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -23,8 +21,8 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
   const [progress, setProgress] = useState(0);
   const [detailsEdited, setDetailsEdited] = useState(false);
   const [form, setForm] = useState({
-    caption: "Shared just for supporters.",
-    priceKas: "1",
+    caption: DEFAULT_CAPTION,
+    priceKas: DEFAULT_PRICE_KAS,
   });
 
   const { toast, showToast, dismissToast } = useToast();
@@ -57,7 +55,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
   }
 
   function restoreDefaults() {
-    setForm({ caption: "Shared just for supporters.", priceKas: "1" });
+    setForm({ caption: DEFAULT_CAPTION, priceKas: DEFAULT_PRICE_KAS });
     setDetailsEdited(false);
   }
 
@@ -65,14 +63,21 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     setUploading(true);
     setProgress(0);
     try {
-      const id = await uploadMedia(file, form.caption, form.priceKas, setProgress);
-      return id;
+      return await uploadMedia(file, form.caption, form.priceKas, setProgress);
     } catch (caught) {
-      showToast(caught instanceof Error ? caught.message : COPY.uploadFailed, "error");
+      showToast(errorText(caught, COPY.uploadFailed), "error");
       return null;
     } finally {
       setUploading(false);
     }
+  }
+
+  async function ensureSignedIn(): Promise<boolean> {
+    if (address) return true;
+    showToast("Sign in with Kasware to publish.");
+    const signedIn = await signIn();
+    if (!signedIn) dismissToast();
+    return Boolean(signedIn);
   }
 
   async function publishSelected(event: FormEvent) {
@@ -86,13 +91,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
     setSubmitting(true);
     dismissToast();
     try {
-      if (!address) {
-        showToast("Sign in with Kasware to publish.");
-        if (!(await signIn())) {
-          dismissToast();
-          return;
-        }
-      }
+      if (!(await ensureSignedIn())) return;
       const id = await uploadFile(selectedFile);
       if (id) navigate(`/post/${id}`);
     } finally {
@@ -101,11 +100,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
   }
 
   const busy = submitting || uploading || signingIn;
-  const actionLabel = signingIn
-    ? "Signing in..."
-    : uploading
-      ? "Publishing..."
-      : "Publish";
+  const actionLabel = publishActionLabel(signingIn, uploading);
 
   return (
     <>
@@ -177,8 +172,6 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
               <label className="price-field">
                 Price
                 <span className="price-input">
-                  <KaspaMark />
-                  <span className="sr-only">KAS</span>
                   <input
                     inputMode="decimal"
                     value={form.priceKas}
@@ -187,6 +180,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
                       setForm({ ...form, priceKas: event.target.value });
                     }}
                   />
+                  <span className="price-unit">KAS</span>
                 </span>
               </label>
               {detailsEdited && (
@@ -206,9 +200,7 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
               </p>
             )}
             <button className="primary publish-action" disabled={!selectedFile || busy}>
-              {selectedFile
-                ? `${actionLabel} for ${form.priceKas || "0"} KAS`
-                : actionLabel}
+              {publishButtonLabel(actionLabel, form.priceKas, selectedFile !== null)}
             </button>
           </div>
         </form>
@@ -216,4 +208,18 @@ export function PublishPage({ address, signIn, signingIn }: Props) {
       <Toast toast={toast} />
     </>
   );
+}
+
+function publishActionLabel(signingIn: boolean, uploading: boolean): string {
+  if (signingIn) return "Signing in...";
+  if (uploading) return "Publishing...";
+  return "Publish";
+}
+
+function publishButtonLabel(
+  actionLabel: string,
+  priceKas: string,
+  hasMedia: boolean,
+): string {
+  return hasMedia ? `${actionLabel} for ${priceKas || "0"} KAS` : actionLabel;
 }

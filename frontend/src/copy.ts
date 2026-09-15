@@ -30,16 +30,17 @@ export const COPY = {
   paymentCancelled: "Payment cancelled.",
   unlocked: "Unlocked.",
   insufficientFunds: "You need enough KAS for the post and the network fee.",
-  transactionRejected: "Transaction rejected. No access was granted. Try again.",
+  transactionRejected: "Transaction rejected. Nothing was charged. Try again.",
   purchasePending: "Purchase pending. Do not pay again.",
   paymentTimedOut:
     "We couldn't confirm the payment. Check the transaction and try again.",
-  accessVerificationFailed: "OnlyKas can't verify access right now. Try again.",
+  accessVerificationFailed:
+    "OnlyKas can't verify your subscription right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
   invalidCreatorAddress: "Enter a complete Kaspa testnet address.",
   offerInvalid: "Add a price and a warm note for your circle.",
   offerMembershipTitle: "Your inner circle",
-  offerMembershipIntro: "A private day of access for the people who support you most.",
+  offerMembershipIntro: "A private subscription for the people who support you most.",
   offerDescriptionLabel: "What they get",
   offerDescriptionHint: "Welcome them warmly — say what the day holds.",
   offerMembershipPermanence:
