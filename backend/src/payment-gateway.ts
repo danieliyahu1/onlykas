@@ -10,6 +10,7 @@ const ZERO_SUBNETWORK = "0".repeat(40);
 const VERIFY_MAX_ATTEMPTS = 5;
 const VERIFY_BASE_DELAY_MS = 1_000;
 const VERIFY_MAX_DELAY_MS = 4_000;
+const CHANGE_DUST_SOMPI = 2_200_000n;
 type Sleep = (milliseconds: number) => Promise<void>;
 type Utxo = { outpoint: { transactionId: string; index: number }; utxoEntry: { amount: string; scriptPublicKey: { scriptPublicKey: string }; blockDaaScore: string; isCoinbase: boolean } };
 type ChainTransaction = { is_accepted?: boolean; inputs?: { previous_outpoint_resolved?: { script_public_key_address?: string } }[]; outputs?: { amount?: string | number; script_public_key_address?: string }[] };
@@ -31,6 +32,7 @@ constructor(
     const amount = BigInt(post.priceSompi);
     const fee = platformFeeSompi(amount);
     const creatorAmount = amount - fee;
+    const outputCount = fee > 0n ? 3 : 2;
     const rate = estimate.normalBuckets[0]?.feerate ?? estimate.priorityBucket.feerate;
     const buyerScript = scriptFor(buyer);
     const selected: Utxo[] = [];
@@ -39,9 +41,9 @@ constructor(
       if (`0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}` !== buyerScript) continue;
       selected.push(utxo);
       total += BigInt(utxo.utxoEntry.amount);
-      if (total >= amount + estimatedFee(selected, rate, 3)) break;
+      if (total >= amount + estimatedFee(selected, rate, outputCount)) break;
     }
-    const networkFee = estimatedFee(selected, rate, 3);
+    const networkFee = estimatedFee(selected, rate, outputCount);
     if (total < amount + networkFee) {
       this.logger.warn("payment_prepare_insufficient_funds", {
         postId: post.id,
@@ -51,10 +53,10 @@ constructor(
     }
     const outputs = [
       { value: creatorAmount.toString(), scriptPublicKey: scriptFor(post.creator), covenant: null },
-      { value: fee.toString(), scriptPublicKey: scriptFor(this.platformFeeAddress), covenant: null },
     ];
+    if (fee > 0n) outputs.push({ value: fee.toString(), scriptPublicKey: scriptFor(this.platformFeeAddress), covenant: null });
     const change = total - amount - networkFee;
-    if (change > 0n) outputs.push({ value: change.toString(), scriptPublicKey: buyerScript, covenant: null });
+    if (change >= CHANGE_DUST_SOMPI) outputs.push({ value: change.toString(), scriptPublicKey: buyerScript, covenant: null });
     const transaction = JSON.stringify({ id: "0".repeat(64), version: 0, inputs: selected.map((utxo) => ({ transactionId: utxo.outpoint.transactionId, index: utxo.outpoint.index, sequence: "0", sigOpCount: 1, computeBudget: 0, signatureScript: "", utxo: { amount: utxo.utxoEntry.amount, scriptPublicKey: `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}`, blockDaaScore: utxo.utxoEntry.blockDaaScore, isCoinbase: utxo.utxoEntry.isCoinbase } })), outputs, subnetworkId: ZERO_SUBNETWORK, lockTime: "0", gas: "0", storageMass: "20000", payload: "" });
     this.logger.debug("payment_prepared", {
       postId: post.id,
@@ -103,8 +105,9 @@ constructor(
     if (!tx.inputs.every((input) => input.previous_outpoint_resolved?.script_public_key_address === buyer)) return false;
     const amount = BigInt(amountSompi);
     const fee = platformFeeSompi(amount);
-    return tx.outputs.some((output) => String(output.amount) === (amount - fee).toString() && output.script_public_key_address === creator)
-      && tx.outputs.some((output) => String(output.amount) === fee.toString() && output.script_public_key_address === this.platformFeeAddress);
+    if (!tx.outputs.some((output) => String(output.amount) === (amount - fee).toString() && output.script_public_key_address === creator)) return false;
+    if (fee === 0n) return !tx.outputs.some((output) => output.script_public_key_address === this.platformFeeAddress);
+    return tx.outputs.some((output) => String(output.amount) === fee.toString() && output.script_public_key_address === this.platformFeeAddress);
   }
 
   private async requestRetryingMissing<T>(operation: string, path: string): Promise<T | null> {

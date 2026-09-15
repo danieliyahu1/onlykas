@@ -8,31 +8,42 @@ const feeAddress = "kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh
 describe("KaspaPaymentGateway preparation", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("puts the rounded fee beside the creator output and keeps the buyer total unchanged", async () => {
+  const funding = (amount: string, transactionId: string) => ({
+    outpoint: { transactionId, index: 0 },
+    utxoEntry: { amount, scriptPublicKey: { scriptPublicKey: addressScript(buyer).slice(4) }, blockDaaScore: "1", isCoinbase: false },
+  });
+
+  function stubNode(utxos: unknown[]) {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.includes("/utxos")) return Response.json([{
-        outpoint: { transactionId: "11".repeat(32), index: 0 },
-        utxoEntry: {
-          amount: "200000000",
-          scriptPublicKey: { scriptPublicKey: addressScript(buyer).slice(4) },
-          blockDaaScore: "1",
-          isCoinbase: false,
-        },
-      }]);
+      if (url.includes("/utxos")) return Response.json(utxos);
       if (url.endsWith("/info/fee-estimate")) return Response.json({ normalBuckets: [{ feerate: 1 }], priorityBucket: { feerate: 1 } });
       return new Response("not found", { status: 404 });
     }));
+  }
+
+  it("sends the whole price to the creator and skips the fee below one KAS", async () => {
+    stubNode([funding("200000000", "11".repeat(32))]);
     const gateway = new KaspaPaymentGateway(feeAddress, "https://node.test", undefined, undefined, undefined);
     const prepared = await gateway.prepare({
       id: "post-1", creator, caption: "", priceSompi: "100000000", mediaType: "image/jpeg",
       mediaSize: 1, mediaDigest: "digest", mediaKey: "key", publishedAt: 0,
     }, buyer);
     const transaction = JSON.parse(prepared.transaction) as { outputs: { value: string; scriptPublicKey: string }[] };
-    expect(transaction.outputs.slice(0, 2)).toEqual([
-      { value: "99000000", scriptPublicKey: addressScript(creator), covenant: null },
-      { value: "1000000", scriptPublicKey: addressScript(feeAddress), covenant: null },
-    ]);
+    expect(transaction.outputs[0]).toEqual({ value: "100000000", scriptPublicKey: addressScript(creator), covenant: null });
+    expect(transaction.outputs.some((output) => output.scriptPublicKey === addressScript(feeAddress))).toBe(false);
+  });
+
+  it("charges the one percent fee once it reaches one KAS", async () => {
+    stubNode([funding("200000000000", "33".repeat(32))]);
+    const gateway = new KaspaPaymentGateway(feeAddress, "https://node.test", undefined, undefined, undefined);
+    const prepared = await gateway.prepare({
+      id: "post-1", creator, caption: "", priceSompi: "100000000000", mediaType: "image/jpeg",
+      mediaSize: 1, mediaDigest: "digest", mediaKey: "key", publishedAt: 0,
+    }, buyer);
+    const transaction = JSON.parse(prepared.transaction) as { outputs: { value: string; scriptPublicKey: string }[] };
+    expect(transaction.outputs[0]).toEqual({ value: "99000000000", scriptPublicKey: addressScript(creator), covenant: null });
+    expect(transaction.outputs.some((output) => output.value === "1000000000" && output.scriptPublicKey === addressScript(feeAddress))).toBe(true);
   });
 
   it("prefers the smallest sufficient UTXO to limit transaction storage mass", async () => {
@@ -82,8 +93,7 @@ describe("KaspaPaymentGateway purchase verification", () => {
         is_accepted: true,
         inputs: [{ previous_outpoint_resolved: { script_public_key_address: "kaspatest:buyer" } }],
          outputs: [
-           { amount: "99000000", script_public_key_address: "kaspatest:creator" },
-           { amount: "1000000", script_public_key_address: "kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue" },
+           { amount: "100000000", script_public_key_address: "kaspatest:creator" },
          ],
       }));
     const sleep = vi.fn(async () => undefined);
@@ -98,6 +108,24 @@ describe("KaspaPaymentGateway purchase verification", () => {
     )).resolves.toBe(true);
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(sleep.mock.calls).toEqual([[1_000], [2_000]]);
+  });
+
+  it("rejects a purchase that omits the platform fee once it is due", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      is_accepted: true,
+      inputs: [{ previous_outpoint_resolved: { script_public_key_address: "kaspatest:buyer" } }],
+      outputs: [
+        { amount: "100000000000", script_public_key_address: "kaspatest:creator" },
+      ],
+    })));
+    const gateway = new KaspaPaymentGateway(feeAddress);
+
+    await expect(gateway.verifyPurchase(
+      "a".repeat(64),
+      "kaspatest:buyer",
+      "kaspatest:creator",
+      "100000000000",
+    )).resolves.toBe(false);
   });
 
   it("does not hide upstream service failures", async () => {
