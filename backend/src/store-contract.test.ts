@@ -1,7 +1,7 @@
 import { LibsqlStore } from "./libsql-store.js";
 import { MemoryStore } from "./memory-store.js";
 import type { Post } from "./domain/models.js";
-import type { Store } from "./application/ports.js";
+import type { Repositories } from "./application/ports.js";
 
 const now = 1_000_000;
 const creator = "kaspatest:creator";
@@ -11,7 +11,7 @@ describe.each([
   ["memory", () => new MemoryStore()],
   ["libsql", () => new LibsqlStore("file::memory:")],
 ])("store contract: %s", (_name, createStore) => {
-  let store: Store;
+  let store: Repositories;
 
   beforeEach(async () => {
     store = createStore();
@@ -98,11 +98,13 @@ describe.each([
   it("enforces purchase uniqueness by post, buyer, and transaction", async () => {
     const purchase = { postId: "post-1", buyer, transactionId: "tx-1" };
 
-    expect(await store.createPurchase(purchase)).toBe(true);
-    expect(await store.createPurchase(purchase)).toBe(false);
-    expect(await store.createPurchase({ ...purchase, postId: "post-2" })).toBe(false);
+    expect(await store.createPurchase(purchase)).toBe("CREATED");
+    expect(await store.createPurchase(purchase)).toBe("DUPLICATE");
+    expect(await store.createPurchase({ ...purchase, postId: "post-2" })).toBe(
+      "DUPLICATE",
+    );
     expect(await store.createPurchase({ ...purchase, transactionId: "tx-2" })).toBe(
-      false,
+      "DUPLICATE",
     );
     expect(await store.getPurchase(purchase.postId, buyer)).toEqual(purchase);
     expect(await store.purchasesForBuyer(buyer)).toEqual([purchase]);
@@ -114,12 +116,12 @@ describe.each([
 
     await store.saveCreatorCovenant(covenant);
     expect(await store.getCreatorCovenant(creator)).toEqual(covenant);
-    await expect(
-      store.saveCreatorCovenant({ creator, covenantId: "covenant-2" }),
-    ).rejects.toThrow();
+    expect(await store.saveCreatorCovenant({ creator, covenantId: "covenant-2" })).toBe(
+      "DUPLICATE",
+    );
 
-    expect(await store.createMembershipPurchase(membership)).toBe(true);
-    expect(await store.createMembershipPurchase(membership)).toBe(false);
+    expect(await store.createMembershipPurchase(membership)).toBe("CREATED");
+    expect(await store.createMembershipPurchase(membership)).toBe("DUPLICATE");
     expect(await store.membershipPurchases(buyer)).toEqual([membership]);
   });
 
@@ -135,6 +137,57 @@ describe.each([
     });
     await store.pruneSessions(now + 2_000);
     expect(await store.getSession(session.id, now)).toBeNull();
+  });
+
+  it("finalizes a payment atomically with its prepared record", async () => {
+    await store.savePreparedPayment({
+      id: "prepared-payment",
+      transaction: "{}",
+      fingerprint: "fingerprint",
+      amountSompi: "100000000",
+      creator,
+      postId: "post-1",
+      buyer,
+      expiresAt: now + 1_000,
+    });
+
+    expect(
+      await store.finalizePurchase("prepared-payment", {
+        postId: "post-1",
+        buyer,
+        transactionId: "tx-finalized",
+      }),
+    ).toBe("CREATED");
+    expect(await store.getPreparedPayment("prepared-payment", now)).toBeNull();
+    expect(await store.getPurchase("post-1", buyer)).toEqual({
+      postId: "post-1",
+      buyer,
+      transactionId: "tx-finalized",
+    });
+  });
+
+  it("treats repeated membership finalization as a duplicate and clears preparation", async () => {
+    await store.savePreparedMembership({
+      id: "prepared-membership",
+      transaction: "{}",
+      fingerprint: "fingerprint",
+      covenantId: "covenant-1",
+      signInputs: [0],
+      memberOutputIndex: 1,
+      creator,
+      buyer,
+      kind: "purchase",
+      expiresAt: now + 1_000,
+    });
+    const membership = { transactionId: "membership-finalized", buyer };
+
+    expect(
+      await store.finalizeMembershipPurchase("prepared-membership", membership),
+    ).toBe("CREATED");
+    expect(
+      await store.finalizeMembershipPurchase("prepared-membership", membership),
+    ).toBe("DUPLICATE");
+    expect(await store.getPreparedMembership("prepared-membership", now)).toBeNull();
   });
 });
 

@@ -33,6 +33,18 @@ pnpm build
 
 `pnpm test` runs Vitest unit/component/integration tests and Playwright on desktop and mobile Chromium viewports.
 
+## Database migrations
+
+The backend applies numbered canonical migrations from `backend/src/adapters/persistence/migrations.ts` during startup. Migration errors are fatal; they are not swallowed. The migration ledger is stored in `schema_migrations`.
+
+For local development or tests, reset the database explicitly with:
+
+```bash
+pnpm --filter @onlykas/backend db:reset
+```
+
+Reset drops the application tables, reapplies the canonical schema, and is destructive. Do not run it against a database whose data must be retained.
+
 ## Production
 
 The production image builds all workspaces and runs one Express process. Express serves the Vite bundle and all API and protected-media routes from one origin.

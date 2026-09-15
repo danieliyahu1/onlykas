@@ -4,7 +4,11 @@ import { createMetrics, type Metrics } from "./metrics.js";
 import { MemoryStore } from "./memory-store.js";
 import type { EventLogger, Logger } from "./observability.js";
 import type { Post } from "./domain/models.js";
-import type { ObjectStorage, PaymentGateway, Store } from "./application/ports.js";
+import type {
+  ObjectStorage,
+  PaymentGateway,
+  Repositories,
+} from "./application/ports.js";
 
 describe("API request diagnostics", () => {
   it("logs enough context to diagnose a missing post", async () => {
@@ -350,7 +354,7 @@ describe("payment confirmation", () => {
 });
 
 function testApp(
-  store: Store = new MemoryStore(),
+  store: Repositories = new MemoryStore(),
   paymentGateway?: PaymentGateway,
   metrics?: Metrics,
 ) {

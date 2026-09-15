@@ -4,7 +4,7 @@ import type {
   PreparedMembershipRecord,
   PreparedPaymentRecord,
 } from "./domain/models.js";
-import type { Store } from "./application/ports.js";
+import type { Repositories } from "./application/ports.js";
 
 const now = 1_000_000;
 
@@ -41,7 +41,7 @@ describe.each([
   ["libsql", () => new LibsqlStore("file::memory:")],
 ])("prepared transactions: %s", (_name, createStore) => {
   it("round-trips and prunes prepared payments", async () => {
-    const store: Store = createStore();
+    const store: Repositories = createStore();
     await store.initialize();
     const live = payment("pay-live", now + 60_000);
     const expired = payment("pay-expired", now - 1);
@@ -60,7 +60,7 @@ describe.each([
   });
 
   it("round-trips and prunes prepared memberships", async () => {
-    const store: Store = createStore();
+    const store: Repositories = createStore();
     await store.initialize();
     const live = membership("mem-live", now + 60_000);
     const expired = membership("mem-expired", now - 1);

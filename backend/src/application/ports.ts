@@ -3,7 +3,6 @@ import type {
   CreatorCovenant,
   MembershipCheck,
   MembershipPurchase,
-  MembershipCheckStatus,
   Post,
   PreparedMembershipRecord,
   PreparedMembershipTransaction,
@@ -14,6 +13,94 @@ import type {
   Purchase,
   Session,
 } from "../domain/models.js";
+
+export type DuplicateOutcome = "CREATED" | "DUPLICATE";
+
+export interface ChallengeRepository {
+  createChallenge(value: Challenge): Promise<void>;
+  consumeChallenge(id: string, now: number): Promise<Challenge | null>;
+  pruneChallenges(now: number): Promise<void>;
+}
+
+export interface SessionRepository {
+  createSession(value: Session): Promise<void>;
+  getSession(id: string, now: number): Promise<Session | null>;
+  rollSession(id: string, expiresAt: number): Promise<void>;
+  deleteSession(id: string): Promise<void>;
+  pruneSessions(now: number): Promise<void>;
+}
+
+export interface PreparedPaymentRepository {
+  savePreparedPayment(value: PreparedPaymentRecord): Promise<void>;
+  getPreparedPayment(id: string, now: number): Promise<PreparedPaymentRecord | null>;
+  deletePreparedPayment(id: string): Promise<void>;
+  prunePreparedPayments(now: number): Promise<void>;
+}
+
+export interface PreparedMembershipRepository {
+  savePreparedMembership(value: PreparedMembershipRecord): Promise<void>;
+  getPreparedMembership(
+    id: string,
+    now: number,
+  ): Promise<PreparedMembershipRecord | null>;
+  deletePreparedMembership(id: string): Promise<void>;
+  prunePreparedMemberships(now: number): Promise<void>;
+}
+
+export interface ProfileRepository {
+  getProfile(address: string): Promise<Profile | null>;
+  saveProfile(value: Profile): Promise<void>;
+  searchCreators(name: string, limit: number): Promise<Profile[]>;
+  publicCreators(limit: number): Promise<Profile[]>;
+}
+
+export interface PostRepository {
+  publishPost(value: Post): Promise<"COMMITTED" | "MEDIA_DIGEST_CONFLICT">;
+  getPost(id: string): Promise<Post | null>;
+  creatorPosts(address: string): Promise<Post[]>;
+}
+
+export interface PurchaseRepository {
+  createPurchase(value: Purchase): Promise<DuplicateOutcome>;
+  getPurchase(postId: string, buyer: string): Promise<Purchase | null>;
+  purchasesForBuyer(buyer: string): Promise<Purchase[]>;
+  finalizePurchase(
+    preparedPaymentId: string,
+    value: Purchase,
+  ): Promise<DuplicateOutcome>;
+}
+
+export interface CovenantRepository {
+  getCreatorCovenant(creator: string): Promise<CreatorCovenant | null>;
+  saveCreatorCovenant(value: CreatorCovenant): Promise<DuplicateOutcome>;
+  finalizeOffer(
+    preparedMembershipId: string,
+    value: CreatorCovenant,
+  ): Promise<DuplicateOutcome>;
+}
+
+export interface MembershipPurchaseRepository {
+  createMembershipPurchase(value: MembershipPurchase): Promise<DuplicateOutcome>;
+  membershipPurchases(buyer: string): Promise<MembershipPurchase[]>;
+  finalizeMembershipPurchase(
+    preparedMembershipId: string,
+    value: MembershipPurchase,
+  ): Promise<DuplicateOutcome>;
+}
+
+export interface Repositories
+  extends
+    ChallengeRepository,
+    SessionRepository,
+    PreparedPaymentRepository,
+    PreparedMembershipRepository,
+    ProfileRepository,
+    PostRepository,
+    PurchaseRepository,
+    CovenantRepository,
+    MembershipPurchaseRepository {
+  initialize(): Promise<void>;
+}
 
 export interface PaymentGateway {
   prepare(post: Post, buyer: string): Promise<PreparedPayment>;
@@ -41,43 +128,6 @@ export interface MembershipGateway {
     prepared: PreparedMembershipTransaction,
     signedTransaction: string,
   ): Promise<PaymentSubmission>;
-}
-
-export interface Store {
-  initialize(): Promise<void>;
-  createChallenge(value: Challenge): Promise<void>;
-  consumeChallenge(id: string, now: number): Promise<Challenge | null>;
-  pruneChallenges(now: number): Promise<void>;
-  savePreparedPayment(value: PreparedPaymentRecord): Promise<void>;
-  getPreparedPayment(id: string, now: number): Promise<PreparedPaymentRecord | null>;
-  deletePreparedPayment(id: string): Promise<void>;
-  prunePreparedPayments(now: number): Promise<void>;
-  savePreparedMembership(value: PreparedMembershipRecord): Promise<void>;
-  getPreparedMembership(
-    id: string,
-    now: number,
-  ): Promise<PreparedMembershipRecord | null>;
-  deletePreparedMembership(id: string): Promise<void>;
-  prunePreparedMemberships(now: number): Promise<void>;
-  createSession(value: Session): Promise<void>;
-  getSession(id: string, now: number): Promise<Session | null>;
-  rollSession(id: string, expiresAt: number): Promise<void>;
-  deleteSession(id: string): Promise<void>;
-  pruneSessions(now: number): Promise<void>;
-  getProfile(address: string): Promise<Profile | null>;
-  saveProfile(value: Profile): Promise<void>;
-  searchCreators(name: string, limit: number): Promise<Profile[]>;
-  publicCreators(limit: number): Promise<Profile[]>;
-  publishPost(value: Post): Promise<"COMMITTED" | "MEDIA_DIGEST_CONFLICT">;
-  getPost(id: string): Promise<Post | null>;
-  creatorPosts(address: string): Promise<Post[]>;
-  createPurchase(value: Purchase): Promise<boolean>;
-  getPurchase(postId: string, buyer: string): Promise<Purchase | null>;
-  purchasesForBuyer(buyer: string): Promise<Purchase[]>;
-  getCreatorCovenant(creator: string): Promise<CreatorCovenant | null>;
-  saveCreatorCovenant(value: CreatorCovenant): Promise<void>;
-  createMembershipPurchase(value: MembershipPurchase): Promise<boolean>;
-  membershipPurchases(buyer: string): Promise<MembershipPurchase[]>;
 }
 
 export interface ObjectStorage {
@@ -115,5 +165,4 @@ export interface MembershipVerifier {
   ): Promise<MembershipCheck>;
 }
 
-export type { MembershipCheckStatus };
 export type { PaymentSubmission, PreparedMembershipTransaction };
