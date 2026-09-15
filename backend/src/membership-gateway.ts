@@ -1,18 +1,13 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import {
   covenantId,
-  createInputSignature,
   Encoding,
-  Mnemonic,
   payToScriptHashScript,
   Resolver,
   RpcClient,
-  SighashType,
   Transaction,
   TransactionOutput,
   updateTransactionMass,
-  XPrv,
 } from "@kluster/kaspa-wasm";
 import type {
   MembershipGateway,
@@ -249,20 +244,13 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
       return rejected("PREPARED_TRANSACTION_CHANGED");
     if (!preparedValue.signInputs.every((index) => validSignature(signed.inputs[index]?.signatureScript)))
       return rejected("INVALID_SIGNATURES");
-    this.logger.debug("membership_transaction_signed", {
-      signInputs: preparedValue.signInputs,
-      signedSummary: transactionSummary(signedTransaction),
-      sigDiagnostics: signatureSummary(signed, preparedValue.signInputs),
-    });
+    this.logger.debug("membership_transaction_signed");
     let transactionId: string;
     try {
       transactionId = await this.metrics.observeDependency("kaspa_wrpc", "submit_transaction", () => this.relay(signedTransaction));
     } catch (error) {
       this.logger.error("membership_transaction_relay_failed", {
-        signInputs: preparedValue.signInputs,
-        signedSummary: transactionSummary(signedTransaction),
         error: safeError(error),
-        walletSigCheck: await testWalletSignatureDiagnostic(signedTransaction),
       });
       throw error;
     }
@@ -303,7 +291,10 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
       });
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
-      return await response.json() as { is_accepted?: boolean };
+      const body: unknown = await response.json();
+      if (!body || typeof body !== "object")
+        throw new Error("INVALID_KASPA_RESPONSE");
+      return body as { is_accepted?: boolean };
     });
   }
 
@@ -348,7 +339,10 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
         ...init,
       });
       if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
-      return await response.json() as T;
+      const body: unknown = await response.json();
+      if (!body || typeof body !== "object")
+        throw new Error("INVALID_KASPA_RESPONSE");
+      return body as T;
     });
   }
 }
@@ -578,58 +572,6 @@ function transactionSummary(value: string): Record<string, unknown> {
     };
   } catch {
     return { invalidJson: true };
-  }
-}
-
-function signatureSummary(transaction: TransactionShape, signInputs: number[]) {
-  return signInputs.map((index) => {
-    const signature = transaction.inputs[index]?.signatureScript ?? "";
-    return {
-      inputIndex: index,
-      length: signature.length,
-      tail: signature.slice(-8),
-      validShape: validSignature(signature),
-    };
-  });
-}
-
-async function testWalletSignatureDiagnostic(signedTransaction: string): Promise<Record<string, unknown>> {
-  if (process.env.NODE_ENV === "production") return { enabled: false };
-  try {
-    const fixture = JSON.parse(
-      await readFile(new URL("../../wallet-testnet.json", import.meta.url), "utf8"),
-    ) as { kasware?: { wallets?: { name: string; seedPhrase: string }[] } };
-    const transaction = Transaction.deserializeFromSafeJSON(signedTransaction);
-    const input = transaction.inputs[1];
-    const inputScriptValue = input?.utxo?.scriptPublicKey;
-    const inputScript = typeof inputScriptValue === "string"
-      ? inputScriptValue
-      : inputScriptValue
-        ? `${inputScriptValue.version.toString(16).padStart(4, "0")}${inputScriptValue.script}`
-        : undefined;
-    if (!input || !inputScript) return { enabled: true, matchedAddress: false };
-    for (const wallet of fixture.kasware?.wallets ?? []) {
-      const privateKey = new XPrv(new Mnemonic(wallet.seedPhrase).toSeed())
-        .derivePath("m/44'/111111'/0'/0/0")
-        .toPrivateKey();
-      const keypair = privateKey.toKeypair();
-      const addressScriptHex = addressScript(keypair.toAddress("testnet-10").toString());
-      if (addressScriptHex !== inputScript) continue;
-      const sdkSignature = createInputSignature(transaction, 1, privateKey, SighashType.All);
-      return {
-        enabled: true,
-        walletName: wallet.name,
-        matchedAddress: true,
-        sdkLen: sdkSignature.length,
-        kaswareLen: input.signatureScript?.length ?? 0,
-        exactMatch: sdkSignature === input.signatureScript,
-        sdkHex: sdkSignature,
-        kaswareHex: input.signatureScript,
-      };
-    }
-    return { enabled: true, matchedAddress: false };
-  } catch (error) {
-    return { enabled: true, diagnosticError: error instanceof Error ? error.name : typeof error };
   }
 }
 

@@ -578,7 +578,6 @@ export function createApp(d: AppDependencies) {
       logger.info("membership_prepare", {
         requestId: req.requestId,
         kind: "offer",
-        signInputs: value.signInputs,
       });
       await d.store.prunePreparedMemberships(now());
       await d.store.savePreparedMembership({
@@ -615,7 +614,6 @@ export function createApp(d: AppDependencies) {
       logger.info("membership_finalize", {
         requestId: req.requestId,
         kind: "offer",
-        signInputs: value.signInputs,
       });
       const submission = await d.membershipGateway.submit(
         value,
@@ -697,7 +695,6 @@ export function createApp(d: AppDependencies) {
       logger.info("membership_prepare", {
         requestId: req.requestId,
         kind: "purchase",
-        signInputs: value.signInputs,
       });
       await d.store.prunePreparedMemberships(now());
       await d.store.savePreparedMembership({
@@ -735,7 +732,6 @@ export function createApp(d: AppDependencies) {
       logger.info("membership_finalize", {
         requestId: req.requestId,
         kind: "purchase",
-        signInputs: value.signInputs,
       });
       const submission = await d.membershipGateway.submit(
         value,

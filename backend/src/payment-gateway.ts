@@ -137,7 +137,10 @@ constructor(
     return this.metrics.observeDependency("kaspa_rest", operation, async () => {
       const response = await fetch(`${this.api}${path}`, { headers: { "Content-Type": "application/json" }, ...init });
       if (!response.ok) throw new KaspaRequestError(response.status, await response.text());
-      return await response.json() as T;
+      const body: unknown = await response.json();
+      if (!body || typeof body !== "object")
+        throw new Error("INVALID_KASPA_RESPONSE");
+      return body as T;
     });
   }
 }

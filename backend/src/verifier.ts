@@ -191,7 +191,10 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
         });
         throw new Error(`Kaspa verification failed: ${response.status} ${await response.text()}`);
       }
-      return await response.json() as T;
+      const body: unknown = await response.json();
+      if (!body || typeof body !== "object")
+        throw new Error("INVALID_KASPA_RESPONSE");
+      return body as T;
     });
   }
 }
