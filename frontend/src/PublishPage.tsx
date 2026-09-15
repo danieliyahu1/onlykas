@@ -145,7 +145,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
             {selectedFile && !busy && (
               <div className="media-actions">
                 <button
-                  className="change-media"
+                  className="secondary change-media"
                   type="button"
                   title="Choose another"
                   onClick={chooseAnother}

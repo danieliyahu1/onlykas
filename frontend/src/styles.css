@@ -544,19 +544,8 @@ textarea {
   min-height: 2.75rem;
 }
 .change-media {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
   min-height: 2.75rem;
   padding: 0 0.85rem;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--paper);
-  transition: border-color 0.12s ease;
-}
-.change-media:hover,
-.change-media:focus-visible {
-  border-color: var(--muted);
 }
 .change-media .icon {
   width: 1.15rem;
