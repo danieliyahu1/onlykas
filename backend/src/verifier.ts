@@ -203,7 +203,6 @@ function membership(
   owner: string,
   contentCreator: string,
   metadata: {
-    platformName: string;
     platformAddress: string;
     createdAtDaa: bigint;
     expiresAtDaa: bigint;
@@ -219,10 +218,9 @@ function membership(
     outputIndex,
     covenantId,
     kind: "token",
-    tokenType: "MINT",
+    tokenType: "membership",
     owner,
     contentCreator,
-    platformName: metadata.platformName,
     platformAddress: metadata.platformAddress,
     createdAtDaa: metadata.createdAtDaa.toString(),
     expiresAtDaa: metadata.expiresAtDaa.toString(),
@@ -277,7 +275,6 @@ function notMembership(transactionId: string, outputIndex: number, covenantId: s
     tokenType: null,
     owner: null,
     contentCreator: null,
-    platformName: null,
     platformAddress: null,
     createdAtDaa: null,
     expiresAtDaa: null,

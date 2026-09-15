@@ -11,14 +11,10 @@ export const MEMBERSHIP_PLATFORM_SHARE = 10_000_000n;
 export const MEMBERSHIP_DURATION_DAA = 864_000n;
 export const MEMBERSHIP_INDEX_VALUE = 50_000_000n;
 export const MEMBERSHIP_OUTPUT_VALUE = 50_000_000n;
-export const MEMBERSHIP_PROTOCOL = "onlykas-membership-v3";
+export const MEMBERSHIP_PROTOCOL = "onlykas";
 export const MEMBERSHIP_METADATA_VERSION = 1;
 
 export interface MembershipMetadata {
-  protocol: typeof MEMBERSHIP_PROTOCOL;
-  version: number;
-  tokenType: "membership";
-  platformName: string;
   platformAddress: string;
   membershipOutputIndex: number;
   createdAtDaa: bigint;
@@ -26,6 +22,9 @@ export interface MembershipMetadata {
 }
 
 export interface MembershipPayload {
+  protocol: typeof MEMBERSHIP_PROTOCOL;
+  version: number;
+  tokenType: "membership";
   memberRedeemScript: string;
   metadata: MembershipMetadata;
 }
@@ -141,15 +140,15 @@ export function membershipMintSignatureScript(
 
 export function membershipPayload(
   memberRedeemScript: string,
-  metadata: Omit<MembershipMetadata, "protocol" | "version" | "tokenType" | "membershipOutputIndex">,
+  metadata: Omit<MembershipMetadata, "membershipOutputIndex">,
 ): string {
   return Buffer.from(JSON.stringify({
     protocol: MEMBERSHIP_PROTOCOL,
     version: MEMBERSHIP_METADATA_VERSION,
+    tokenType: "membership",
     memberRedeemScript,
     metadata: {
       ...metadata,
-      tokenType: "membership",
       membershipOutputIndex: 1,
       createdAtDaa: metadata.createdAtDaa.toString(),
       expiresAtDaa: metadata.expiresAtDaa.toString(),
@@ -169,22 +168,20 @@ export function parseMembershipPayloadDetails(payload: string | undefined): Memb
     if (
       value.protocol !== MEMBERSHIP_PROTOCOL ||
       value.version !== MEMBERSHIP_METADATA_VERSION ||
+      value.tokenType !== "membership" ||
       typeof value.memberRedeemScript !== "string" ||
       !metadata ||
-      metadata.tokenType !== "membership" ||
-      typeof metadata.platformName !== "string" ||
       typeof metadata.platformAddress !== "string" ||
       metadata.membershipOutputIndex !== 1 ||
       typeof metadata.createdAtDaa !== "string" ||
       typeof metadata.expiresAtDaa !== "string"
     ) return null;
     return {
+      protocol: MEMBERSHIP_PROTOCOL,
+      version: MEMBERSHIP_METADATA_VERSION,
+      tokenType: "membership",
       memberRedeemScript: value.memberRedeemScript,
       metadata: {
-        protocol: MEMBERSHIP_PROTOCOL,
-        version: MEMBERSHIP_METADATA_VERSION,
-        tokenType: "membership",
-        platformName: metadata.platformName,
         platformAddress: metadata.platformAddress,
         membershipOutputIndex: 1,
         createdAtDaa: BigInt(metadata.createdAtDaa),

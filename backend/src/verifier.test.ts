@@ -40,7 +40,6 @@ describe("KaspaMembershipVerifier", () => {
         version: 1,
         is_accepted: true,
         payload: membershipPayload(redeemScript, {
-          platformName: "OnlyKas",
           platformAddress: platformFeeAddress,
           createdAtDaa: 136_000n,
           expiresAtDaa: 1_000_000n,
@@ -63,7 +62,6 @@ describe("KaspaMembershipVerifier", () => {
     expect(result.status).toBe("VALID");
     expect(result.owner).toBe(buyer);
     expect(result.contentCreator).toBe(creator);
-    expect(result.platformName).toBe("OnlyKas");
     expect(result.platformAddress).toBe(platformFeeAddress);
     expect(result.createdAtDaa).toBe("136000");
     expect(result.expiresAtDaa).toBe("1000000");
@@ -85,7 +83,6 @@ describe("KaspaMembershipVerifier", () => {
         version: 1,
         is_accepted: true,
         payload: membershipPayload(redeemScript, {
-          platformName: "OnlyKas",
           platformAddress: creator,
           createdAtDaa: 136_000n,
           expiresAtDaa: 1_000_000n,

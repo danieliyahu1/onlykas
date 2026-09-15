@@ -105,10 +105,9 @@ export interface MembershipCheck {
   outputIndex: number;
   covenantId: string | null;
   kind: "token" | "none";
-  tokenType: "MINT" | null;
+  tokenType: "membership" | null;
   owner: string | null;
   contentCreator: string | null;
-  platformName: string | null;
   platformAddress: string | null;
   createdAtDaa: string | null;
   expiresAtDaa: string | null;

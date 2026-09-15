@@ -24,8 +24,9 @@ the discovery output.
 A membership is recognized only when all of these checks pass:
 
 - the transaction has version `1`;
-- its hex payload decodes to JSON with protocol `onlykas-membership-v3`;
-- the payload reveals `memberRedeemScript` and readable membership metadata;
+- its hex payload decodes to JSON with protocol `onlykas`, version `1`, and
+  token type `membership`;
+- the payload reveals `memberRedeemScript` and membership metadata;
 - the redeem script matches the compiled SilverScript template and decodes to
   non-minter state;
 - hashing that redeem script produces the covenant output's P2SH script;
@@ -58,11 +59,11 @@ with the expiry committed in covenant state.
 | `OWNER_MISMATCH` | The covenant is recognized and unspent, but its state owner differs from `expectedOwner`. |
 | `NOT_MEMBERSHIP` | Any discovery, template, script, amount, covenant ID, lifetime, or unspent check fails. |
 
-The v3 payload contains a human-readable `platformName`, the platform address,
-the membership output index, and the creation/expiry DAA values. The verifier
-cross-checks every machine-readable value against covenant state before exposing
-the metadata. `createdAt` and `validUntil` remain ISO display estimates; DAA
-values are the authoritative values.
+The `onlykas` payload contains the platform address, membership output index,
+and creation/expiry DAA values. The verifier cross-checks every machine-readable
+value against covenant state before exposing the metadata. `createdAt` and
+`validUntil` remain ISO display estimates; DAA values are the authoritative
+values.
 
 ## HTTP API
 

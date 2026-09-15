@@ -88,7 +88,7 @@ describe("KaspaMembershipGateway", () => {
     expect(mintTransaction.outputs[1]?.covenant?.covenantId.toString()).toBe(offer.covenantId);
     const inputValue = mintTransaction.inputs.reduce((sum, input) => sum + (input.utxo?.amount ?? 0n), 0n);
     const outputValue = mintTransaction.outputs.reduce((sum, output) => sum + output.value, 0n);
-    expect(inputValue - outputValue).toBe(1_615_200n);
+    expect(inputValue - outputValue).toBe(1_611_300n);
   });
 
   it("prices fees from version 1 compute mass", async () => {

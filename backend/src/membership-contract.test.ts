@@ -74,7 +74,6 @@ describe("membership contract codec", () => {
       isMinter: false,
     };
     const payload = membershipPayload(membershipRedeemScript(state), {
-      platformName: "OnlyKas",
       platformAddress: platformFeeAddress,
       createdAtDaa: 36_000n,
       expiresAtDaa: 900_000n,
@@ -82,8 +81,10 @@ describe("membership contract codec", () => {
 
     expect(parseMembershipPayloadDetails(payload)).toMatchObject({
       memberRedeemScript: membershipRedeemScript(state),
+      protocol: "onlykas",
+      version: 1,
+      tokenType: "membership",
       metadata: {
-        platformName: "OnlyKas",
         platformAddress: platformFeeAddress,
         membershipOutputIndex: 1,
         createdAtDaa: 36_000n,
