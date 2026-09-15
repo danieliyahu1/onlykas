@@ -47,6 +47,17 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     await applyMigrations(this.client);
     this.logger.info("database_initialized");
   }
+  async isReady(): Promise<boolean> {
+    try {
+      await this.execute({ sql: "SELECT 1", args: [] });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  close(): void {
+    this.client.close();
+  }
   async enqueueFeedback(entry: FeedbackEntry) {
     await this.execute({
       sql: "INSERT INTO feedback_outbox (id,message,received_at) VALUES (?,?,?)",

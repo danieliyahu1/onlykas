@@ -67,6 +67,7 @@ const feedbackDeliverer = new TelegramFeedback({
     ? { endpoint: environment.FEEDBACK_TELEGRAM_SEND_URL }
     : {}),
 });
+let feedbackDrainTimer: NodeJS.Timeout | undefined;
 const feedbackSpill = new FeedbackSpill({
   filePath: environment.FEEDBACK_SPILL_PATH,
 });
@@ -90,7 +91,7 @@ if (feedbackDeliverer.enabled) {
       }),
     );
 
-  const feedbackDrainTimer = setInterval(() => {
+   feedbackDrainTimer = setInterval(() => {
     void feedbackService
       .drainPending()
       .catch((error) =>
@@ -135,15 +136,33 @@ const app = createApp({
     metrics,
   ),
   publicOrigin: environment.PUBLIC_ORIGIN,
+  readinessCheck: () => store.isReady(),
   production: environment.NODE_ENV === "production",
   logger,
   metrics,
   feedbackService,
 });
-app.listen(environment.PORT, "0.0.0.0", () =>
+const appServer = app.listen(environment.PORT, "0.0.0.0", () =>
   logger.info("server_started", { port: environment.PORT }),
 );
 const metricsServer = createMetricsServer(metrics);
 metricsServer.listen(environment.METRICS_PORT, "0.0.0.0", () =>
   logger.info("metrics_started", { port: environment.METRICS_PORT }),
 );
+
+let shuttingDown = false;
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info("server_shutdown_started", { signal });
+  if (feedbackDrainTimer) clearInterval(feedbackDrainTimer);
+  await Promise.all([
+    new Promise<void>((resolve) => appServer.close(() => resolve())),
+    new Promise<void>((resolve) => metricsServer.close(() => resolve())),
+  ]);
+  storage.close();
+  store.close();
+  logger.info("server_shutdown_completed");
+}
+for (const signal of ["SIGINT", "SIGTERM"] as const)
+  process.once(signal, () => void shutdown(signal));
