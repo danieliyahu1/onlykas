@@ -99,6 +99,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     private readonly logger: Logger = defaultLogger,
     private readonly metrics: Metrics = defaultMetrics,
+    private readonly platformName = "OnlyKas",
   ) {}
 
   async prepareOffer(creator: string): Promise<PreparedMembershipTransaction> {
@@ -188,7 +189,12 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
       ),
       utxo: serializableUtxo(minterUtxo, covenantIdHex),
     };
-    const payload = membershipPayload(membershipRedeemScript(member));
+    const payload = membershipPayload(membershipRedeemScript(member), {
+      platformName: this.platformName,
+      platformAddress: this.platformFeeAddress,
+      createdAtDaa: BigInt(virtualDaaScore),
+      expiresAtDaa: member.expiresAtDaa,
+    });
     const provisionalOutputs = [
       ...outputs,
       { value: "0", scriptPublicKey: addressScript(buyer), covenant: null },

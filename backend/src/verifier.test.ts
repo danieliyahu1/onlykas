@@ -39,7 +39,12 @@ describe("KaspaMembershipVerifier", () => {
       if (url.includes(`/transactions/${transactionId}`)) return Response.json({
         version: 1,
         is_accepted: true,
-        payload: membershipPayload(redeemScript),
+        payload: membershipPayload(redeemScript, {
+          platformName: "OnlyKas",
+          platformAddress: platformFeeAddress,
+          createdAtDaa: 136_000n,
+          expiresAtDaa: 1_000_000n,
+        }),
         outputs: [
           {},
           { amount: MEMBERSHIP_OUTPUT_VALUE.toString(), script_public_key: membershipScript(state).slice(4), covenant: { covenantId, authorizingInput: 0 } },
@@ -57,5 +62,41 @@ describe("KaspaMembershipVerifier", () => {
 
     expect(result.status).toBe("VALID");
     expect(result.owner).toBe(buyer);
+    expect(result.contentCreator).toBe(creator);
+    expect(result.platformName).toBe("OnlyKas");
+    expect(result.platformAddress).toBe(platformFeeAddress);
+    expect(result.createdAtDaa).toBe("136000");
+    expect(result.expiresAtDaa).toBe("1000000");
+  });
+
+  it("rejects metadata that does not describe the protected platform", async () => {
+    const state: MembershipState = {
+      creator: addressPublicKey(creator),
+      platform: addressPublicKey(platformFeeAddress),
+      owner: addressPublicKey(buyer),
+      expiresAtDaa: 1_000_000n,
+      isMinter: false,
+    };
+    const redeemScript = membershipRedeemScript(state);
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/info/blockdag")) return Response.json({ virtualDaaScore: "500000" });
+      if (url.includes(`/transactions/${transactionId}`)) return Response.json({
+        version: 1,
+        is_accepted: true,
+        payload: membershipPayload(redeemScript, {
+          platformName: "OnlyKas",
+          platformAddress: creator,
+          createdAtDaa: 136_000n,
+          expiresAtDaa: 1_000_000n,
+        }),
+        outputs: [{}, { amount: MEMBERSHIP_OUTPUT_VALUE.toString(), script_public_key: membershipScript(state).slice(4), covenant: { covenantId, authorizingInput: 0 } }],
+      });
+      return new Response("not found", { status: 404 });
+    }));
+
+    const result = await new KaspaMembershipVerifier("https://node.test", () => 0).verifyUtxo(transactionId, 1);
+
+    expect(result.status).toBe("NOT_MEMBERSHIP");
   });
 });

@@ -24,8 +24,8 @@ the discovery output.
 A membership is recognized only when all of these checks pass:
 
 - the transaction has version `1`;
-- its hex payload decodes to JSON with protocol `onlykas-membership-v2`;
-- the payload reveals `memberRedeemScript`;
+- its hex payload decodes to JSON with protocol `onlykas-membership-v3`;
+- the payload reveals `memberRedeemScript` and readable membership metadata;
 - the redeem script matches the compiled SilverScript template and decodes to
   non-minter state;
 - hashing that redeem script produces the covenant output's P2SH script;
@@ -39,6 +39,8 @@ A membership is recognized only when all of these checks pass:
 - the transaction pays exactly 9.9 KAS to that creator, 0.1 KAS to the platform
   address committed in covenant state, and creates the member's 50,000,000-sompi
   discovery pointer;
+- the payload platform address matches the platform address committed in state;
+- the payload expiry matches state and its creation DAA plus 864,000 DAA;
 - the covenant output still appears in the UTXO set for its P2SH address.
 
 The last check prevents a spent token from remaining valid when an unrelated
@@ -56,10 +58,11 @@ with the expiry committed in covenant state.
 | `OWNER_MISMATCH` | The covenant is recognized and unspent, but its state owner differs from `expectedOwner`. |
 | `NOT_MEMBERSHIP` | Any discovery, template, script, amount, covenant ID, lifetime, or unspent check fails. |
 
-`createdAt` and `validUntil` remain ISO strings for the existing API. They are
-display estimates derived from the committed expiry, fixed 864,000-DAA
-membership duration, current wall clock, and current DAA difference;
-authorization uses DAA values only.
+The v3 payload contains a human-readable `platformName`, the platform address,
+the membership output index, and the creation/expiry DAA values. The verifier
+cross-checks every machine-readable value against covenant state before exposing
+the metadata. `createdAt` and `validUntil` remain ISO display estimates; DAA
+values are the authoritative values.
 
 ## HTTP API
 

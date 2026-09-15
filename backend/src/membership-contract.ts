@@ -11,7 +11,24 @@ export const MEMBERSHIP_PLATFORM_SHARE = 10_000_000n;
 export const MEMBERSHIP_DURATION_DAA = 864_000n;
 export const MEMBERSHIP_INDEX_VALUE = 50_000_000n;
 export const MEMBERSHIP_OUTPUT_VALUE = 50_000_000n;
-export const MEMBERSHIP_PROTOCOL = "onlykas-membership-v2";
+export const MEMBERSHIP_PROTOCOL = "onlykas-membership-v3";
+export const MEMBERSHIP_METADATA_VERSION = 1;
+
+export interface MembershipMetadata {
+  protocol: typeof MEMBERSHIP_PROTOCOL;
+  version: number;
+  tokenType: "membership";
+  platformName: string;
+  platformAddress: string;
+  membershipOutputIndex: number;
+  createdAtDaa: bigint;
+  expiresAtDaa: bigint;
+}
+
+export interface MembershipPayload {
+  memberRedeemScript: string;
+  metadata: MembershipMetadata;
+}
 
 export interface MembershipState {
   creator: string;
@@ -122,17 +139,58 @@ export function membershipMintSignatureScript(
     .toString();
 }
 
-export function membershipPayload(memberRedeemScript: string): string {
-  return Buffer.from(JSON.stringify({ protocol: MEMBERSHIP_PROTOCOL, memberRedeemScript })).toString("hex");
+export function membershipPayload(
+  memberRedeemScript: string,
+  metadata: Omit<MembershipMetadata, "protocol" | "version" | "tokenType" | "membershipOutputIndex">,
+): string {
+  return Buffer.from(JSON.stringify({
+    protocol: MEMBERSHIP_PROTOCOL,
+    version: MEMBERSHIP_METADATA_VERSION,
+    memberRedeemScript,
+    metadata: {
+      ...metadata,
+      tokenType: "membership",
+      membershipOutputIndex: 1,
+      createdAtDaa: metadata.createdAtDaa.toString(),
+      expiresAtDaa: metadata.expiresAtDaa.toString(),
+    },
+  })).toString("hex");
 }
 
 export function parseMembershipPayload(payload: string | undefined): string | null {
+  return parseMembershipPayloadDetails(payload)?.memberRedeemScript ?? null;
+}
+
+export function parseMembershipPayloadDetails(payload: string | undefined): MembershipPayload | null {
   if (!payload || !/^[0-9a-f]+$/i.test(payload) || payload.length % 2 !== 0) return null;
   try {
     const value = JSON.parse(Buffer.from(payload, "hex").toString("utf8")) as Record<string, unknown>;
-    return value.protocol === MEMBERSHIP_PROTOCOL && typeof value.memberRedeemScript === "string"
-      ? value.memberRedeemScript
-      : null;
+    const metadata = value.metadata as Record<string, unknown> | undefined;
+    if (
+      value.protocol !== MEMBERSHIP_PROTOCOL ||
+      value.version !== MEMBERSHIP_METADATA_VERSION ||
+      typeof value.memberRedeemScript !== "string" ||
+      !metadata ||
+      metadata.tokenType !== "membership" ||
+      typeof metadata.platformName !== "string" ||
+      typeof metadata.platformAddress !== "string" ||
+      metadata.membershipOutputIndex !== 1 ||
+      typeof metadata.createdAtDaa !== "string" ||
+      typeof metadata.expiresAtDaa !== "string"
+    ) return null;
+    return {
+      memberRedeemScript: value.memberRedeemScript,
+      metadata: {
+        protocol: MEMBERSHIP_PROTOCOL,
+        version: MEMBERSHIP_METADATA_VERSION,
+        tokenType: "membership",
+        platformName: metadata.platformName,
+        platformAddress: metadata.platformAddress,
+        membershipOutputIndex: 1,
+        createdAtDaa: BigInt(metadata.createdAtDaa),
+        expiresAtDaa: BigInt(metadata.expiresAtDaa),
+      },
+    };
   } catch {
     return null;
   }

@@ -14,7 +14,7 @@ import {
   MEMBERSHIP_PLATFORM_SHARE,
   membershipAddress,
   membershipScript,
-  parseMembershipPayload,
+  parseMembershipPayloadDetails,
 } from "./membership-contract.js";
 
 const DAA_MILLISECONDS = 100;
@@ -117,19 +117,23 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
   ): Promise<MembershipCheck> {
     const output = transaction.outputs?.[outputIndex];
     const covenantId = outputCovenantId(output);
-    const redeemScript = parseMembershipPayload(transaction.payload);
-    const state = redeemScript ? decodeMembershipRedeemScript(redeemScript) : null;
+    const payload = parseMembershipPayloadDetails(transaction.payload);
+    const state = payload ? decodeMembershipRedeemScript(payload.memberRedeemScript) : null;
     if (
       !transaction.is_accepted ||
       transaction.version !== 1 ||
       outputIndex !== 1 ||
       !output ||
       !covenantId ||
+      !payload ||
       !state ||
       state.isMinter ||
       outputAmount(output) !== MEMBERSHIP_OUTPUT_VALUE ||
       outputScript(output) !== membershipScript(state) ||
       outputAuthorizingInput(output) !== 0 ||
+      payload.metadata.platformAddress !== keyAddress(state.platform) ||
+      payload.metadata.expiresAtDaa !== state.expiresAtDaa ||
+      payload.metadata.createdAtDaa + MEMBERSHIP_DURATION_DAA !== state.expiresAtDaa ||
       (expectedCovenantId !== undefined && covenantId !== expectedCovenantId)
     ) return notMembership(transactionId, outputIndex, covenantId);
 
@@ -138,7 +142,7 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
     const platformAddress = keyAddress(state.platform);
     if (!owner || !creator || !platformAddress) return notMembership(transactionId, outputIndex, covenantId);
     if (state.owner !== addressPublicKey(owner))
-      return membership(transactionId, outputIndex, covenantId, owner, state.expiresAtDaa, currentDaa, "OWNER_MISMATCH", this.now);
+      return membership(transactionId, outputIndex, covenantId, owner, creator, payload.metadata, currentDaa, "OWNER_MISMATCH", this.now);
     if (state.creator !== addressPublicKey(creator))
       return notMembership(transactionId, outputIndex, covenantId);
 
@@ -156,7 +160,7 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
     ) return notMembership(transactionId, outputIndex, covenantId);
 
     const status = state.expiresAtDaa > currentDaa ? "VALID" : "EXPIRED";
-    return membership(transactionId, outputIndex, covenantId, owner, state.expiresAtDaa, currentDaa, status, this.now);
+    return membership(transactionId, outputIndex, covenantId, owner, creator, payload.metadata, currentDaa, status, this.now);
   }
 
   private async isUnspent(address: string, transactionId: string, outputIndex: number): Promise<boolean> {
@@ -197,12 +201,18 @@ function membership(
   outputIndex: number,
   covenantId: string,
   owner: string,
-  expiresAtDaa: bigint,
+  contentCreator: string,
+  metadata: {
+    platformName: string;
+    platformAddress: string;
+    createdAtDaa: bigint;
+    expiresAtDaa: bigint;
+  },
   currentDaa: bigint,
   status: MembershipCheck["status"],
   now: () => number,
 ): MembershipCheck {
-  const createdDaa = expiresAtDaa - MEMBERSHIP_DURATION_DAA;
+  const createdDaa = metadata.createdAtDaa;
   const estimate = (score: bigint) => new Date(now() + Number(score - currentDaa) * DAA_MILLISECONDS).toISOString();
   return {
     transactionId,
@@ -211,8 +221,13 @@ function membership(
     kind: "token",
     tokenType: "MINT",
     owner,
+    contentCreator,
+    platformName: metadata.platformName,
+    platformAddress: metadata.platformAddress,
+    createdAtDaa: metadata.createdAtDaa.toString(),
+    expiresAtDaa: metadata.expiresAtDaa.toString(),
     createdAt: estimate(createdDaa),
-    validUntil: estimate(expiresAtDaa),
+    validUntil: estimate(metadata.expiresAtDaa),
     status,
   };
 }
@@ -261,6 +276,11 @@ function notMembership(transactionId: string, outputIndex: number, covenantId: s
     kind: "none",
     tokenType: null,
     owner: null,
+    contentCreator: null,
+    platformName: null,
+    platformAddress: null,
+    createdAtDaa: null,
+    expiresAtDaa: null,
     createdAt: null,
     validUntil: null,
     status: "NOT_MEMBERSHIP",

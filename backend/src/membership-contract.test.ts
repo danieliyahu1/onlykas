@@ -3,6 +3,8 @@ import {
   decodeMembershipRedeemScript,
   MEMBERSHIP_DURATION_DAA,
   membershipMintSignatureScript,
+  membershipPayload,
+  parseMembershipPayloadDetails,
   membershipRedeemScript,
   type MembershipState,
 } from "./membership-contract.js";
@@ -61,5 +63,32 @@ describe("membership contract codec", () => {
 
     expect(signatureScript).toMatch(/^[0-9a-f]+$/);
     expect(signatureScript.endsWith(membershipRedeemScript(minter))).toBe(true);
+  });
+
+  it("publishes readable metadata alongside the member script", () => {
+    const state: MembershipState = {
+      creator: addressPublicKey(creator),
+      platform: addressPublicKey(platformFeeAddress),
+      owner: addressPublicKey(buyer),
+      expiresAtDaa: 900_000n,
+      isMinter: false,
+    };
+    const payload = membershipPayload(membershipRedeemScript(state), {
+      platformName: "OnlyKas",
+      platformAddress: platformFeeAddress,
+      createdAtDaa: 36_000n,
+      expiresAtDaa: 900_000n,
+    });
+
+    expect(parseMembershipPayloadDetails(payload)).toMatchObject({
+      memberRedeemScript: membershipRedeemScript(state),
+      metadata: {
+        platformName: "OnlyKas",
+        platformAddress: platformFeeAddress,
+        membershipOutputIndex: 1,
+        createdAtDaa: 36_000n,
+        expiresAtDaa: 900_000n,
+      },
+    });
   });
 });

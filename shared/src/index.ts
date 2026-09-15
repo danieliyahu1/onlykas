@@ -60,6 +60,11 @@ export interface MembershipCheckResponse {
   kind: "token" | "none";
   tokenType: "MINT" | null;
   owner: string | null;
+  contentCreator: string | null;
+  platformName: string | null;
+  platformAddress: string | null;
+  createdAtDaa: string | null;
+  expiresAtDaa: string | null;
   createdAt: string | null;
   validUntil: string | null;
   status: "VALID" | "EXPIRED" | "OWNER_MISMATCH" | "NOT_MEMBERSHIP";
