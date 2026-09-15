@@ -144,18 +144,22 @@ nav a {
   align-items: center;
   min-height: 2.75rem;
   padding: 0 1.1rem;
-  border: 1px solid var(--acid);
-  background: var(--acid);
-  color: var(--ink);
-  font-weight: 700;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--paper);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  transition: background 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 .nav-account-action:hover:not(:disabled),
 .nav-account-action:focus-visible {
-  background: var(--acid-strong);
-  border-color: var(--acid-strong);
+  border-color: var(--acid);
+  background: var(--surface);
+  color: var(--acid);
 }
 
 /* Global search */
