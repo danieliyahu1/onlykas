@@ -22,8 +22,9 @@ import type { DuplicateOutcome, Repositories } from "./application/ports.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 import { applyMigrations } from "./adapters/persistence/migrations.js";
+import type { FeedbackEntry, FeedbackOutbox } from "./adapters/feedback/feedback.js";
 
-export class LibsqlStore implements Repositories {
+export class LibsqlStore implements Repositories, FeedbackOutbox {
   private readonly client: Client;
   constructor(
     url: string,
@@ -45,6 +46,43 @@ export class LibsqlStore implements Repositories {
   async initialize() {
     await applyMigrations(this.client);
     this.logger.info("database_initialized");
+  }
+  async enqueueFeedback(entry: FeedbackEntry) {
+    await this.execute({
+      sql: "INSERT INTO feedback_outbox (id,message,received_at) VALUES (?,?,?)",
+      args: [entry.id, entry.message, entry.receivedAt],
+    });
+  }
+  async pendingFeedback(): Promise<number> {
+    const result = await this.execute({
+      sql: "SELECT COUNT(*) AS count FROM feedback_outbox",
+      args: [],
+    });
+    return Number(result.rows[0]?.count ?? 0);
+  }
+  async claimFeedback(limit: number, leaseMs: number, now = Date.now()): Promise<FeedbackEntry[]> {
+    const result = await this.execute({
+      sql: `UPDATE feedback_outbox SET lease_until=?, attempts=attempts+1
+        WHERE id IN (SELECT id FROM feedback_outbox
+          WHERE lease_until IS NULL OR lease_until<=?
+          ORDER BY received_at LIMIT ?)
+        RETURNING id, message, received_at`,
+      args: [now + leaseMs, now, limit],
+    });
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      message: String(row.message),
+      receivedAt: String(row.received_at),
+    }));
+  }
+  async acknowledgeFeedback(id: string) {
+    await this.execute({ sql: "DELETE FROM feedback_outbox WHERE id=?", args: [id] });
+  }
+  async releaseFeedback(id: string, retryAt = Date.now() + 120_000) {
+    await this.execute({
+      sql: "UPDATE feedback_outbox SET lease_until=? WHERE id=?",
+      args: [retryAt, id],
+    });
   }
   async createChallenge(v: Challenge) {
     await this.execute({

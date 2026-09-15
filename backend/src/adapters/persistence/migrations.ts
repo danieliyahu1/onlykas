@@ -125,6 +125,20 @@ export const migrations: Migration[] = [
       )`,
     ],
   },
+  {
+    version: 5,
+    name: "feedback_outbox",
+    statements: [
+      `CREATE TABLE feedback_outbox (
+        id TEXT PRIMARY KEY NOT NULL,
+        message TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        lease_until INTEGER
+      )`,
+      "CREATE INDEX feedback_outbox_delivery ON feedback_outbox (lease_until, received_at)",
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {
@@ -159,6 +173,7 @@ export async function applyMigrations(client: Client): Promise<void> {
 
 export async function resetDatabase(client: Client): Promise<void> {
   const tables = [
+    "feedback_outbox",
     "membership_workflows",
     "payment_workflows",
     "pending_publications",

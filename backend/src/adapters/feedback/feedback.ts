@@ -118,6 +118,14 @@ export interface FeedbackEntry {
   message: string;
 }
 
+export interface FeedbackOutbox {
+  enqueueFeedback(entry: FeedbackEntry): Promise<void>;
+  pendingFeedback(): Promise<number>;
+  claimFeedback(limit: number, leaseMs: number, now?: number): Promise<FeedbackEntry[]>;
+  acknowledgeFeedback(id: string): Promise<void>;
+  releaseFeedback(id: string, retryAt?: number): Promise<void>;
+}
+
 export class FeedbackSpill {
   constructor(
     {
@@ -200,6 +208,21 @@ export class FeedbackSpill {
     await writeFile(temporary, JSON.stringify(this.entries), "utf8");
     await rename(temporary, this.filePath);
   }
+
+  async enqueueFeedback(entry: FeedbackEntry) {
+    await this.#load();
+    this.entries.push(entry);
+    await this.#persist();
+  }
+  async pendingFeedback() { return this.pending(); }
+  async claimFeedback(limit: number) {
+    await this.#load();
+    return this.entries.slice(0, limit);
+  }
+  async acknowledgeFeedback(id: string) {
+    await this.remove({ id } as FeedbackEntry);
+  }
+  async releaseFeedback() {}
 }
 
 export class FeedbackService {
@@ -207,6 +230,7 @@ export class FeedbackService {
     {
       deliverer,
       spill,
+      outbox,
       metrics,
       now = () => new Date(),
       logger = console,
@@ -216,6 +240,7 @@ export class FeedbackService {
         deliver(entry: FeedbackEntry): Promise<void>;
       };
       spill: FeedbackSpill;
+      outbox?: FeedbackOutbox;
       metrics?: FeedbackMetrics;
       now?: () => Date;
       logger?: {
@@ -227,6 +252,7 @@ export class FeedbackService {
   ) {
     this.deliverer = deliverer;
     this.spill = spill;
+    this.outbox = outbox ?? spill;
     this.metrics = metrics;
     this.now = now;
     this.logger = logger;
@@ -237,6 +263,7 @@ export class FeedbackService {
     deliver(entry: FeedbackEntry): Promise<void>;
   };
   readonly spill: FeedbackSpill;
+  private readonly outbox: FeedbackOutbox;
   private readonly metrics: FeedbackMetrics | undefined;
   private readonly now: () => Date;
   private readonly logger: {
@@ -254,20 +281,25 @@ export class FeedbackService {
     queued?: true;
   }> {
     const feedback = validateFeedback(input);
-    const entry = await this.spill.add(feedback);
+    const entry: FeedbackEntry = {
+      id: randomUUID(),
+      receivedAt: this.now().toISOString(),
+      ...feedback,
+    };
+    await this.outbox.enqueueFeedback(entry);
     if (!this.deliverer.enabled) {
       const reason =
         "TELEGRAM_FEEDBACK_BOT_TOKEN or TELEGRAM_FEEDBACK_CHAT_ID is not set";
       this.metrics?.recordFeedback({ outcome: "disabled" });
       this.logger.warn?.("feedback_delivery_disabled", {
         reason,
-        pending: this.spill.entries.length,
+        pending: await this.outbox.pendingFeedback(),
       });
       return { accepted: true, queued: true };
     }
     try {
       await this.deliverer.deliver(entry);
-      await this.spill.remove(entry);
+      await this.outbox.acknowledgeFeedback(entry.id);
       this.metrics?.recordFeedback({ outcome: "delivered" });
       this.logger.info?.("feedback_delivered", { id: entry.id });
       return { accepted: true };
@@ -284,11 +316,16 @@ export class FeedbackService {
 
   async drainPending(): Promise<void> {
     let drained = 0;
-    await this.spill.drain(async (entry) => {
-      await this.deliverer.deliver(entry);
-      this.metrics?.recordFeedback({ outcome: "delivered" });
-      drained += 1;
-    });
+    for (const entry of await this.outbox.claimFeedback(20, 120_000)) {
+      try {
+        await this.deliverer.deliver(entry);
+        await this.outbox.acknowledgeFeedback(entry.id);
+        this.metrics?.recordFeedback({ outcome: "delivered" });
+        drained += 1;
+      } catch {
+        await this.outbox.releaseFeedback(entry.id);
+      }
+    }
     if (drained > 0)
       this.logger.info?.("feedback_delivered_from_queue", { count: drained });
   }
