@@ -92,7 +92,7 @@ data:
           "title": "Audience over time",
           "description": "Open/sign-in count per time interval. The y-axis is visits, not a per-second rate.",
           "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 18, "x": 0, "y": 6 },
+          "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
           "fieldConfig": {
             "defaults": {
               "unit": "none",
@@ -132,23 +132,6 @@ data:
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
               "expr": "sum(increase(onlykas_http_requests_total{job=\"onlykas\",route=\"/api/creators/:address\"}[$__interval]))",
               "legendFormat": "creator page"
-            }
-          ]
-        },
-        {
-          "id": 23,
-          "type": "stat",
-          "title": "Sign-in conversion (vs homepage)",
-          "description": "Successful sign-ins as a share of homepage opens.",
-          "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-          "gridPos": { "h": 8, "w": 6, "x": 18, "y": 6 },
-          "fieldConfig": { "defaults": { "unit": "percent", "decimals": 1 }, "overrides": [] },
-          "targets": [
-            {
-              "refId": "A",
-              "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "100 * sum(increase(onlykas_auth_session_total{job=\"onlykas\",outcome=\"created\"}[$__range])) / clamp_min(sum(increase(onlykas_page_visits_total{job=\"onlykas\"}[$__range])), 1)",
-              "legendFormat": "conversion"
             }
           ]
         },
