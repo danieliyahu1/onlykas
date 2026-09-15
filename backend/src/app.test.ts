@@ -96,9 +96,7 @@ describe("API request diagnostics", () => {
         statusCode: 404,
       }),
     });
-    expect(
-      events.some((entry) => "postId" in entry.fields),
-    ).toBe(false);
+    expect(events.some((entry) => "postId" in entry.fields)).toBe(false);
   });
 });
 
@@ -116,9 +114,7 @@ describe("request metrics", () => {
     expect(body).not.toContain("post-123");
 
     const values = (
-      await metrics.registry
-        .getSingleMetric("onlykas_http_requests_total")!
-        .get()
+      await metrics.registry.getSingleMetric("onlykas_http_requests_total")!.get()
     ).values;
     expect(values).toContainEqual(
       expect.objectContaining({
@@ -137,13 +133,9 @@ describe("request metrics", () => {
     await request(app).get("/api/posts/unknown").expect(404);
 
     const values = (
-      await metrics.registry
-        .getSingleMetric("onlykas_page_visits_total")!
-        .get()
+      await metrics.registry.getSingleMetric("onlykas_page_visits_total")!.get()
     ).values;
-    expect(values).toEqual([
-      expect.objectContaining({ labels: {}, value: 1 }),
-    ]);
+    expect(values).toEqual([expect.objectContaining({ labels: {}, value: 1 })]);
   });
 });
 
@@ -153,14 +145,20 @@ describe("profile visibility", () => {
 
   async function profileApp() {
     const store = new MemoryStore();
-    await store.createSession({ id: "profile-session", address, expiresAt: Date.now() + 60_000 });
+    await store.createSession({
+      id: "profile-session",
+      address,
+      expiresAt: Date.now() + 60_000,
+    });
     return { store, app: testApp(store).app };
   }
 
   it("defaults profiles to private and allows visibility-only updates", async () => {
     const { app, store } = await profileApp();
 
-    const initial = await request(app).get("/api/profile").set("Cookie", "onlykas_session=profile-session");
+    const initial = await request(app)
+      .get("/api/profile")
+      .set("Cookie", "onlykas_session=profile-session");
     expect(initial.body).toMatchObject({ address, displayName: null, isPublic: false });
 
     const updated = await request(app)
@@ -174,12 +172,24 @@ describe("profile visibility", () => {
 
   it("returns only public profiles from the public creators endpoint", async () => {
     const { app, store } = await profileApp();
-    await store.saveProfile({ address, displayName: "Visible", isPublic: true, updatedAt: Date.now() });
-    await store.saveProfile({ address: otherAddress, displayName: "Hidden", isPublic: false, updatedAt: Date.now() });
+    await store.saveProfile({
+      address,
+      displayName: "Visible",
+      isPublic: true,
+      updatedAt: Date.now(),
+    });
+    await store.saveProfile({
+      address: otherAddress,
+      displayName: "Hidden",
+      isPublic: false,
+      updatedAt: Date.now(),
+    });
 
     const response = await request(app).get("/api/creators/public");
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([expect.objectContaining({ address, displayName: "Visible" })]);
+    expect(response.body).toEqual([
+      expect.objectContaining({ address, displayName: "Visible" }),
+    ]);
   });
 
   it("keeps the display name when only visibility is toggled", async () => {
@@ -196,7 +206,10 @@ describe("profile visibility", () => {
       .set("Cookie", "onlykas_session=profile-session")
       .send({ isPublic: true });
     expect(toggled.body).toMatchObject({ displayName: "Maya", isPublic: true });
-    expect(await store.getProfile(address)).toMatchObject({ displayName: "Maya", isPublic: true });
+    expect(await store.getProfile(address)).toMatchObject({
+      displayName: "Maya",
+      isPublic: true,
+    });
   });
 
   it("keeps the visibility state when the display name changes", async () => {
@@ -213,16 +226,28 @@ describe("profile visibility", () => {
       .set("Cookie", "onlykas_session=profile-session")
       .send({ displayName: "Maya" });
     expect(renamed.body).toMatchObject({ displayName: "Maya", isPublic: true });
-    expect(await store.getProfile(address)).toMatchObject({ displayName: "Maya", isPublic: true });
+    expect(await store.getProfile(address)).toMatchObject({
+      displayName: "Maya",
+      isPublic: true,
+    });
   });
 
   it("still serves private profiles by direct address", async () => {
     const { app, store } = await profileApp();
-    await store.saveProfile({ address, displayName: "Hidden", isPublic: false, updatedAt: Date.now() });
+    await store.saveProfile({
+      address,
+      displayName: "Hidden",
+      isPublic: false,
+      updatedAt: Date.now(),
+    });
 
     const direct = await request(app).get(`/api/creators/${address}`);
     expect(direct.status).toBe(200);
-    expect(direct.body).toMatchObject({ address, displayName: "Hidden", isPublic: false });
+    expect(direct.body).toMatchObject({
+      address,
+      displayName: "Hidden",
+      isPublic: false,
+    });
 
     const directory = await request(app).get("/api/creators/public");
     expect(directory.body).toEqual([]);
@@ -232,7 +257,11 @@ describe("profile visibility", () => {
 describe("payment confirmation", () => {
   async function buyerSession(store: MemoryStore) {
     const buyer = `kaspatest:${"b".repeat(60)}`;
-    await store.createSession({ id: "session-1", address: buyer, expiresAt: Date.now() + 60_000 });
+    await store.createSession({
+      id: "session-1",
+      address: buyer,
+      expiresAt: Date.now() + 60_000,
+    });
     return buyer;
   }
 
@@ -242,15 +271,30 @@ describe("payment confirmation", () => {
     const target = post("paid-post");
     await store.publishPost(target);
     const gateway: PaymentGateway = {
-      prepare: async () => ({ transaction: "{}", fingerprint: "fp", amountSompi: target.priceSompi, creator: target.creator }),
-      submit: async () => ({ isAccepted: true, transactionId: "tx-1", rejection: null }),
-      status: async () => ({ isAccepted: true, transactionId: "tx-1", rejection: null }),
+      prepare: async () => ({
+        transaction: "{}",
+        fingerprint: "fp",
+        amountSompi: target.priceSompi,
+        creator: target.creator,
+      }),
+      submit: async () => ({
+        isAccepted: true,
+        transactionId: "tx-1",
+        rejection: null,
+      }),
+      status: async () => ({
+        isAccepted: true,
+        transactionId: "tx-1",
+        rejection: null,
+      }),
       verifyPurchase: async () => true,
     };
     const { app } = testApp(store, gateway);
     const cookie = "onlykas_session=session-1";
 
-    const prepared = await request(app).post("/api/posts/paid-post/payments/prepare").set("Cookie", cookie);
+    const prepared = await request(app)
+      .post("/api/posts/paid-post/payments/prepare")
+      .set("Cookie", cookie);
     expect(prepared.status).toBe(201);
 
     const finalized = await request(app)
@@ -264,29 +308,51 @@ describe("payment confirmation", () => {
 
   it("reports pending when the node has not indexed the transaction yet", async () => {
     const store = new MemoryStore();
-    await buyerSession(store);
+    const buyer = await buyerSession(store);
     const target = post("paid-post");
     await store.publishPost(target);
     const gateway: PaymentGateway = {
-      prepare: async () => ({ transaction: "{}", fingerprint: "fp", amountSompi: target.priceSompi, creator: target.creator }),
-      submit: async () => ({ isAccepted: null, transactionId: "tx-1", rejection: null }),
-      status: async () => ({ isAccepted: null, transactionId: "tx-1", rejection: null }),
+      prepare: async () => ({
+        transaction: "{}",
+        fingerprint: "fp",
+        amountSompi: target.priceSompi,
+        creator: target.creator,
+      }),
+      submit: async () => ({
+        isAccepted: null,
+        transactionId: "tx-1",
+        rejection: null,
+      }),
+      status: async () => ({
+        isAccepted: null,
+        transactionId: "tx-1",
+        rejection: null,
+      }),
       verifyPurchase: async () => true,
     };
     const { app } = testApp(store, gateway);
     const cookie = "onlykas_session=session-1";
 
-    const prepared = await request(app).post("/api/posts/paid-post/payments/prepare").set("Cookie", cookie);
+    const prepared = await request(app)
+      .post("/api/posts/paid-post/payments/prepare")
+      .set("Cookie", cookie);
     const finalized = await request(app)
       .post(`/api/payments/${prepared.body.id}/finalize`)
       .set("Cookie", cookie)
       .send({ signedTransaction: "{}" });
     expect(finalized.status).toBe(202);
     expect(finalized.body.state).toBe("PENDING");
+    expect(finalized.body.transactionId).toBe("tx-1");
+    expect(await store.getPurchase("paid-post", buyer)).toBeNull();
+    expect(await store.getPreparedPayment(prepared.body.id, Date.now())).toBeNull();
   });
 });
 
-function testApp(store: Store = new MemoryStore(), paymentGateway?: PaymentGateway, metrics?: Metrics) {
+function testApp(
+  store: Store = new MemoryStore(),
+  paymentGateway?: PaymentGateway,
+  metrics?: Metrics,
+) {
   const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
   const record =
     (level: string): EventLogger =>
@@ -301,7 +367,11 @@ function testApp(store: Store = new MemoryStore(), paymentGateway?: PaymentGatew
   };
   const storage: ObjectStorage = {
     putFile: async () => undefined,
-    readRange: async () => ({ bytes: new Uint8Array(), size: 0, contentType: "image/jpeg" }),
+    readRange: async () => ({
+      bytes: new Uint8Array(),
+      size: 0,
+      contentType: "image/jpeg",
+    }),
     delete: async () => undefined,
   };
   const app = createApp({
