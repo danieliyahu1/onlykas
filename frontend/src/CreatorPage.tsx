@@ -249,16 +249,23 @@ function SubscriptionAction({
 }
 
 function PostCard({ post }: { post: PostResponse }) {
+  const free = post.priceSompi === "0";
   return (
     <Link to={`/post/${post.id}`} className="post-card">
-      <span className={post.canView ? "post-lock unlocked" : "post-lock locked"}>
-        <LockIcon open={post.canView} />
-        <span className="sr-only">{post.canView ? "Unlocked" : "Locked"}</span>
+      <span
+        className={`post-lock ${free ? "is-free" : post.canView ? "unlocked" : "locked"}`}
+      >
+        {!free && <LockIcon open={post.canView} />}
+        <span className="sr-only">
+          {free ? "Free" : post.canView ? "Unlocked" : "Locked"}
+        </span>
       </span>
       <div className="post-card-copy">
         <p>{post.caption}</p>
       </div>
-      <span className="post-price">{formatKas(post.priceSompi)} KAS</span>
+      <span className={free ? "post-price free" : "post-price"}>
+        {free ? "Free" : `${formatKas(post.priceSompi)} KAS`}
+      </span>
     </Link>
   );
 }

@@ -1,9 +1,11 @@
 import {
   MEDIA_COPY,
   MAX_IMAGE_BYTES,
+  isFreePost,
   isKaspaTestnetAddress,
   mediaHintError,
   parseKasToSompi,
+  parsePostPrice,
   validatePost,
 } from "./index.js";
 
@@ -14,21 +16,41 @@ describe("post validation", () => {
   });
 
   it.each(["", "0", "-1", "1.000000001", "one"])(
-    "rejects invalid price %s",
+    "rejects invalid payable price %s",
     (price) => {
       expect(parseKasToSompi(price)).toBeNull();
     },
   );
 
+  it("accepts a zero price only through parsePostPrice", () => {
+    expect(parsePostPrice("0")).toBe(0n);
+    expect(parsePostPrice("0.00")).toBe(0n);
+    expect(parsePostPrice("1.00000001")).toBe(100_000_001n);
+    expect(parsePostPrice("0.00000001")).toBe(1n);
+  });
+
+  it.each(["", "-1", "1.000000001", "one"])(
+    "rejects malformed post price %s",
+    (price) => {
+      expect(parsePostPrice(price)).toBeNull();
+    },
+  );
+
+  it("flags free posts by their stored sompi value", () => {
+    expect(isFreePost("0")).toBe(true);
+    expect(isFreePost("1")).toBe(false);
+  });
+
   it("normalizes text and enforces visible character limits", () => {
     expect(validatePost(" caption ", "2")).toEqual([]);
+    expect(validatePost(" caption ", "0")).toEqual([]);
     expect(validatePost(" ", "0")).toEqual([
       "Caption must be between 1 and 280 characters.",
-      MEDIA_COPY.invalidPrice,
     ]);
     expect(validatePost("x".repeat(281), "1")).toEqual([
       "Caption must be between 1 and 280 characters.",
     ]);
+    expect(validatePost("x", "-1")).toEqual([MEDIA_COPY.invalidPrice]);
   });
 });
 

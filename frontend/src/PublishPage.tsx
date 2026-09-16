@@ -19,7 +19,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [detailsEdited, setDetailsEdited] = useState(false);
+  const [free, setFree] = useState(false);
   const [form, setForm] = useState({
     caption: DEFAULT_CAPTION,
     priceKas: DEFAULT_PRICE_KAS,
@@ -54,16 +54,12 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
     mediaInput.current.click();
   }
 
-  function restoreDefaults() {
-    setForm({ caption: DEFAULT_CAPTION, priceKas: DEFAULT_PRICE_KAS });
-    setDetailsEdited(false);
-  }
-
   async function uploadFile(file: File): Promise<string | null> {
     setUploading(true);
     setProgress(0);
     try {
-      return await uploadMedia(file, form.caption, form.priceKas, setProgress);
+      const price = free ? "0" : form.priceKas;
+      return await uploadMedia(file, form.caption, price, setProgress);
     } catch (caught) {
       showToast(errorText(caught, COPY.uploadFailed), "error");
       return null;
@@ -83,7 +79,8 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
   async function publishSelected(event: FormEvent) {
     event.preventDefault();
     if (!selectedFile || submitting) return;
-    const errors = validatePost(form.caption, form.priceKas);
+    const price = free ? "0" : form.priceKas;
+    const errors = validatePost(form.caption, price);
     if (errors.length) {
       showToast(errors.join(" "), "error");
       return;
@@ -163,34 +160,36 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
                 <textarea
                   value={form.caption}
                   maxLength={280}
-                  onChange={(event) => {
-                    setDetailsEdited(true);
-                    setForm({ ...form, caption: event.target.value });
-                  }}
+                  onChange={(event) =>
+                    setForm({ ...form, caption: event.target.value })
+                  }
                 />
               </label>
-              <label className="price-field">
-                Price
-                <span className="price-input">
-                  <input
-                    inputMode="decimal"
-                    value={form.priceKas}
-                    onChange={(event) => {
-                      setDetailsEdited(true);
-                      setForm({ ...form, priceKas: event.target.value });
-                    }}
-                  />
-                  <span className="price-unit">KAS</span>
+              <label className="pricing-switch">
+                <span>Free</span>
+                <input
+                  type="checkbox"
+                  checked={free}
+                  onChange={(event) => setFree(event.target.checked)}
+                />
+                <span className="pricing-track" aria-hidden="true">
+                  <span className="pricing-knob" />
                 </span>
               </label>
-              {detailsEdited && (
-                <button
-                  className="text-button restore-defaults"
-                  type="button"
-                  onClick={restoreDefaults}
-                >
-                  Reset
-                </button>
+              {!free && (
+                <label className="price-field">
+                  Price
+                  <span className="price-input">
+                    <input
+                      inputMode="decimal"
+                      value={form.priceKas}
+                      onChange={(event) =>
+                        setForm({ ...form, priceKas: event.target.value })
+                      }
+                    />
+                    <span className="price-unit">KAS</span>
+                  </span>
+                </label>
               )}
             </div>
 
@@ -200,7 +199,12 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
               </p>
             )}
             <button className="primary publish-action" disabled={!selectedFile || busy}>
-              {publishButtonLabel(actionLabel, form.priceKas, selectedFile !== null)}
+              {publishButtonLabel(
+                actionLabel,
+                form.priceKas,
+                selectedFile !== null,
+                free,
+              )}
             </button>
           </div>
         </form>
@@ -220,6 +224,9 @@ function publishButtonLabel(
   actionLabel: string,
   priceKas: string,
   hasMedia: boolean,
+  isFree: boolean,
 ): string {
-  return hasMedia ? `${actionLabel} for ${priceKas || "0"} KAS` : actionLabel;
+  if (!hasMedia || actionLabel !== "Publish") return actionLabel;
+  if (isFree) return COPY.publishForFree;
+  return `${actionLabel} for ${priceKas || "0"} KAS`;
 }

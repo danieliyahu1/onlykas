@@ -14,7 +14,8 @@ export const COPY = {
   videoTooLarge: "Videos can be up to 100 MB.",
   malformedMedia: "This file cannot be played by OnlyKas.",
   uploadFailed: "Upload failed. Try again.",
-  invalidPrice: "Enter a KAS price greater than zero, using up to 8 decimal places.",
+  invalidPrice: "Enter a KAS price of zero or more, using up to 8 decimal places.",
+  publishForFree: "Publish for free",
   permanence:
     "Publishing is permanent. The media, details, and price cannot be changed.",
   publishingCancelled: "Publishing cancelled.",

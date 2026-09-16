@@ -11,11 +11,12 @@ import helmet from "helmet";
 import { z } from "zod";
 import {
   KASPA_TESTNET_ADDRESS_PATTERN,
+  isFreePost,
   mediaHintError,
   NETWORK,
   normalizeDisplayName,
   normalizePostText,
-  parseKasToSompi,
+  parsePostPrice,
   validateDisplayName,
   type MembershipAddressVerificationResponse,
   type PostResponse,
@@ -345,8 +346,8 @@ export function createApp(d: AppDependencies) {
         metrics.mediaPublishAttempt("invalid", "unknown");
         return apiError(res, 422, "INVALID_MEDIA", hint);
       }
-      const priceSompi = parseKasToSompi(price);
-      const errors: string[] = priceSompi ? [] : [COPY.invalidPrice];
+      const priceSompi = parsePostPrice(price);
+      const errors: string[] = priceSompi !== null ? [] : [COPY.invalidPrice];
       if (!caption.trim()) errors.push("Caption must be between 1 and 280 characters.");
       if ([...caption.trim()].length > 280)
         errors.push("Caption must be between 1 and 280 characters.");
@@ -399,12 +400,12 @@ export function createApp(d: AppDependencies) {
           viewer && !isOwner && (await membershipAccess(d, address, viewer)),
         ),
         profile = await profiles.get(address);
-      const unlocked =
-        isOwner || active
-          ? new Set(posts.map((p) => p.id))
-          : viewer
-            ? await purchasedPostIds(d, posts, viewer)
-            : new Set<string>();
+      const unlocked = new Set(posts.filter((p) => isFreePost(p.priceSompi)).map((p) => p.id));
+      if (isOwner || active) {
+        for (const p of posts) unlocked.add(p.id);
+      } else if (viewer) {
+        for (const id of await purchasedPostIds(d, posts, viewer)) unlocked.add(id);
+      }
       res.json({
         address,
         displayAddress: shorten(address),
@@ -427,10 +428,11 @@ export function createApp(d: AppDependencies) {
         postResponse(
           p,
           Boolean(
-            viewer &&
-            (viewer === p.creator ||
-              (await purchaseAccess(d, p, viewer)) ||
-              (await membershipAccess(d, p.creator, viewer))),
+            isFreePost(p.priceSompi) ||
+              (viewer &&
+                (viewer === p.creator ||
+                  (await purchaseAccess(d, p, viewer)) ||
+                  (await membershipAccess(d, p.creator, viewer)))),
           ),
         ),
       );
@@ -448,7 +450,11 @@ export function createApp(d: AppDependencies) {
         return apiError(res, 404, "POST_NOT_FOUND");
       }
       const buyer = req.walletSession!.address;
-      if (buyer === post.creator || (await d.store.getPurchase(post.id, buyer))) {
+      if (
+        buyer === post.creator ||
+        isFreePost(post.priceSompi) ||
+        (await d.store.getPurchase(post.id, buyer))
+      ) {
         metrics.paymentPrepareAttempt("already_unlocked");
         return apiError(res, 409, "ALREADY_UNLOCKED");
       }
@@ -889,6 +895,7 @@ export function createApp(d: AppDependencies) {
       }
       const viewer = req.walletSession!.address;
       if (
+        !isFreePost(p.priceSompi) &&
         viewer !== p.creator &&
         !(await purchaseAccess(d, p, viewer)) &&
         !(await membershipAccess(d, p.creator, viewer))

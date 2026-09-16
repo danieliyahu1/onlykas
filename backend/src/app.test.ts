@@ -366,6 +366,83 @@ describe("payment confirmation", () => {
   });
 });
 
+describe("free posts", () => {
+  const freePost = (id: string): Post => ({ ...post(id), priceSompi: "0" });
+  const viewer = `kaspatest:${"b".repeat(60)}`;
+
+  async function viewerSession(store: MemoryStore) {
+    await store.createSession({
+      id: "session-viewer",
+      address: viewer,
+      expiresAt: Date.now() + 60_000,
+    });
+    return "onlykas_session=session-viewer";
+  }
+
+  it("serves free post metadata to everyone with canView true", async () => {
+    const store = new MemoryStore();
+    await store.publishPost(freePost("free-post"));
+    const { app } = testApp(store);
+
+    const response = await request(app).get("/api/posts/free-post");
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: "free-post",
+      priceSompi: "0",
+      canView: true,
+    });
+  });
+
+  it("lets any signed-in viewer fetch free post media", async () => {
+    const store = new MemoryStore();
+    await store.publishPost(freePost("free-post"));
+    const cookie = await viewerSession(store);
+    const { app } = testApp(store);
+
+    const response = await request(app)
+      .get("/api/posts/free-post/media")
+      .set("Cookie", cookie);
+    expect(response.status).toBe(200);
+  });
+
+  it("blocks payment preparation for free posts", async () => {
+    const store = new MemoryStore();
+    await store.publishPost(freePost("free-post"));
+    const cookie = await viewerSession(store);
+    const gateway: PaymentGateway = {
+      prepare: async () => {
+        throw new Error("prepare must not run for free posts");
+      },
+      submit: async () => ({ isAccepted: false, transactionId: null, rejection: null }),
+      status: async () => ({ isAccepted: false, transactionId: null, rejection: null }),
+      verifyPurchase: async () => false,
+    };
+    const { app } = testApp(store, gateway);
+
+    const response = await request(app)
+      .post("/api/posts/free-post/payments/prepare")
+      .set("Cookie", cookie);
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe("ALREADY_UNLOCKED");
+  });
+
+  it("marks free posts unlocked and paid posts locked in the creator listing", async () => {
+    const store = new MemoryStore();
+    const creator = `kaspatest:${"c".repeat(50)}`;
+    await store.publishPost({ ...freePost("free-post"), creator });
+    await store.publishPost({ ...post("paid-post"), creator });
+    const { app } = testApp(store);
+
+    const response = await request(app).get(`/api/creators/${creator}`);
+    expect(response.status).toBe(200);
+    const byId = Object.fromEntries(
+      response.body.posts.map((p: { id: string; canView: boolean }) => [p.id, p]),
+    );
+    expect(byId["free-post"].canView).toBe(true);
+    expect(byId["paid-post"].canView).toBe(false);
+  });
+});
+
 function testApp(
   store: Repositories = new MemoryStore(),
   paymentGateway?: PaymentGateway,

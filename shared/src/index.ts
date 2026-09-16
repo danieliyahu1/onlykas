@@ -7,7 +7,7 @@ export const MEDIA_COPY = {
   unsupportedMedia: "Choose a JPEG, PNG, WebP, MP4, or WebM file.",
   imageTooLarge: "Images can be up to 25 MB.",
   videoTooLarge: "Videos can be up to 100 MB.",
-  invalidPrice: "Enter a KAS price greater than zero, using up to 8 decimal places.",
+  invalidPrice: "Enter a KAS price of zero or more, using up to 8 decimal places.",
 } as const;
 
 export const FEEDBACK_MAX_MESSAGE = 1500;
@@ -102,6 +102,18 @@ export function parseKasToSompi(value: string): bigint | null {
   return sompi > 0n ? sompi : null;
 }
 
+export function parsePostPrice(value: string): bigint | null {
+  const match = /^(\d+)(?:\.(\d{1,8}))?$/.exec(value.trim());
+  if (!match || !match[1]) return null;
+  return (
+    BigInt(match[1]) * 100_000_000n + BigInt((match[2] ?? "").padEnd(8, "0"))
+  );
+}
+
+export function isFreePost(priceSompi: string): boolean {
+  return priceSompi === "0";
+}
+
 export function validatePost(caption: string, price: string): string[] {
   const errors: string[] = [];
   const normalizedCaption = normalizePostText(caption);
@@ -110,7 +122,7 @@ export function validatePost(caption: string, price: string): string[] {
     Array.from(normalizedCaption).length > 280
   )
     errors.push("Caption must be between 1 and 280 characters.");
-  if (parseKasToSompi(price) === null) errors.push(MEDIA_COPY.invalidPrice);
+  if (parsePostPrice(price) === null) errors.push(MEDIA_COPY.invalidPrice);
   return errors;
 }
 

@@ -85,20 +85,35 @@ describe("creator publish experience", () => {
     );
   });
 
-  it("lets defaults be edited and restored without media", async () => {
+  it("switches between free and a set price with one control", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(screen.getByLabelText(/Caption/)).toHaveValue("Shared just for supporters.");
     expect(screen.getByLabelText(/Price/)).toHaveValue("1");
+    await user.click(screen.getByLabelText(/Free/));
+    expect(screen.queryByLabelText(/Price/)).not.toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText(/Caption/));
-    await user.type(screen.getByLabelText(/Caption/), "Custom captions");
-    expect(screen.getByRole("button", { name: "Reset" })).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "Reset" }));
-    expect(screen.getByLabelText(/Caption/)).toHaveValue("Shared just for supporters.");
+    await user.click(screen.getByLabelText(/Free/));
     expect(screen.getByLabelText(/Price/)).toHaveValue("1");
+  });
+
+  it("publishes free posts without a price", async () => {
+    prepareSuccessfulPublish();
+    const user = userEvent.setup();
+    renderPage();
+    await user.upload(
+      screen.getByLabelText(/choose image or video/i),
+      new File(["video"], "release.mp4", { type: "video/mp4" }),
+    );
+    await user.click(screen.getByLabelText(/Free/));
+    await user.click(screen.getByRole("button", { name: "Publish for free" }));
+
+    expect(uploadMedia).toHaveBeenCalledWith(
+      expect.any(File),
+      expect.any(String),
+      "0",
+      expect.any(Function),
+    );
   });
 
   it("does nothing after cancelled sign-in", async () => {

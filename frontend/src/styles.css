@@ -471,6 +471,60 @@ textarea {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+.pricing-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.75rem;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.pricing-switch > span:first-child {
+  color: var(--muted);
+}
+.pricing-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  opacity: 0;
+}
+.pricing-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 1.5rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+.pricing-knob {
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  background: var(--muted);
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+.pricing-switch input:checked + .pricing-track {
+  background: var(--acid);
+  border-color: var(--acid);
+}
+.pricing-switch input:checked + .pricing-track .pricing-knob {
+  transform: translateX(1.25rem);
+  background: var(--ink);
+}
+.pricing-switch input:focus-visible ~ .pricing-track {
+  outline: 2px solid var(--acid);
+  outline-offset: 3px;
+}
 
 /* Publishing */
 
@@ -563,9 +617,6 @@ textarea {
   display: grid;
   gap: 1rem;
   padding: 0.25rem 0;
-}
-.restore-defaults {
-  justify-self: end;
 }
 .publish-action {
   width: 100%;
@@ -891,6 +942,9 @@ progress {
   border-color: var(--acid);
   color: var(--acid);
 }
+.post-lock.is-free {
+  border: 0;
+}
 .post-lock-icon {
   width: 1.35rem;
   height: 1.35rem;
@@ -906,6 +960,11 @@ progress {
     500 0.75rem "DM Mono",
     monospace;
   white-space: nowrap;
+}
+.post-price.free {
+  color: var(--acid);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 .empty-posts {
   display: grid;
