@@ -111,6 +111,18 @@ describe("PostPage", () => {
     expect(screen.queryByText("This post isn't available.")).not.toBeInTheDocument();
   });
 
+  it("renders media for a free post to a signed-out viewer", async () => {
+    const free = { ...post("free-post", "A free moment", true), priceSompi: "0" };
+    vi.mocked(api).mockResolvedValueOnce(free);
+    renderPost(free);
+
+    expect(await screen.findByRole("img", { name: "A free moment" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Sign in to view" }),
+    ).not.toBeInTheDocument();
+    expect(api).toHaveBeenCalledTimes(1);
+  });
+
   it("refetches access after the viewer signs in without a page refresh", async () => {
     vi.mocked(api)
       .mockResolvedValueOnce(post("auth-post", "A private moment", false))

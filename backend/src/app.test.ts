@@ -443,6 +443,27 @@ describe("free posts", () => {
   });
 });
 
+describe("anonymous media access", () => {
+  it("serves free post media without a session", async () => {
+    const store = new MemoryStore();
+    await store.publishPost({ ...post("free-post"), priceSompi: "0" });
+    const { app } = testApp(store);
+
+    const response = await request(app).get("/api/posts/free-post/media");
+    expect(response.status).toBe(200);
+  });
+
+  it("requires a session for paid post media", async () => {
+    const store = new MemoryStore();
+    await store.publishPost(post("paid-post"));
+    const { app } = testApp(store);
+
+    const response = await request(app).get("/api/posts/paid-post/media");
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe("AUTHENTICATION_REQUIRED");
+  });
+});
+
 function testApp(
   store: Repositories = new MemoryStore(),
   paymentGateway?: PaymentGateway,

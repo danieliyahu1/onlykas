@@ -885,7 +885,6 @@ export function createApp(d: AppDependencies) {
   app.all(
     "/api/posts/:id/media",
     optional,
-    required,
     asyncHandler(async (req, res) => {
       if (req.method !== "GET" && req.method !== "HEAD") return res.status(405).end();
       const p = await d.store.getPost(param(req, "id"));
@@ -893,15 +892,17 @@ export function createApp(d: AppDependencies) {
         metrics.mediaDeliveryAttempt(req.method, "not_found", "none");
         return apiError(res, 404, "POST_NOT_FOUND");
       }
-      const viewer = req.walletSession!.address;
-      if (
-        !isFreePost(p.priceSompi) &&
-        viewer !== p.creator &&
-        !(await purchaseAccess(d, p, viewer)) &&
-        !(await membershipAccess(d, p.creator, viewer))
-      ) {
-        metrics.mediaDeliveryAttempt(req.method, "forbidden", "none");
-        return apiError(res, 403, "MEDIA_FORBIDDEN");
+      if (!isFreePost(p.priceSompi)) {
+        const viewer = req.walletSession?.address;
+        if (!viewer) return apiError(res, 401, "AUTHENTICATION_REQUIRED");
+        if (
+          viewer !== p.creator &&
+          !(await purchaseAccess(d, p, viewer)) &&
+          !(await membershipAccess(d, p.creator, viewer))
+        ) {
+          metrics.mediaDeliveryAttempt(req.method, "forbidden", "none");
+          return apiError(res, 403, "MEDIA_FORBIDDEN");
+        }
       }
       const range = parseRange(req.headers.range, p.mediaSize);
       if (range === "invalid") {

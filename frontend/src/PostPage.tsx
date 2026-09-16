@@ -105,38 +105,25 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const isVideo = currentPost.mediaType.startsWith("video/");
   const mediaLabel = currentPost.caption || (isVideo ? "Video" : "Photo");
   const mediaUrl = `/api/posts/${encodeURIComponent(currentPost.id)}/media`;
-  const isFree = currentPost.priceSompi === "0";
 
   return (
     <>
       <article className="single-post">
         <h1 className="caption">{currentPost.caption}</h1>
         {currentPost.canView && !mediaError ? (
-          address || !isFree ? (
-            isVideo ? (
-              <VideoPlayer
-                src={mediaUrl}
-                label={mediaLabel}
-                onError={() => setMediaError(true)}
-              />
-            ) : (
-              <img
-                className="post-media"
-                src={mediaUrl}
-                alt={mediaLabel}
-                onError={() => setMediaError(true)}
-              />
-            )
+          isVideo ? (
+            <VideoPlayer
+              src={mediaUrl}
+              label={mediaLabel}
+              onError={() => setMediaError(true)}
+            />
           ) : (
-            <div className="post-actions">
-              <button
-                className="primary"
-                disabled={busy !== null || signingIn}
-                onClick={() => void signIn()}
-              >
-                Sign in to view
-              </button>
-            </div>
+            <img
+              className="post-media"
+              src={mediaUrl}
+              alt={mediaLabel}
+              onError={() => setMediaError(true)}
+            />
           )
         ) : mediaError ? (
           <p className="feedback inline" role="alert">
