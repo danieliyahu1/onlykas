@@ -93,6 +93,15 @@ describe.each([
       "MEDIA_DIGEST_CONFLICT",
     );
     expect(await store.getPost(newer.id)).toEqual(newer);
+    expect(await store.findPostByMedia(creator, newer.mediaDigest)).toEqual(newer);
+
+    const otherCreator = "kaspatest:other";
+    const shared = { ...newer, id: "shared", creator: otherCreator };
+    expect(await store.publishPost(shared)).toBe("COMMITTED");
+    expect(await store.findPostByMedia(otherCreator, newer.mediaDigest)).toEqual(
+      shared,
+    );
+    expect(await store.creatorPosts(otherCreator)).toEqual([shared]);
   });
 
   it("enforces purchase uniqueness by post, buyer, and transaction", async () => {

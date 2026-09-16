@@ -40,4 +40,18 @@ describe("database migrations", () => {
     const versions = await client.execute("SELECT version FROM schema_migrations");
     expect(versions.rows).toHaveLength(migrations.length);
   });
+
+  it("enforces media uniqueness per creator", async () => {
+    const client = createClient({ url: "file::memory:" });
+    await applyMigrations(client);
+    const insert = (id: string, creator: string) =>
+      client.execute({
+        sql: "INSERT INTO posts (id,creator,caption,price_sompi,media_type,media_size,media_digest,media_key,published_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        args: [id, creator, "caption", "1", "image/jpeg", 10, "shared-digest", "key", 1],
+      });
+
+    await insert("post-a", "kaspatest:a");
+    await insert("post-b", "kaspatest:b");
+    await expect(insert("post-c", "kaspatest:a")).rejects.toThrow();
+  });
 });

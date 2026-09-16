@@ -15,7 +15,9 @@ export interface PublishPostInput {
   now: number;
 }
 
-export type PublishPostResult = { kind: "CREATED"; post: Post } | { kind: "DUPLICATE" };
+export type PublishPostResult =
+  | { kind: "CREATED"; post: Post }
+  | { kind: "DUPLICATE"; post: Post | null };
 
 export function createPublishPostUseCase(dependencies: {
   posts: Pick<
@@ -24,6 +26,7 @@ export function createPublishPostUseCase(dependencies: {
     | "commitPublication"
     | "releasePublication"
     | "prunePendingPublications"
+    | "findPostByMedia"
   >;
   storage: Pick<ObjectStorage, "putFile" | "delete">;
   verifyMedia: (path: string) => Promise<VerifiedMedia>;
@@ -43,12 +46,22 @@ export function createPublishPostUseCase(dependencies: {
       mediaKey: `media/blake3/${media.digest.slice(0, 2)}/${media.digest}`,
       publishedAt: input.now,
     };
+    const duplicateResult = async (): Promise<PublishPostResult> => ({
+      kind: "DUPLICATE",
+      post: await dependencies.posts.findPostByMedia(
+        post.creator,
+        post.mediaDigest,
+      ),
+    });
+    const releaseReservation = () =>
+      dependencies.posts.releasePublication(post.id).catch(() => undefined);
+
     await dependencies.posts.prunePendingPublications(input.now);
     const reservation = await dependencies.posts.reservePublication(
       post,
       input.now + dependencies.pendingTtlMs,
     );
-    if (reservation === "DUPLICATE") return { kind: "DUPLICATE" };
+    if (reservation === "DUPLICATE") return duplicateResult();
 
     try {
       await dependencies.storage.putFile(
@@ -57,13 +70,22 @@ export function createPublishPostUseCase(dependencies: {
         post.mediaType,
       );
     } catch (error) {
-      await dependencies.posts.releasePublication(post.id);
+      await releaseReservation();
       await dependencies.storage.delete(post.mediaKey).catch(() => undefined);
       throw error;
     }
 
-    const committed = await dependencies.posts.commitPublication(post);
-    if (committed === "DUPLICATE") return { kind: "DUPLICATE" };
+    let committed: "COMMITTED" | "DUPLICATE";
+    try {
+      committed = await dependencies.posts.commitPublication(post);
+    } catch (error) {
+      await releaseReservation();
+      throw error;
+    }
+    if (committed === "DUPLICATE") {
+      await releaseReservation();
+      return duplicateResult();
+    }
     return { kind: "CREATED", post };
   };
 }

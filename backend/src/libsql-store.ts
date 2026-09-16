@@ -289,11 +289,20 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     });
     return r.rows.map(profileFromRow);
   }
+  private async postRowByMedia(creator: string, digest: string) {
+    const r = await this.execute({
+      sql: `SELECT * FROM posts WHERE creator=? AND media_digest=?`,
+      args: [creator, digest],
+    });
+    return r.rows[0];
+  }
   async reservePublication(v: Post, expiresAt: number) {
     try {
+      if (await this.postRowByMedia(v.creator, v.mediaDigest))
+        return "DUPLICATE" as const;
       await this.execute({
-        sql: `INSERT INTO pending_publications (post_id,media_digest,media_key,expires_at) VALUES (?,?,?,?)`,
-        args: [v.id, v.mediaDigest, v.mediaKey, expiresAt],
+        sql: `INSERT INTO pending_publications (post_id,creator,media_digest,media_key,expires_at) VALUES (?,?,?,?,?)`,
+        args: [v.id, v.creator, v.mediaDigest, v.mediaKey, expiresAt],
       });
       return "RESERVED" as const;
     } catch (error) {
@@ -310,6 +319,7 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
       });
       if (!pending.rows[0] || text(pending.rows[0].media_digest) !== v.mediaDigest) {
         await transaction.rollback();
+        await this.releasePublication(v.id).catch(() => undefined);
         return "DUPLICATE" as const;
       }
       await transaction.execute({
@@ -334,6 +344,7 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
       return "COMMITTED" as const;
     } catch (error) {
       await transaction.rollback();
+      await this.releasePublication(v.id).catch(() => undefined);
       if (isUniqueConstraint(error)) return "DUPLICATE" as const;
       throw error;
     }
@@ -368,18 +379,21 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
       });
       return "COMMITTED" as const;
     } catch (error) {
-      if (!isUniqueConstraint(error)) throw error;
-      const r = await this.execute({
-        sql: `SELECT 1 FROM posts WHERE media_digest=?`,
-        args: [v.mediaDigest],
-      });
-      if (r.rows[0]) return "MEDIA_DIGEST_CONFLICT" as const;
+      if (
+        isUniqueConstraint(error) &&
+        (await this.postRowByMedia(v.creator, v.mediaDigest))
+      )
+        return "MEDIA_DIGEST_CONFLICT" as const;
       throw error;
     }
   }
   async getPost(id: string) {
     const r = await this.execute({ sql: `SELECT * FROM posts WHERE id=?`, args: [id] });
     return r.rows[0] ? postFromRow(r.rows[0]) : null;
+  }
+  async findPostByMedia(creator: string, digest: string) {
+    const row = await this.postRowByMedia(creator, digest);
+    return row ? postFromRow(row) : null;
   }
   async creatorPosts(address: string) {
     const r = await this.execute({

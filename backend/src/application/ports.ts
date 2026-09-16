@@ -71,6 +71,7 @@ export interface PostRepository {
   prunePendingPublications(now: number): Promise<void>;
   publishPost(value: Post): Promise<"COMMITTED" | "MEDIA_DIGEST_CONFLICT">;
   getPost(id: string): Promise<Post | null>;
+  findPostByMedia(creator: string, digest: string): Promise<Post | null>;
   creatorPosts(address: string): Promise<Post[]>;
 }
 

@@ -131,7 +131,11 @@ export class MemoryStore implements Repositories {
       .map((v) => structuredClone(v));
   }
   async publishPost(v: Post) {
-    if ([...this.posts.values()].some((p) => p.mediaDigest === v.mediaDigest))
+    if (
+      [...this.posts.values()].some(
+        (p) => p.creator === v.creator && p.mediaDigest === v.mediaDigest,
+      )
+    )
       return "MEDIA_DIGEST_CONFLICT" as const;
     this.posts.set(v.id, structuredClone(v));
     return "COMMITTED" as const;
@@ -141,7 +145,9 @@ export class MemoryStore implements Repositories {
       [
         ...this.posts.values(),
         ...[...this.pendingPosts.values()].map((x) => x.post),
-      ].some((post) => post.mediaDigest === v.mediaDigest)
+      ].some(
+        (post) => post.creator === v.creator && post.mediaDigest === v.mediaDigest,
+      )
     )
       return "DUPLICATE" as const;
     this.pendingPosts.set(v.id, { post: structuredClone(v), expiresAt });
@@ -149,8 +155,10 @@ export class MemoryStore implements Repositories {
   }
   async commitPublication(v: Post) {
     const pending = this.pendingPosts.get(v.id);
-    if (!pending || pending.post.mediaDigest !== v.mediaDigest)
+    if (!pending || pending.post.mediaDigest !== v.mediaDigest) {
+      this.pendingPosts.delete(v.id);
       return "DUPLICATE" as const;
+    }
     this.pendingPosts.delete(v.id);
     this.posts.set(v.id, structuredClone(v));
     return "COMMITTED" as const;
@@ -164,6 +172,12 @@ export class MemoryStore implements Repositories {
   }
   async getPost(id: string) {
     const v = this.posts.get(id);
+    return v ? structuredClone(v) : null;
+  }
+  async findPostByMedia(creator: string, digest: string) {
+    const v = [...this.posts.values()].find(
+      (p) => p.creator === creator && p.mediaDigest === digest,
+    );
     return v ? structuredClone(v) : null;
   }
   async creatorPosts(address: string) {

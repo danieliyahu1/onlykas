@@ -139,6 +139,39 @@ export const migrations: Migration[] = [
       "CREATE INDEX IF NOT EXISTS feedback_outbox_delivery ON feedback_outbox (lease_until, received_at)",
     ],
   },
+  {
+    version: 6,
+    name: "per_creator_media_dedupe",
+    statements: [
+      `CREATE TABLE posts_v2 (
+        id TEXT PRIMARY KEY NOT NULL,
+        creator TEXT NOT NULL,
+        caption TEXT NOT NULL,
+        price_sompi TEXT NOT NULL,
+        media_type TEXT NOT NULL,
+        media_size INTEGER NOT NULL CHECK (media_size > 0),
+        media_digest TEXT NOT NULL,
+        media_key TEXT NOT NULL,
+        published_at INTEGER NOT NULL CHECK (published_at > 0),
+        UNIQUE (creator, media_digest)
+      )`,
+      `INSERT INTO posts_v2 (id,creator,caption,price_sompi,media_type,media_size,media_digest,media_key,published_at)
+        SELECT id,creator,caption,price_sompi,media_type,media_size,media_digest,media_key,published_at FROM posts`,
+      "DROP TABLE posts",
+      "ALTER TABLE posts_v2 RENAME TO posts",
+      "CREATE INDEX IF NOT EXISTS posts_creator_date ON posts (creator, published_at DESC)",
+      "DROP TABLE pending_publications",
+      `CREATE TABLE pending_publications (
+        post_id TEXT PRIMARY KEY NOT NULL,
+        creator TEXT NOT NULL,
+        media_digest TEXT NOT NULL,
+        media_key TEXT NOT NULL,
+        expires_at INTEGER NOT NULL CHECK (expires_at > 0),
+        UNIQUE (creator, media_digest)
+      )`,
+      "CREATE INDEX IF NOT EXISTS pending_publications_expiry ON pending_publications (expires_at)",
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {

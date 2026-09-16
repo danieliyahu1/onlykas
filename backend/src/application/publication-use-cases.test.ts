@@ -1,4 +1,5 @@
 import { MemoryStore } from "../memory-store.js";
+import type { Post } from "../domain/models.js";
 import { createPublishPostUseCase } from "./publication-use-cases.js";
 
 const media = {
@@ -48,7 +49,7 @@ describe("publish post use case", () => {
         sourcePath: "media",
         now: 1_000,
       }),
-    ).toEqual({ kind: "DUPLICATE" });
+    ).toMatchObject({ kind: "DUPLICATE", post: { id: "post-1" } });
     expect(uploads).toBe(1);
   });
 
@@ -79,5 +80,74 @@ describe("publish post use case", () => {
     ).rejects.toThrow("storage unavailable");
     expect(store.pendingPosts.size).toBe(0);
     expect(deleted).toBe(1);
+  });
+
+  it("releases the reservation and returns the existing post when the commit is a duplicate", async () => {
+    const existing: Post = {
+      id: "post-0",
+      creator: "creator",
+      caption: "caption",
+      priceSompi: "100",
+      mediaType: "image/jpeg",
+      mediaSize: 3,
+      mediaDigest: media.digest,
+      mediaKey: "media",
+      publishedAt: 0,
+    };
+    const released: string[] = [];
+    const publish = createPublishPostUseCase({
+      posts: {
+        prunePendingPublications: async () => undefined,
+        reservePublication: async () => "RESERVED",
+        commitPublication: async () => "DUPLICATE",
+        releasePublication: async (id) => void released.push(id),
+        findPostByMedia: async () => existing,
+      },
+      storage: storage(),
+      verifyMedia: async () => media,
+      createId: () => "post-1",
+      pendingTtlMs: 60_000,
+    });
+
+    const result = await publish({
+      creator: "creator",
+      caption: "caption",
+      priceSompi: "100",
+      sourcePath: "media",
+      now: 1_000,
+    });
+
+    expect(result).toEqual({ kind: "DUPLICATE", post: existing });
+    expect(released).toEqual(["post-1"]);
+  });
+
+  it("releases the reservation when the commit fails", async () => {
+    const released: string[] = [];
+    const publish = createPublishPostUseCase({
+      posts: {
+        prunePendingPublications: async () => undefined,
+        reservePublication: async () => "RESERVED",
+        commitPublication: async () => {
+          throw new Error("database unavailable");
+        },
+        releasePublication: async (id) => void released.push(id),
+        findPostByMedia: async () => null,
+      },
+      storage: storage(),
+      verifyMedia: async () => media,
+      createId: () => "post-1",
+      pendingTtlMs: 60_000,
+    });
+
+    await expect(
+      publish({
+        creator: "creator",
+        caption: "caption",
+        priceSompi: "100",
+        sourcePath: "media",
+        now: 1_000,
+      }),
+    ).rejects.toThrow("database unavailable");
+    expect(released).toEqual(["post-1"]);
   });
 });
