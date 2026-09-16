@@ -10,7 +10,7 @@ export function FeedbackButton() {
   const textRef = useRef<HTMLTextAreaElement>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const { toast, showToast } = useToast();
+  const { toast, showToast, dismissToast } = useToast();
 
   function open() {
     setNote(null);
@@ -108,7 +108,7 @@ export function FeedbackButton() {
           </div>
         </form>
       </dialog>
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import type { PostResponse } from "@onlykas/shared";
 import { api, signPreparedPayment } from "./kasware.js";
 import { Toast, useToast } from "./Toast.js";
@@ -11,18 +11,20 @@ import type { WalletProps } from "./wallet.js";
 
 export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const { id = "" } = useParams();
+  const location = useLocation();
   const [post, setPost] = useState<PostResponse | null>(null);
   const [busy, setBusy] = useState<null | "unlock" | "subscription">(null);
   const [mediaError, setMediaError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { toast, showToast, dismissToast } = useToast();
+  const notice = (location.state as { notice?: string } | null)?.notice;
+  const shownNotice = useRef(false);
 
   useEffect(() => {
     let active = true;
     setPost(null);
     setLoading(true);
-    dismissToast();
     setMediaError(false);
     setLoadError(null);
     void (async () => {
@@ -40,7 +42,13 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
     return () => {
       active = false;
     };
-  }, [address, dismissToast, id]);
+  }, [address, id]);
+
+  useEffect(() => {
+    if (!notice || shownNotice.current) return;
+    shownNotice.current = true;
+    showToast(notice, "notice");
+  }, [notice, showToast]);
 
   if (loading) return <Message title="Loading..." />;
   if (!post)
@@ -155,7 +163,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
           View creator · {shortenAddress(currentPost.creator)}
         </Link>
       </article>
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

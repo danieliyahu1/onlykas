@@ -369,7 +369,13 @@ export function createApp(d: AppDependencies) {
         });
         if (result.kind === "DUPLICATE") {
           metrics.mediaPublishAttempt("conflict", type || "unknown");
-          return apiError(res, 409, "MEDIA_ALREADY_PUBLISHED");
+          return apiError(
+            res,
+            409,
+            "MEDIA_ALREADY_PUBLISHED",
+            COPY.mediaAlreadyPublished,
+            result.post ? { id: result.post.id } : undefined,
+          );
         }
         metrics.mediaPublished(result.post.mediaType, result.post.mediaSize);
         res.status(201).json({ id: result.post.id });
@@ -1088,11 +1094,18 @@ function cookieOptions(production: boolean) {
     path: "/",
   };
 }
-function apiError(res: Response, status: number, code: string, message?: string) {
+function apiError(
+  res: Response,
+  status: number,
+  code: string,
+  message?: string,
+  extra?: Record<string, unknown>,
+) {
   res.locals.apiErrorCode = code;
   return res.status(status).json({
     error: code,
     message: message ?? `${code.toLowerCase().replaceAll("_", " ")}.`,
+    ...(extra ?? {}),
   });
 }
 function routePattern(req: Request) {

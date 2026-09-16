@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -165,5 +166,35 @@ describe("PostPage", () => {
 
     expect(await screen.findByRole("img", { name: "A private moment" })).toBeVisible();
     expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a notice passed through navigation", async () => {
+    vi.mocked(api).mockResolvedValue(post("notice-post", "A notice", true));
+    render(
+      <StrictMode>
+        <MemoryRouter
+          initialEntries={[
+            {
+              pathname: "/post/notice-post",
+              state: { notice: COPY.mediaAlreadyPublished },
+            },
+          ]}
+        >
+          <Routes>
+            <Route
+              path="/post/:id"
+              element={
+                <PostPage address={null} signIn={vi.fn(async () => null)} signingIn={false} />
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      COPY.mediaAlreadyPublished,
+    );
+    expect(screen.getByRole("status")).toHaveClass("toast-notice");
   });
 });

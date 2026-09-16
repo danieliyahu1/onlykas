@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 import { useNavigate } from "react-router-dom";
 import { mediaHintError, validatePost } from "@onlykas/shared";
 import { COPY } from "./copy.js";
-import { uploadMedia } from "./upload.js";
+import { uploadMedia, type UploadResult } from "./upload.js";
 import { Icon } from "./Icons.js";
 import { errorText } from "./errors.js";
 import { Toast, useToast } from "./Toast.js";
@@ -54,7 +54,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
     mediaInput.current.click();
   }
 
-  async function uploadFile(file: File): Promise<string | null> {
+  async function uploadFile(file: File): Promise<UploadResult | null> {
     setUploading(true);
     setProgress(0);
     try {
@@ -89,8 +89,13 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
     dismissToast();
     try {
       if (!(await ensureSignedIn())) return;
-      const id = await uploadFile(selectedFile);
-      if (id) navigate(`/post/${id}`);
+      const result = await uploadFile(selectedFile);
+      if (!result) return;
+      navigate(`/post/${result.id}`, {
+        state: result.duplicate
+          ? { notice: COPY.mediaAlreadyPublished }
+          : undefined,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -209,7 +214,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
           </div>
         </form>
       </section>
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

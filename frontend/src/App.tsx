@@ -184,7 +184,7 @@ export function App() {
             )}
           </div>
         </nav>
-        <Toast toast={toast} />
+        <Toast toast={toast} onDismiss={dismissToast} />
         <main ref={mainRef}>
           <Routes>
             <Route

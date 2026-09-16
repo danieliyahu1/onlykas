@@ -190,7 +190,7 @@ export function CreatorPage({
           )}
         </div>
       </section>
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

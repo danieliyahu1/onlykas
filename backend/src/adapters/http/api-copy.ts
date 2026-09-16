@@ -10,4 +10,5 @@ export const API_COPY = {
   unsupportedMedia: "Choose a JPEG, PNG, WebP, MP4, or WebM file.",
   imageTooLarge: "Images can be up to 25 MB.",
   videoTooLarge: "Videos can be up to 100 MB.",
+  mediaAlreadyPublished: "You've already published this.",
 } as const;

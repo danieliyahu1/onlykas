@@ -1,11 +1,16 @@
 import { COPY } from "./copy.js";
 
+export interface UploadResult {
+  id: string;
+  duplicate: boolean;
+}
+
 export function uploadMedia(
   file: File,
   caption: string,
   priceKas: string,
   onProgress: (percent: number) => void,
-): Promise<string> {
+): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("POST", "/api/posts/publish");
@@ -28,7 +33,9 @@ export function uploadMedia(
         // Use the generic error when the server did not return JSON.
       }
       if (request.status >= 200 && request.status < 300 && body.id)
-        resolve(body.id);
+        resolve({ id: body.id, duplicate: false });
+      else if (request.status === 409 && body.id)
+        resolve({ id: body.id, duplicate: true });
       else reject(new Error(body.message ?? "Upload failed"));
     };
     request.send(file);

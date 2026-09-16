@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { COPY } from "./copy.js";
 import { PublishPage } from "./PublishPage.js";
 import { api } from "./kasware.js";
@@ -34,8 +34,29 @@ function prepareSuccessfulPublish() {
   vi.mocked(uploadMedia).mockImplementation(
     async (_file, _caption, _price, progress) => {
       progress(100);
-      return "upload-id";
+      return { id: "upload-id", duplicate: false };
     },
+  );
+}
+
+function PostRoute() {
+  const { id } = useParams();
+  return <div>post:{id}</div>;
+}
+
+function renderPublishWithNavigation() {
+  return render(
+    <MemoryRouter initialEntries={["/publish"]}>
+      <Routes>
+        <Route
+          path="/publish"
+          element={
+            <PublishPage address={address} signIn={vi.fn(async () => address)} signingIn={false} />
+          }
+        />
+        <Route path="/post/:id" element={<PostRoute />} />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
@@ -131,32 +152,36 @@ describe("creator publish experience", () => {
     expect(api).not.toHaveBeenCalled();
   });
 
-  it("explains when the same media was already published", async () => {
-    prepareSuccessfulPublish();
-    vi.mocked(uploadMedia)
-      .mockRejectedValueOnce(new Error(COPY.mediaAlreadyPublished))
-      .mockResolvedValueOnce("new-post-id");
+  it("opens the existing post when the media was already published", async () => {
+    vi.mocked(uploadMedia).mockResolvedValueOnce({
+      id: "existing-post-id",
+      duplicate: true,
+    });
+    const user = userEvent.setup();
+    renderPublishWithNavigation();
+    await user.upload(
+      screen.getByLabelText(/choose image or video/i),
+      new File(["image"], "duplicate.png", { type: "image/png" }),
+    );
+    await user.click(screen.getByRole("button", { name: /^publish/i }));
+
+    expect(await screen.findByText("post:existing-post-id")).toBeVisible();
+  });
+
+  it("keeps the error when the same media has no existing post", async () => {
+    vi.mocked(uploadMedia).mockRejectedValueOnce(
+      new Error(COPY.mediaAlreadyPublished),
+    );
     const user = userEvent.setup();
     renderPage();
-    const mediaInput = screen.getByLabelText(/choose image or video/i);
     await user.upload(
-      mediaInput,
+      screen.getByLabelText(/choose image or video/i),
       new File(["image"], "duplicate.png", { type: "image/png" }),
     );
     await user.click(screen.getByRole("button", { name: /^publish/i }));
 
     expect(await screen.findByText(COPY.mediaAlreadyPublished)).toBeVisible();
     expect(screen.getByRole("button", { name: /^publish/i })).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "Replace" }));
-    await user.upload(
-      mediaInput,
-      new File(["new image"], "new.png", { type: "image/png" }),
-    );
-
-    expect(screen.queryByText(COPY.mediaAlreadyPublished)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^publish/i }));
-    expect(uploadMedia).toHaveBeenCalledTimes(2);
   });
 
   it("reports exact media size validation errors", async () => {
