@@ -48,7 +48,7 @@ function CreatorPreview() {
     >
       <div className="creator-identity">
         <h2 className="preview-name">Yonatan Sompolinsky</h2>
-        <span className="wallet-address">kaspatest:qpchy8…09rle5a7</span>
+        <span className="wallet-address">kaspa:qpchy8…09rle5a7</span>
       </div>
       <div className="access-strip">
         <p className="access-facts">One day of access · 10 KAS</p>
