@@ -535,25 +535,37 @@ main:has(.home-page) {
 .home-page {
   width: min(100%, 62rem);
   min-height: 100%;
-  display: grid;
-  align-content: center;
-  gap: clamp(1.25rem, 4vh, 2.5rem);
-  padding: clamp(1.5rem, 6vh, 3.5rem) clamp(1rem, 4vw, 3rem);
+  padding: 0;
+  text-align: center;
 }
-.home-hero {
+.home-section {
   display: grid;
-  gap: clamp(1.5rem, 4vw, 3rem);
-  align-items: center;
+  justify-items: center;
+  align-content: center;
+  gap: clamp(0.75rem, 2vh, 1.25rem);
+  padding: clamp(3rem, 9vh, 5.5rem) clamp(1rem, 4vw, 3rem);
+}
+.home-section + .home-section {
+  border-top: 1px solid var(--line);
+}
+.home-section-title {
+  max-width: 20ch;
+  margin: 0;
+  font-size: clamp(1.3rem, 3vw, 1.9rem);
+  text-wrap: balance;
 }
 .home-intro {
-  display: grid;
-  gap: clamp(0.6rem, 1.6vh, 1rem);
-  align-content: start;
+  padding-top: clamp(2.5rem, 8vh, 5rem);
+}
+@media (min-width: 900px) {
+  .home-intro {
+    min-height: min(calc(100svh - 14rem), 38rem);
+  }
 }
 .home-intro h1 {
   max-width: 15ch;
   margin: 0;
-  font-size: clamp(1.9rem, min(5vw, 6.5vh), 3.2rem);
+  font-size: clamp(2rem, min(5.5vw, 7.5vh), 3.8rem);
   text-wrap: balance;
 }
 .home-lede {
@@ -562,164 +574,99 @@ main:has(.home-page) {
   color: var(--muted);
   font-size: clamp(0.95rem, min(2vw, 2.2vh), 1.1rem);
   line-height: 1.6;
-  text-wrap: pretty;
+  text-wrap: balance;
 }
-.home-doors {
+.home-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  justify-content: center;
   gap: 1.25rem;
   margin-top: 0.25rem;
-}
-.home-skip {
-  color: var(--muted);
-  font:
-    0.8rem "DM Mono",
-    monospace;
-  text-decoration: underline;
-  text-underline-offset: 0.3em;
-  transition: color 0.12s ease;
-}
-.home-skip:hover,
-.home-skip:focus-visible {
-  color: var(--paper);
-}
-@media (min-width: 900px) {
-  .home-hero {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  }
-  .home-preview {
-    max-width: 24rem;
-    justify-self: end;
-    width: 100%;
-  }
 }
 
 /* Home preview */
 
-.home-preview {
-  display: grid;
-  gap: 0.6rem;
-  margin: 0;
-}
-.home-preview-caption {
-  color: var(--muted);
-  font:
-    500 0.68rem "DM Mono",
-    monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
 .preview-card {
   display: grid;
   gap: 0.85rem;
-  padding: 1rem;
+  width: min(100%, 32rem);
+  padding: 1.1rem;
   border: 1px solid var(--line);
   background: var(--surface);
+  text-align: left;
 }
-.preview-head {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-}
-.preview-avatar {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 2.5rem;
-  height: 2.5rem;
-  border: 1px solid var(--line);
-  background: var(--ink);
-  color: var(--muted);
-  font-weight: 700;
-}
-.preview-identity {
-  display: grid;
+.preview-card .creator-identity {
   min-width: 0;
 }
-.preview-identity strong {
-  font-size: 0.95rem;
-  letter-spacing: -0.01em;
+.preview-card .preview-name {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
 }
-.preview-address {
-  color: var(--muted);
-  font:
-    0.68rem "DM Mono",
-    monospace;
-  overflow-wrap: anywhere;
-}
-.preview-post {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.7rem;
-  border: 1px solid var(--line);
-  background: var(--ink);
-}
-.preview-thumb {
-  flex: 0 0 auto;
-  width: 3rem;
-  height: 3rem;
-  border: 1px solid var(--line);
-  background: linear-gradient(135deg, #1c2a27, #0d1312);
-}
-.preview-post-copy {
-  display: grid;
-  gap: 0.15rem;
-  min-width: 0;
-}
-.preview-post-copy strong {
-  font-size: 0.85rem;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.preview-post-meta {
-  color: var(--muted);
-  font:
-    0.66rem "DM Mono",
-    monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.preview-lock {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  margin-left: auto;
-  color: var(--muted);
-}
-.preview-action {
+.preview-card .wallet-address {
   display: block;
-  padding: 0.7rem;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  text-align: center;
-  font-weight: 600;
-  font-size: 0.82rem;
+  margin-top: 0.25rem;
+  min-height: 0;
+  padding: 0;
+  font-size: 0.68rem;
+  text-align: left;
 }
-.home-note {
+.preview-card .access-strip {
+  margin: 0;
+  padding: 0.65rem 0;
+}
+.preview-card .access-facts {
+  font-size: 0.75rem;
+}
+.preview-card .post-grid {
+  margin: 0;
+}
+.preview-card .post-card {
+  gap: 0.6rem 1rem;
+  padding: 0.85rem 0;
+}
+.preview-card .post-card-copy p {
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.preview-card .post-lock {
+  width: 2rem;
+  height: 2rem;
+}
+.preview-card .post-lock-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.preview-card .post-price {
+  font-size: 0.72rem;
+}
+
+/* Home fans */
+
+.fan-creators {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.25rem;
   margin: 0.25rem 0 0;
-  max-width: 38ch;
-  color: var(--muted);
-  font-size: clamp(0.78rem, 1.5vh, 0.88rem);
-  line-height: 1.5;
+  padding: 0;
+  list-style: none;
 }
-@media (max-height: 720px) {
-  .home-page {
-    gap: clamp(0.75rem, 2.5vh, 1.5rem);
-    padding: clamp(1rem, 4vh, 2rem) clamp(1rem, 4vw, 3rem);
-  }
-  .home-preview-caption {
-    display: none;
-  }
+.fan-creators a {
+  color: var(--paper);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.12s ease;
 }
+.fan-creators a:hover,
+.fan-creators a:focus-visible {
+  color: var(--acid);
+}
+
 @media (max-width: 560px) {
-  .home-page {
-    gap: clamp(0.75rem, 2.5vh, 1.25rem);
-    padding: 1.25rem 1rem;
-  }
   .home-intro h1 {
-    font-size: 1.8rem;
+    font-size: 2rem;
   }
   .home-lede {
     font-size: 0.9rem;

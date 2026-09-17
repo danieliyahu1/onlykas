@@ -1,64 +1,92 @@
 import { Link } from "react-router-dom";
+import type { CreatorSearchResult } from "@onlykas/shared";
 import { LockIcon } from "./Icons.js";
+import { api } from "./kasware.js";
+import { useAsyncResource } from "./useAsyncResource.js";
 
 export function HomePage() {
   return (
-    <section className="home-page">
-      <div className="home-hero">
-        <header className="home-intro">
-          <h1>Get paid by the people who love your work.</h1>
-          <p className="home-lede">
-            Publish a photo or a video. Set your price. Your subscribers pay you
-            directly — you keep 99%.
-          </p>
-          <div className="home-doors">
-            <Link className="primary" to="/publish">
-              Start publishing
-            </Link>
-            <Link className="home-skip" to="/creators">
-              See creators
-            </Link>
-          </div>
-          <p className="home-note">
-            Your work is seen by the people who pay for it.
-          </p>
-        </header>
+    <div className="home-page">
+      <section className="home-section home-intro">
+        <h1>Get paid by the people who love your work.</h1>
+        <p className="home-lede">
+          Publish a photo or a video. Set your price. You keep 99%.
+        </p>
+        <div className="home-actions">
+          <Link className="primary" to="/publish">
+            Start publishing
+          </Link>
+        </div>
+      </section>
+
+      <section className="home-section">
+        <h2 className="home-section-title">What your fans see</h2>
         <CreatorPreview />
-      </div>
-    </section>
+      </section>
+
+      <section className="home-section">
+        <h2 className="home-section-title">Here to support a creator?</h2>
+        <p className="home-lede">
+          Unlock their work or subscribe for a day. Your KAS goes straight to
+          them.
+        </p>
+        <FanCreators />
+        <Link className="secondary" to="/creators">
+          Browse creators
+        </Link>
+      </section>
+    </div>
   );
 }
 
 function CreatorPreview() {
   return (
-    <figure className="home-preview">
-      <figcaption className="home-preview-caption">
-        What your subscribers see
-      </figcaption>
-      <div
-        className="preview-card"
-        role="img"
-        aria-label="A creator's page on OnlyKas: a members-only video post priced at 5 KAS, with a Subscribe button."
-      >
-        <div className="preview-head">
-          <span className="preview-avatar">A</span>
-          <span className="preview-identity">
-            <strong>Amara Okoye</strong>
-            <span className="preview-address">kaspatest:qq…8v4k</span>
-          </span>
-        </div>
-        <div className="preview-post">
-          <span className="preview-thumb" />
-          <span className="preview-post-copy">
-            <strong>Studio, Sunday — the long version</strong>
-            <span className="preview-post-meta">8:24 · Members only</span>
-          </span>
-          <span className="preview-lock">
-            <LockIcon open={false} />
-          </span>
-        </div>
-        <span className="preview-action">Subscribe · 5 KAS a month</span>
+    <div
+      className="preview-card"
+      role="img"
+      aria-label="A subscribed fan's view of a creator's profile on OnlyKas: Yonatan Sompolinsky, one day of access for 10 KAS, marked Subscribed, with the unlocked post BlockDAG explanation with AI."
+    >
+      <div className="creator-identity">
+        <h2 className="preview-name">Yonatan Sompolinsky</h2>
+        <span className="wallet-address">kaspatest:qpchy8…09rle5a7</span>
       </div>
-    </figure>
+      <div className="access-strip">
+        <p className="access-facts">One day of access · 10 KAS</p>
+        <span className="access-status">Subscribed</span>
+      </div>
+      <div className="post-grid">
+        <div className="post-card">
+          <span className="post-lock unlocked">
+            <LockIcon open={true} />
+          </span>
+          <div className="post-card-copy">
+            <p>BlockDAG explanation with AI</p>
+          </div>
+          <span className="post-price">5 KAS</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FanCreators() {
+  const { data } = useAsyncResource(
+    (signal) => api<CreatorSearchResult[]>("/api/creators/public", { signal }),
+    [],
+  );
+  const creators = (data ?? [])
+    .filter((creator) => creator.displayName)
+    .slice(0, 4);
+  if (!creators.length) return null;
+  return (
+    <ul className="fan-creators">
+      {creators.map((creator) => (
+        <li key={creator.address}>
+          <Link to={`/creator/${encodeURIComponent(creator.address)}`}>
+            {creator.displayName}
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
