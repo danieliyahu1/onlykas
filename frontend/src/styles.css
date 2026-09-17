@@ -353,7 +353,9 @@ h2 {
   transition:
     background 0.12s ease,
     border-color 0.12s ease,
-    color 0.12s ease;
+    color 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
 }
 .primary {
   border: 1px solid var(--acid);
@@ -364,6 +366,10 @@ h2 {
 .primary:focus-visible {
   background: var(--acid-strong);
   border-color: var(--acid-strong);
+  box-shadow:
+    0 0 0 3px #49eacb66,
+    0 0 2.5rem #49eacbcc;
+  transform: translateY(-2px);
 }
 .secondary {
   border: 1px solid var(--line);
@@ -372,7 +378,7 @@ h2 {
 }
 .secondary:hover:not(:disabled),
 .secondary:focus-visible {
-  border-color: var(--muted);
+  border-color: var(--acid);
 }
 .text-button {
   min-height: auto;
