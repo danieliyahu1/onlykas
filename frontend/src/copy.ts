@@ -37,7 +37,6 @@ export const COPY = {
   accessVerificationFailed:
     "OnlyKas can't verify your subscription right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
-  invalidCreatorAddress: "Enter a complete Kaspa testnet address.",
   feedbackButton: "Feedback",
   feedbackDialogTitle: "Send feedback",
   feedbackLabel: "What should we improve?",
