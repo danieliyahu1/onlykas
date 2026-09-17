@@ -16,12 +16,34 @@ function renderHome() {
 }
 
 describe("HomePage", () => {
-  it("explains what OnlyKas is", () => {
+  it("names the app for a first-time visitor", () => {
+    renderHome();
+
+    expect(screen.getByText(/OnlyKas is built on Kaspa/i)).toBeVisible();
+  });
+
+  it("explains what OnlyKas is for everyone", () => {
     renderHome();
 
     expect(
-      screen.getByRole("heading", { name: "Get paid for what you post." }),
+      screen.getByRole("heading", { name: "Paid posts, fan to creator." }),
     ).toBeVisible();
+  });
+
+  it("says Kaspa decides access and OnlyKas stores the media", () => {
+    renderHome();
+
+    expect(screen.getByText(/Kaspa decides who can unlock it/i)).toBeVisible();
+    expect(screen.getByText(/OnlyKas stores the media/i)).toBeVisible();
+  });
+
+  it("speaks human language, not blockchain jargon", () => {
+    const { container } = renderHome();
+    const copy = (container.textContent ?? "").toLowerCase();
+
+    for (const jargon of ["wallet", "blockchain", "on-chain", "settle"]) {
+      expect(copy).not.toContain(jargon);
+    }
   });
 
   it("opens the creators directory from the consumer door", async () => {
