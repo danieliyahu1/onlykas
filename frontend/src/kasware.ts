@@ -1,6 +1,9 @@
 import { NETWORK } from "@onlykas/shared";
+import { ApiError, toApiError, type ApiErrorBody } from "./api-error.js";
 import { COPY } from "./copy.js";
 import { logger } from "./logger.js";
+
+export { ApiError };
 
 export interface Kasware {
   requestAccounts(): Promise<string[]>;
@@ -54,17 +57,6 @@ declare global {
 }
 
 export class WalletError extends Error {}
-
-export class ApiError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "ApiError";
-  }
-}
 
 export function kasware(): Kasware {
   if (!window.kasware) throw new WalletError(COPY.kaswareMissing);
@@ -151,30 +143,31 @@ export async function api<T = unknown>(
   }).catch(() => {
     throw new ApiError("SERVER_UNAVAILABLE", COPY.serverDown, 0);
   });
-  const requestId = response.headers.get("x-request-id") ?? undefined;
+  const headerRequestId = response.headers.get("x-request-id") ?? undefined;
   const body =
     response.status === 204
       ? null
-      : ((await response.json()) as { error?: string; message?: string });
-  if (!response.ok)
+      : ((await response.json()) as ApiErrorBody);
+  if (!response.ok) {
+    const error = toApiError(response.status, {
+      ...(body ?? {}),
+      requestId: body?.requestId ?? headerRequestId,
+    });
     logger.error("api_failed", {
       method: init?.method ?? "GET",
       path,
       status: response.status,
-      message: body?.message,
-      requestId,
+      code: error.code,
+      message: error.message,
+      requestId: error.requestId,
     });
-  if (!response.ok)
-    throw new ApiError(
-      body?.error ?? "REQUEST_FAILED",
-      body?.message ?? "The request could not be completed.",
-      response.status,
-    );
+    throw error;
+  }
   logger.debug("api_success", {
     method: init?.method ?? "GET",
     path,
     status: response.status,
-    requestId,
+    requestId: headerRequestId,
   });
   return body as T;
 }

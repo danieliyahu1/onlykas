@@ -1,9 +1,13 @@
+import { ApiError, toApiError, type ApiErrorBody } from "./api-error.js";
 import { COPY } from "./copy.js";
+import { logger } from "./logger.js";
 
 export interface UploadResult {
   id: string;
   duplicate: boolean;
 }
+
+type UploadBody = ApiErrorBody & { id?: string };
 
 export function uploadMedia(
   file: File,
@@ -24,19 +28,37 @@ export function uploadMedia(
       if (event.lengthComputable)
         onProgress(Math.round((event.loaded / event.total) * 100));
     };
-    request.onerror = () => reject(new Error(COPY.serverDown));
+    request.onerror = () =>
+      reject(new ApiError("SERVER_UNAVAILABLE", COPY.serverDown, 0));
     request.onload = () => {
-      let body: { id?: string; message?: string } = {};
+      let body: UploadBody = {};
       try {
-        body = JSON.parse(request.responseText) as typeof body;
+        body = JSON.parse(request.responseText) as UploadBody;
       } catch {
         // Use the generic error when the server did not return JSON.
       }
-      if (request.status >= 200 && request.status < 300 && body.id)
+      if (request.status >= 200 && request.status < 300 && body.id) {
         resolve({ id: body.id, duplicate: false });
-      else if (request.status === 409 && body.id)
+        return;
+      }
+      if (request.status === 409 && body.id) {
         resolve({ id: body.id, duplicate: true });
-      else reject(new Error(body.message ?? "Upload failed"));
+        return;
+      }
+      const error = toApiError(request.status, {
+        ...body,
+        requestId:
+          body.requestId ??
+          request.getResponseHeader("x-request-id") ??
+          undefined,
+      });
+      logger.error("upload_failed", {
+        status: request.status,
+        code: error.code,
+        message: error.message,
+        requestId: error.requestId,
+      });
+      reject(error);
     };
     request.send(file);
   });
