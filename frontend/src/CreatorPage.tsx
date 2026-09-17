@@ -164,7 +164,7 @@ export function CreatorPage({
         </div>
         {showSubscription && (
           <div className="access-strip">
-            <p className="access-facts">Subscription · 24 hours · 10 KAS</p>
+            <p className="access-facts">One day of access · 10 KAS</p>
             <SubscriptionAction
               membership={currentCreator.membership}
               owner={owner}
