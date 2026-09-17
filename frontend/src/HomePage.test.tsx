@@ -27,6 +27,14 @@ describe("HomePage", () => {
     expect(screen.getByText(/Your subscribers pay you directly/i)).toBeVisible();
   });
 
+  it("tells creators who can see their work", () => {
+    renderHome();
+
+    expect(
+      screen.getByText("Your work is seen by the people who pay for it."),
+    ).toBeVisible();
+  });
+
   it("shows the product instead of describing it", () => {
     renderHome();
 

@@ -19,14 +19,11 @@ export function HomePage() {
               See creators
             </Link>
           </div>
+          <p className="home-note">
+            Your work is seen by the people who pay for it.
+          </p>
         </header>
         <CreatorPreview />
-      </div>
-      <div className="home-trust">
-        <p className="home-trust-claim">Your work is seen by the people who pay for it.</p>
-        <p className="home-trust-note">
-          The money comes straight to you, on Kaspa. You keep 99%.
-        </p>
       </div>
     </section>
   );
