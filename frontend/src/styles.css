@@ -882,6 +882,7 @@ progress {
 }
 .feedback-actions .primary {
   width: 100%;
+  font-size: 1.1rem;
 }
 
 /* Toast */
