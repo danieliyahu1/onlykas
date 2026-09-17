@@ -106,19 +106,30 @@ describe("creator publish experience", () => {
     );
   });
 
-  it("switches between free and a set price with one control", async () => {
+  it("reads a zero price as free and any amount as paid", async () => {
     const user = userEvent.setup();
     renderPage();
+    await user.upload(
+      screen.getByLabelText(/choose image or video/i),
+      new File(["video"], "release.mp4", { type: "video/mp4" }),
+    );
 
-    expect(screen.getByLabelText(/Price/)).toHaveValue("1");
-    await user.click(screen.getByLabelText(/Free/));
-    expect(screen.queryByLabelText(/Price/)).not.toBeInTheDocument();
+    const price = screen.getByLabelText(/Price/);
+    expect(price).toHaveValue("1");
+    expect(screen.getByRole("button", { name: "Publish" })).toBeVisible();
 
-    await user.click(screen.getByLabelText(/Free/));
-    expect(screen.getByLabelText(/Price/)).toHaveValue("1");
+    await user.clear(price);
+    await user.type(price, "0");
+    expect(
+      screen.getByRole("button", { name: "Publish for free" }),
+    ).toBeVisible();
+
+    await user.clear(price);
+    await user.type(price, "0.1");
+    expect(screen.getByRole("button", { name: "Publish" })).toBeVisible();
   });
 
-  it("publishes free posts without a price", async () => {
+  it("publishes a zero price as free", async () => {
     prepareSuccessfulPublish();
     const user = userEvent.setup();
     renderPage();
@@ -126,7 +137,9 @@ describe("creator publish experience", () => {
       screen.getByLabelText(/choose image or video/i),
       new File(["video"], "release.mp4", { type: "video/mp4" }),
     );
-    await user.click(screen.getByLabelText(/Free/));
+    const price = screen.getByLabelText(/Price/);
+    await user.clear(price);
+    await user.type(price, "0");
     await user.click(screen.getByRole("button", { name: "Publish for free" }));
 
     expect(uploadMedia).toHaveBeenCalledWith(
@@ -135,6 +148,22 @@ describe("creator publish experience", () => {
       "0",
       expect.any(Function),
     );
+  });
+
+  it("never shows the price on the publish button", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.getByText("Publishing is free.")).toBeVisible();
+
+    await user.upload(
+      screen.getByLabelText(/choose image or video/i),
+      new File(["video"], "release.mp4", { type: "video/mp4" }),
+    );
+
+    const button = screen.getByRole("button", { name: "Publish" });
+    expect(button).toBeVisible();
+    expect(button).not.toHaveTextContent(/KAS/i);
   });
 
   it("does nothing after cancelled sign-in", async () => {

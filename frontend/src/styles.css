@@ -459,60 +459,6 @@ textarea {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.pricing-switch {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 2.75rem;
-  border-bottom: 1px solid var(--line);
-  cursor: pointer;
-}
-.pricing-switch > span:first-child {
-  color: var(--muted);
-}
-.pricing-switch input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: 0;
-  padding: 0;
-  min-height: 0;
-  opacity: 0;
-}
-.pricing-track {
-  position: relative;
-  flex: 0 0 auto;
-  width: 2.75rem;
-  height: 1.5rem;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  transition:
-    background 160ms ease,
-    border-color 160ms ease;
-}
-.pricing-knob {
-  position: absolute;
-  top: 0.125rem;
-  left: 0.125rem;
-  width: 1.125rem;
-  height: 1.125rem;
-  background: var(--muted);
-  transition:
-    transform 160ms ease,
-    background 160ms ease;
-}
-.pricing-switch input:checked + .pricing-track {
-  background: var(--acid);
-  border-color: var(--acid);
-}
-.pricing-switch input:checked + .pricing-track .pricing-knob {
-  transform: translateX(1.25rem);
-  background: var(--ink);
-}
-.pricing-switch input:focus-visible ~ .pricing-track {
-  outline: 2px solid var(--acid);
-  outline-offset: 3px;
-}
 
 /* Home */
 
@@ -757,7 +703,7 @@ main:has(.home-page) {
 .publish-action {
   width: 100%;
 }
-.permanence-note {
+.publish-free-note {
   margin: 0;
   color: var(--muted);
   font-size: 0.8rem;

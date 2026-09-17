@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { mediaHintError, validatePost } from "@onlykas/shared";
+import { mediaHintError, parsePostPrice, validatePost } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { uploadMedia, type UploadResult } from "./upload.js";
 import { Icon } from "./Icons.js";
@@ -19,11 +19,11 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [free, setFree] = useState(false);
   const [form, setForm] = useState({
     caption: DEFAULT_CAPTION,
     priceKas: DEFAULT_PRICE_KAS,
   });
+  const free = parsePostPrice(form.priceKas) === 0n;
 
   const { toast, showToast, dismissToast } = useToast();
 
@@ -58,8 +58,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
     setUploading(true);
     setProgress(0);
     try {
-      const price = free ? "0" : form.priceKas;
-      return await uploadMedia(file, form.caption, price, setProgress);
+      return await uploadMedia(file, form.caption, form.priceKas, setProgress);
     } catch (caught) {
       showToast(errorText(caught, COPY.uploadFailed), "error");
       return null;
@@ -79,8 +78,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
   async function publishSelected(event: FormEvent) {
     event.preventDefault();
     if (!selectedFile || submitting) return;
-    const price = free ? "0" : form.priceKas;
-    const errors = validatePost(form.caption, price);
+    const errors = validatePost(form.caption, form.priceKas);
     if (errors.length) {
       showToast(errors.join(" "), "error");
       return;
@@ -170,46 +168,24 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
                   }
                 />
               </label>
-              <label className="pricing-switch">
-                <span>Free</span>
-                <input
-                  type="checkbox"
-                  checked={free}
-                  onChange={(event) => setFree(event.target.checked)}
-                />
-                <span className="pricing-track" aria-hidden="true">
-                  <span className="pricing-knob" />
+              <label className="price-field">
+                Price
+                <span className="price-input">
+                  <input
+                    inputMode="decimal"
+                    value={form.priceKas}
+                    onChange={(event) =>
+                      setForm({ ...form, priceKas: event.target.value })
+                    }
+                  />
+                  <span className="price-unit">KAS</span>
                 </span>
               </label>
-              {!free && (
-                <label className="price-field">
-                  Price
-                  <span className="price-input">
-                    <input
-                      inputMode="decimal"
-                      value={form.priceKas}
-                      onChange={(event) =>
-                        setForm({ ...form, priceKas: event.target.value })
-                      }
-                    />
-                    <span className="price-unit">KAS</span>
-                  </span>
-                </label>
-              )}
             </div>
 
-            {selectedFile && (
-              <p className="permanence-note">
-                You can&apos;t edit a post after publishing.
-              </p>
-            )}
+            <p className="publish-free-note">Publishing is free.</p>
             <button className="primary publish-action" disabled={!selectedFile || busy}>
-              {publishButtonLabel(
-                actionLabel,
-                form.priceKas,
-                selectedFile !== null,
-                free,
-              )}
+              {publishButtonLabel(actionLabel, selectedFile !== null, free)}
             </button>
           </div>
         </form>
@@ -227,11 +203,10 @@ function publishActionLabel(signingIn: boolean, uploading: boolean): string {
 
 function publishButtonLabel(
   actionLabel: string,
-  priceKas: string,
   hasMedia: boolean,
   isFree: boolean,
 ): string {
   if (!hasMedia || actionLabel !== "Publish") return actionLabel;
   if (isFree) return COPY.publishForFree;
-  return `${actionLabel} for ${priceKas || "0"} KAS`;
+  return actionLabel;
 }
