@@ -37,11 +37,11 @@ export const COPY = {
   accessVerificationFailed:
     "OnlyKas can't verify your subscription right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
-  feedbackButton: "Feedback",
+  feedbackButton: "How can we improve",
   feedbackDialogTitle: "Send feedback",
   feedbackLabel: "What should we improve?",
   feedbackHint: "Anonymous",
-  feedbackPlaceholder: "Tell us what happened",
+  feedbackPlaceholder: "Tell us your experience",
   feedbackSend: "Send",
   feedbackThanks: "Thanks — sent.",
   feedbackRequired: "Write a few words first.",
