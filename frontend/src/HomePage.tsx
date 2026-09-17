@@ -49,7 +49,6 @@ function CreatorPreview() {
             <strong>Amara Okoye</strong>
             <span className="preview-address">kaspatest:qq…8v4k</span>
           </span>
-          <span className="preview-badge">Subscribed</span>
         </div>
         <div className="preview-post">
           <span className="preview-thumb" />
