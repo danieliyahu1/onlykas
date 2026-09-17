@@ -3,11 +3,11 @@ import { Link } from "react-router-dom";
 const STEPS = [
   {
     title: "Publish",
-    body: "Add a photo or video. Set a price, or share it for free.",
+    body: "Add a photo or video. Set a price, or offer a subscription.",
   },
   {
-    title: "Unlock",
-    body: "Fans pay KAS to see a creator's paid posts.",
+    title: "Subscribe",
+    body: "See everything, or pay for a single post.",
   },
   {
     title: "Get paid",
@@ -19,9 +19,9 @@ export function HomePage() {
   return (
     <section className="home-page">
       <header className="home-intro">
-        <h1>Paid posts, fan to creator.</h1>
+        <h1>Creators and their subscribers, directly.</h1>
         <p className="home-lede">
-          OnlyKas is built on Kaspa. Fans pay creators directly.
+          OnlyKas is built on Kaspa. Subscribe to a creator, and you're in.
         </p>
       </header>
       <div className="home-doors">
@@ -42,7 +42,7 @@ export function HomePage() {
       </ol>
       <div className="home-trust">
         <p className="home-trust-claim">
-          Kaspa decides who can unlock a post — and anyone can check.
+          Kaspa decides who can see a post — and anyone can check.
         </p>
         <p className="home-trust-note">
           OnlyKas stores the photos and videos, and follows the rules.

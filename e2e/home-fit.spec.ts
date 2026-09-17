@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("home page fits the viewport without scrolling", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Paid posts, fan to creator." }),
+    page.getByRole("heading", { name: "Creators and their subscribers, directly." }),
   ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
 

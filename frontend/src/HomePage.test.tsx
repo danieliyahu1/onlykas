@@ -26,14 +26,14 @@ describe("HomePage", () => {
     renderHome();
 
     expect(
-      screen.getByRole("heading", { name: "Paid posts, fan to creator." }),
+      screen.getByRole("heading", { name: "Creators and their subscribers, directly." }),
     ).toBeVisible();
   });
 
   it("says Kaspa authorizes access and anyone can check", () => {
     renderHome();
 
-    expect(screen.getByText(/Kaspa decides who can unlock a post/i)).toBeVisible();
+    expect(screen.getByText(/Kaspa decides who can see a post/i)).toBeVisible();
     expect(screen.getByText(/anyone can check/i)).toBeVisible();
     expect(
       screen.getByText(/OnlyKas stores the photos and videos/i),
@@ -46,6 +46,15 @@ describe("HomePage", () => {
 
     for (const jargon of ["wallet", "blockchain", "on-chain", "settle"]) {
       expect(copy).not.toContain(jargon);
+    }
+  });
+
+  it("never tolls a visitor with unlock or paid-post language", () => {
+    const { container } = renderHome();
+    const copy = (container.textContent ?? "").toLowerCase();
+
+    for (const phrasings of ["unlock", "paid post"]) {
+      expect(copy).not.toContain(phrasings);
     }
   });
 
