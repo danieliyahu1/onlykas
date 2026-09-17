@@ -3,7 +3,9 @@ import { expect, test } from "@playwright/test";
 test("home page fits the viewport without scrolling", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Creators and their subscribers, directly." }),
+    page.getByRole("heading", {
+      name: "Get paid by the people who love your work.",
+    }),
   ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
 

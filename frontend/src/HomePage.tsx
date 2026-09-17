@@ -1,53 +1,69 @@
 import { Link } from "react-router-dom";
-
-const STEPS = [
-  {
-    title: "Publish",
-    body: "Add a photo or video. Set a price, or offer a subscription.",
-  },
-  {
-    title: "Subscribe",
-    body: "See everything, or pay for a single post.",
-  },
-  {
-    title: "Get paid",
-    body: "The money goes straight to you. You keep 99%.",
-  },
-];
+import { LockIcon } from "./Icons.js";
 
 export function HomePage() {
   return (
     <section className="home-page">
-      <header className="home-intro">
-        <h1>Creators and their subscribers, directly.</h1>
-        <p className="home-lede">
-          OnlyKas is built on Kaspa. Subscribe to a creator, and you're in.
-        </p>
-      </header>
-      <div className="home-doors">
-        <Link className="primary" to="/creators">
-          Explore creators
-        </Link>
-        <Link className="secondary" to="/publish">
-          Publish a post
-        </Link>
+      <div className="home-hero">
+        <header className="home-intro">
+          <p className="home-eyebrow">For creators</p>
+          <h1>Get paid by the people who love your work.</h1>
+          <p className="home-lede">
+            Publish a photo or a video. Set your price. Your subscribers pay you
+            directly — you keep 99%.
+          </p>
+          <div className="home-doors">
+            <Link className="primary" to="/publish">
+              Start publishing
+            </Link>
+            <Link className="home-skip" to="/creators">
+              See creators
+            </Link>
+          </div>
+        </header>
+        <CreatorPreview />
       </div>
-      <ol className="home-steps">
-        {STEPS.map((step) => (
-          <li key={step.title}>
-            <strong>{step.title}</strong>
-            <span>{step.body}</span>
-          </li>
-        ))}
-      </ol>
       <div className="home-trust">
-        <p className="home-trust-claim">
-          Kaspa decides who can see a post — and anyone can check.
-        </p>
+        <p className="home-trust-claim">You decide who sees your work.</p>
         <p className="home-trust-note">
-          OnlyKas stores the photos and videos, and follows the rules.
+          Their money comes straight to you, on Kaspa. You keep 99%.
         </p>
       </div>
     </section>
+  );
+}
+
+function CreatorPreview() {
+  return (
+    <figure className="home-preview">
+      <figcaption className="home-preview-caption">
+        What your subscribers see
+      </figcaption>
+      <div
+        className="preview-card"
+        role="img"
+        aria-label="A creator's page on OnlyKas: a members-only video post priced at 5 KAS, with a Subscribe button."
+      >
+        <div className="preview-head">
+          <span className="preview-avatar">A</span>
+          <span className="preview-identity">
+            <strong>Amara Okoye</strong>
+            <span className="preview-address">kaspatest:qq…8v4k</span>
+          </span>
+          <span className="preview-badge">Subscribed</span>
+        </div>
+        <div className="preview-post">
+          <span className="preview-thumb" />
+          <span className="preview-post-copy">
+            <strong>Studio, Sunday — the long version</strong>
+            <span className="preview-post-meta">8:24 · Members only</span>
+          </span>
+          <span className="preview-lock">
+            <LockIcon open={false} />
+          </span>
+        </div>
+        <span className="preview-action">Subscribe · 5 KAS a month</span>
+      </div>
+    </figure>
   );
 }

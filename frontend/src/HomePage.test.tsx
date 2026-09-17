@@ -16,28 +16,43 @@ function renderHome() {
 }
 
 describe("HomePage", () => {
-  it("names the app for a first-time visitor", () => {
+  it("speaks to creators and what they get", () => {
     renderHome();
 
-    expect(screen.getByText(/OnlyKas is built on Kaspa/i)).toBeVisible();
+    expect(screen.getByText("For creators")).toBeVisible();
+    expect(
+      screen.getByRole("heading", {
+        name: "Get paid by the people who love your work.",
+      }),
+    ).toBeVisible();
+    expect(screen.getByText(/Your subscribers pay you directly/i)).toBeVisible();
   });
 
-  it("explains what OnlyKas is for everyone", () => {
+  it("shows the product instead of describing it", () => {
     renderHome();
 
+    expect(screen.getByText("What your subscribers see")).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "Creators and their subscribers, directly." }),
+      screen.getByRole("img", { name: /members-only video post/i }),
     ).toBeVisible();
   });
 
-  it("says Kaspa authorizes access and anyone can check", () => {
+  it("gives a creator one clear door", async () => {
+    const user = userEvent.setup();
     renderHome();
 
-    expect(screen.getByText(/Kaspa decides who can see a post/i)).toBeVisible();
-    expect(screen.getByText(/anyone can check/i)).toBeVisible();
-    expect(
-      screen.getByText(/OnlyKas stores the photos and videos/i),
-    ).toBeVisible();
+    await user.click(screen.getByRole("link", { name: "Start publishing" }));
+
+    expect(await screen.findByText("Publish page")).toBeVisible();
+  });
+
+  it("keeps the subscriber door quiet", async () => {
+    const user = userEvent.setup();
+    renderHome();
+
+    await user.click(screen.getByRole("link", { name: "See creators" }));
+
+    expect(await screen.findByText("Creators page")).toBeVisible();
   });
 
   it("speaks human language, not blockchain jargon", () => {
@@ -56,23 +71,5 @@ describe("HomePage", () => {
     for (const phrasings of ["unlock", "paid post"]) {
       expect(copy).not.toContain(phrasings);
     }
-  });
-
-  it("opens the creators directory from the consumer door", async () => {
-    const user = userEvent.setup();
-    renderHome();
-
-    await user.click(screen.getByRole("link", { name: "Explore creators" }));
-
-    expect(await screen.findByText("Creators page")).toBeVisible();
-  });
-
-  it("opens the publish form from the creator door", async () => {
-    const user = userEvent.setup();
-    renderHome();
-
-    await user.click(screen.getByRole("link", { name: "Publish a post" }));
-
-    expect(await screen.findByText("Publish page")).toBeVisible();
   });
 });
