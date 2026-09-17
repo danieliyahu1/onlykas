@@ -182,7 +182,7 @@ export function CreatorPage({
             <div className="empty-posts">
               <p>No posts yet.</p>
               {owner && (
-                <Link className="secondary" to="/">
+                <Link className="secondary" to="/publish">
                   Publish a post
                 </Link>
               )}

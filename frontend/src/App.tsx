@@ -4,6 +4,7 @@ import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-do
 import type { ProfileResponse } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { authenticate, kasware, api } from "./kasware.js";
+import { HomePage } from "./HomePage.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage } from "./CreatorPage.js";
 import { PostPage } from "./PostPage.js";
@@ -187,12 +188,7 @@ export function App() {
         <Toast toast={toast} onDismiss={dismissToast} />
         <main ref={mainRef}>
           <Routes>
-            <Route
-              path="/"
-              element={
-                <PublishPage address={address} signIn={signIn} signingIn={signingIn} />
-              }
-            />
+            <Route path="/" element={<HomePage />} />
             <Route
               path="/publish"
               element={
