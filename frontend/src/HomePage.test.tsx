@@ -19,7 +19,6 @@ describe("HomePage", () => {
   it("speaks to creators and what they get", () => {
     renderHome();
 
-    expect(screen.getByText("For creators")).toBeVisible();
     expect(
       screen.getByRole("heading", {
         name: "Get paid by the people who love your work.",

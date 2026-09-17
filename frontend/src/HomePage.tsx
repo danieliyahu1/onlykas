@@ -6,7 +6,6 @@ export function HomePage() {
     <section className="home-page">
       <div className="home-hero">
         <header className="home-intro">
-          <p className="home-eyebrow">For creators</p>
           <h1>Get paid by the people who love your work.</h1>
           <p className="home-lede">
             Publish a photo or a video. Set your price. Your subscribers pay you
@@ -24,9 +23,9 @@ export function HomePage() {
         <CreatorPreview />
       </div>
       <div className="home-trust">
-        <p className="home-trust-claim">You decide who sees your work.</p>
+        <p className="home-trust-claim">Your work is seen by the people who pay for it.</p>
         <p className="home-trust-note">
-          Their money comes straight to you, on Kaspa. You keep 99%.
+          The money comes straight to you, on Kaspa. You keep 99%.
         </p>
       </div>
     </section>
