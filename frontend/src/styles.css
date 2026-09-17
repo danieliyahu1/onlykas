@@ -442,6 +442,8 @@ textarea {
 }
 .price-input:focus-within {
   border-color: var(--acid);
+  outline: 2px solid var(--acid);
+  outline-offset: 3px;
 }
 .price-input input {
   flex: 1;
@@ -449,6 +451,9 @@ textarea {
   padding-left: 0;
   padding-right: 0;
   border-bottom: 0;
+}
+.price-input input:focus-visible {
+  outline: none;
 }
 .price-unit {
   flex: 0 0 auto;
