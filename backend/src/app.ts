@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
@@ -49,10 +49,16 @@ import {
   type Logger,
 } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
-import { MediaValidationError, verifyMediaFile } from "./adapters/media/media.js";
+import {
+  MediaValidationError,
+  verifyMediaFile,
+  type VerifiedMedia,
+} from "./adapters/media/media.js";
 import { FeedbackError, type FeedbackService } from "./adapters/feedback/feedback.js";
 import { RateLimiter } from "./adapters/http/rate-limit.js";
 import { createPublishPostUseCase } from "./application/publication-use-cases.js";
+import { StorageError } from "./r2-storage.js";
+import { discardTempDir } from "./temp-files.js";
 
 const sessionCookie = "onlykas_session";
 const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
@@ -60,6 +66,7 @@ export interface AppDependencies {
   store: Repositories;
   storage: ObjectStorage;
   walletVerifier: WalletVerifier;
+  verifyMedia?: (path: string) => Promise<VerifiedMedia>;
   paymentGateway?: PaymentGateway;
   membershipGateway?: MembershipGateway;
   membershipVerifier?: MembershipVerifier;
@@ -110,7 +117,7 @@ export function createApp(d: AppDependencies) {
   const publishPost = createPublishPostUseCase({
     posts: d.store,
     storage: d.storage,
-    verifyMedia: verifyMediaFile,
+    verifyMedia: d.verifyMedia ?? verifyMediaFile,
     createId: randomUUID,
     pendingTtlMs: PREPARED_TTL_MS,
   });
@@ -131,6 +138,7 @@ export function createApp(d: AppDependencies) {
   });
   app.use((req, res, next) => {
     req.requestId = requestId(req.get("x-request-id"));
+    res.locals.requestId = req.requestId;
     res.setHeader("X-Request-Id", req.requestId);
     const startedAt = Date.now();
     res.on("finish", () => {
@@ -385,10 +393,13 @@ export function createApp(d: AppDependencies) {
           metrics.mediaPublishAttempt("invalid", "unknown");
           return apiError(res, 422, e.category);
         }
-        metrics.mediaPublishAttempt("error", "unknown");
+        metrics.mediaPublishAttempt(
+          e instanceof StorageError ? "storage_error" : "error",
+          "unknown",
+        );
         throw e;
       } finally {
-        await rm(dir, { recursive: true, force: true });
+        await discardTempDir(dir, logger);
       }
     }),
   );
@@ -986,14 +997,18 @@ export function createApp(d: AppDependencies) {
     void next;
     if (e instanceof z.ZodError) return apiError(res, 400, "INVALID_REQUEST");
     if (e instanceof HttpError) return apiError(res, e.status, e.code);
+    const storageFailure = e instanceof StorageError;
     logger.error("request_failed", {
       requestId: req.requestId,
       method: req.method,
       path: req.path,
       route: routePattern(req),
+      errorCode: storageFailure ? "MEDIA_STORAGE_FAILED" : "SERVICE_UNAVAILABLE",
       ...safeError(e),
     });
-    return apiError(res, 503, "SERVICE_UNAVAILABLE");
+    return storageFailure
+      ? apiError(res, 502, "MEDIA_STORAGE_FAILED")
+      : apiError(res, 503, "SERVICE_UNAVAILABLE");
   });
   return app;
 }
@@ -1105,6 +1120,7 @@ function apiError(
   return res.status(status).json({
     error: code,
     message: message ?? `${code.toLowerCase().replaceAll("_", " ")}.`,
+    requestId: res.locals.requestId,
     ...(extra ?? {}),
   });
 }

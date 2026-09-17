@@ -4,6 +4,8 @@ import { createMetrics, type Metrics } from "./metrics.js";
 import { MemoryStore } from "./memory-store.js";
 import type { EventLogger, Logger } from "./observability.js";
 import type { Post } from "./domain/models.js";
+import { StorageError } from "./r2-storage.js";
+import type { VerifiedMedia } from "./adapters/media/media.js";
 import type {
   ObjectStorage,
   PaymentGateway,
@@ -20,6 +22,7 @@ describe("API request diagnostics", () => {
 
     expect(response.status).toBe(404);
     expect(response.headers["x-request-id"]).toBe("friend-trace");
+    expect(response.body.requestId).toBe("friend-trace");
     expect(events).toContainEqual({
       event: "request_completed",
       fields: expect.objectContaining({
@@ -464,10 +467,96 @@ describe("anonymous media access", () => {
   });
 });
 
+describe("publish failure diagnostics", () => {
+  const creator = `kaspatest:${"c".repeat(60)}`;
+
+  const verifiedVideo: VerifiedMedia = {
+    digest: "d".repeat(64),
+    mediaType: "video/mp4",
+    size: 64,
+  };
+
+  async function creatorApp(
+    storage: ObjectStorage,
+    verifyMedia: (path: string) => Promise<VerifiedMedia>,
+  ) {
+    const store = new MemoryStore();
+    await store.createSession({
+      id: "publish-session",
+      address: creator,
+      expiresAt: Date.now() + 60_000,
+    });
+    return testApp(store, undefined, undefined, storage, verifyMedia);
+  }
+
+  it("reports a storage failure with its own code and keeps the correlation id", async () => {
+    const storage: ObjectStorage = {
+      putFile: async () => {
+        throw new StorageError(
+          "put_object",
+          "media/blake3/ab/abc",
+          "STORAGE_FORBIDDEN",
+          403,
+          "AccessDenied",
+          "r2-request-1",
+          undefined,
+          new Error("access denied"),
+        );
+      },
+      readRange: async () => ({
+        bytes: new Uint8Array(),
+        size: 0,
+        contentType: "video/mp4",
+      }),
+      delete: async () => undefined,
+    };
+    const { app, events } = await creatorApp(storage, async () => verifiedVideo);
+
+    const response = await request(app)
+      .post("/api/posts/publish")
+      .set("X-Request-Id", "publish-trace")
+      .set("Cookie", "onlykas_session=publish-session")
+      .set("X-OnlyKas-Caption", "A private post")
+      .set("X-OnlyKas-Price", "1")
+      .set("Content-Type", "video/mp4")
+      .send(Buffer.alloc(64));
+
+    expect(response.status).toBe(502);
+    expect(response.headers["x-request-id"]).toBe("publish-trace");
+    expect(response.body).toMatchObject({
+      error: "MEDIA_STORAGE_FAILED",
+      requestId: "publish-trace",
+    });
+
+    expect(events).toContainEqual({
+      event: "request_failed",
+      fields: expect.objectContaining({
+        level: "error",
+        requestId: "publish-trace",
+        path: "/api/posts/publish",
+        errorCode: "MEDIA_STORAGE_FAILED",
+        storageOperation: "put_object",
+        storageServiceCode: "AccessDenied",
+        storageRequestId: "r2-request-1",
+      }),
+    });
+    expect(events).toContainEqual({
+      event: "request_completed",
+      fields: expect.objectContaining({
+        requestId: "publish-trace",
+        statusCode: 502,
+        errorCode: "MEDIA_STORAGE_FAILED",
+      }),
+    });
+  });
+});
+
 function testApp(
   store: Repositories = new MemoryStore(),
   paymentGateway?: PaymentGateway,
   metrics?: Metrics,
+  storageOverride?: ObjectStorage,
+  verifyMediaOverride?: (path: string) => Promise<VerifiedMedia>,
 ) {
   const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
   const record =
@@ -481,7 +570,7 @@ function testApp(
     warn: record("warn"),
     error: record("error"),
   };
-  const storage: ObjectStorage = {
+  const storage: ObjectStorage = storageOverride ?? {
     putFile: async () => undefined,
     readRange: async () => ({
       bytes: new Uint8Array(),
@@ -495,6 +584,7 @@ function testApp(
     storage,
     walletVerifier: { verify: async () => false },
     ...(paymentGateway ? { paymentGateway } : {}),
+    ...(verifyMediaOverride ? { verifyMedia: verifyMediaOverride } : {}),
     publicOrigin: "http://localhost:5173",
     logger,
     ...(metrics ? { metrics } : {}),

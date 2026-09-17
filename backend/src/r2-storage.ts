@@ -54,16 +54,23 @@ export class R2Storage implements ObjectStorage {
     this.client.destroy();
   }
   async putFile(key: string, sourcePath: string, contentType: string): Promise<void> {
-    await this.metrics.observeDependency("r2", "put_object", () =>
-      this.client.send(
-        new PutObjectCommand({
-          Bucket: this.bucket,
-          Key: key,
-          Body: createReadStream(sourcePath),
-          ContentType: contentType,
-        }),
-      ),
-    );
+    const body = createReadStream(sourcePath);
+    try {
+      await this.metrics.observeDependency("r2", "put_object", () =>
+        this.client.send(
+          new PutObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+            Body: body,
+            ContentType: contentType,
+          }),
+        ),
+      );
+    } catch (error) {
+      throw toStorageError("put_object", key, error);
+    } finally {
+      body.destroy();
+    }
   }
   async readRange(
     key: string,
