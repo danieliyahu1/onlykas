@@ -30,11 +30,14 @@ describe("HomePage", () => {
     ).toBeVisible();
   });
 
-  it("says Kaspa decides access and OnlyKas stores the media", () => {
+  it("says Kaspa authorizes access and anyone can check", () => {
     renderHome();
 
-    expect(screen.getByText(/Kaspa decides who can unlock it/i)).toBeVisible();
-    expect(screen.getByText(/OnlyKas stores the media/i)).toBeVisible();
+    expect(screen.getByText(/Kaspa decides who can unlock a post/i)).toBeVisible();
+    expect(screen.getByText(/anyone can check/i)).toBeVisible();
+    expect(
+      screen.getByText(/OnlyKas stores the photos and videos/i),
+    ).toBeVisible();
   });
 
   it("speaks human language, not blockchain jargon", () => {

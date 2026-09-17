@@ -11,7 +11,7 @@ const STEPS = [
   },
   {
     title: "Get paid",
-    body: "You keep 99% of every paid post.",
+    body: "The money goes straight to you. You keep 99%.",
   },
 ];
 
@@ -21,8 +21,7 @@ export function HomePage() {
       <header className="home-intro">
         <h1>Paid posts, fan to creator.</h1>
         <p className="home-lede">
-          OnlyKas is built on Kaspa. Creators publish, fans unlock with KAS, and
-          the money goes straight to the creator.
+          OnlyKas is built on Kaspa. Fans pay creators directly.
         </p>
       </header>
       <div className="home-doors">
@@ -41,9 +40,14 @@ export function HomePage() {
           </li>
         ))}
       </ol>
-      <p className="home-note">
-        OnlyKas stores the media. Kaspa decides who can unlock it.
-      </p>
+      <div className="home-trust">
+        <p className="home-trust-claim">
+          Kaspa decides who can unlock a post — and anyone can check.
+        </p>
+        <p className="home-trust-note">
+          OnlyKas stores the photos and videos, and follows the rules.
+        </p>
+      </div>
     </section>
   );
 }

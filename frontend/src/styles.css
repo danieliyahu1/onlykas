@@ -600,14 +600,28 @@ main:has(.home-page) {
   font-size: clamp(0.82rem, 1.7vh, 0.9rem);
   line-height: 1.5;
 }
-.home-note {
+.home-trust {
+  display: grid;
+  gap: clamp(0.35rem, 1vh, 0.55rem);
+  padding-top: clamp(0.85rem, 2.4vh, 1.5rem);
+  border-top: 1px solid var(--line);
+}
+.home-trust-claim {
   margin: 0;
+  max-width: 42ch;
+  color: var(--paper);
+  font-size: clamp(1.15rem, 2.9vh, 1.5rem);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.home-trust-note {
+  margin: 0;
+  max-width: 52ch;
   color: var(--muted);
-  font:
-    0.72rem "DM Mono",
-    monospace;
-  letter-spacing: 0.02em;
-  line-height: 1.6;
+  font-size: clamp(0.78rem, 1.5vh, 0.88rem);
+  line-height: 1.5;
 }
 @media (max-height: 720px) {
   .home-page {
@@ -616,6 +630,9 @@ main:has(.home-page) {
   }
   .home-steps {
     padding-top: clamp(0.75rem, 2vh, 1.25rem);
+  }
+  .home-trust {
+    padding-top: clamp(0.65rem, 1.8vh, 1rem);
   }
 }
 @media (max-width: 560px) {
@@ -648,6 +665,12 @@ main:has(.home-page) {
   .home-steps span {
     font-size: 0.72rem;
     line-height: 1.4;
+  }
+  .home-trust {
+    padding-top: 0.75rem;
+  }
+  .home-trust-claim {
+    font-size: 1.1rem;
   }
 }
 
