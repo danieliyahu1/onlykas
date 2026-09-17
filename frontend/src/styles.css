@@ -132,32 +132,14 @@ nav a {
 .nav-link {
   color: var(--muted);
   font-size: 0.85rem;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
   transition: color 0.12s ease;
 }
 .nav-link:hover,
 .nav-link:focus-visible {
-  color: var(--paper);
-}
-.nav-account-action {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.75rem;
-  padding: 0 1.1rem;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--paper);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    color 0.12s ease;
-}
-.nav-account-action:hover:not(:disabled),
-.nav-account-action:focus-visible {
-  border-color: var(--acid);
-  background: var(--surface);
   color: var(--acid);
 }
 
@@ -1309,11 +1291,10 @@ progress {
   }
   .nav-link {
     order: 2;
-    margin-left: auto;
   }
-  .account,
-  .nav-account-action {
+  .account {
     order: 3;
+    margin-left: auto;
   }
   .global-search {
     order: 4;

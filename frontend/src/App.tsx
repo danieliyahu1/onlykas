@@ -160,6 +160,9 @@ export function App() {
             <Link to="/creators" className="nav-link">
               Creators
             </Link>
+            <Link to="/publish" className="nav-link">
+              Publish
+            </Link>
             {address ? (
               <AccountMenu
                 address={address}
@@ -174,7 +177,7 @@ export function App() {
               />
             ) : (
               <button
-                className="nav-account-action"
+                className="nav-link"
                 disabled={signingIn || checkingSession}
                 onClick={() => void signIn()}
                 aria-label="Sign in with Kasware"

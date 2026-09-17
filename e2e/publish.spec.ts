@@ -1,5 +1,21 @@
 import { expect, test } from "@playwright/test";
 
+test("the header leads a creator from anywhere to the composer", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const publishLink = page
+    .getByRole("navigation")
+    .getByRole("link", { name: "Publish" });
+  await expect(publishLink).toBeVisible();
+  await publishLink.click();
+
+  await expect(
+    page.getByRole("heading", { name: "Publish a post." }),
+  ).toBeVisible();
+});
+
 test("creator entry point becomes ready after choosing media", async ({
   page,
 }) => {
