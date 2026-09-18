@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { isKaspaTestnetAddress, type CreatorSearchResult } from "@onlykas/shared";
 import { api, ApiError } from "./kasware.js";
+import { Icon } from "./Icons.js";
 import { Spinner } from "./Spinner.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
@@ -13,45 +14,71 @@ export function FindCreatorPage() {
   const [error, setError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const handledQuery = useRef<string | null>(null);
+  const request = useRef<AbortController | null>(null);
 
   useAutoDismiss(error, () => setError(null));
 
-  useEffect(() => {
-    const value = searchParams.get("q")?.trim() ?? "";
+  function runSearch(rawValue: string) {
+    const value = rawValue.trim();
+    handledQuery.current = value;
+    request.current?.abort();
+    request.current = null;
     setQuery(value);
-    if (!value) return;
+    setResults([]);
+    setSearched(false);
+    setError(null);
+    if (!value) {
+      setSearching(false);
+      return;
+    }
     if (isKaspaTestnetAddress(value)) {
       navigate(`/creator/${encodeURIComponent(value)}`, { replace: true });
+      setSearching(false);
       return;
     }
     if (value.startsWith("kaspatest:")) {
       setError("Enter the full address.");
+      setSearching(false);
       return;
     }
-    setError(null);
-    setResults([]);
-    setSearched(false);
+    const controller = new AbortController();
+    request.current = controller;
     setSearching(true);
     void api<CreatorSearchResult[]>(
       `/api/creators/search?q=${encodeURIComponent(value)}`,
+      { signal: controller.signal },
     )
       .then((found) => {
+        if (request.current !== controller) return;
         setResults(found);
         setSearched(true);
       })
-      .catch((error: unknown) =>
+      .catch((caught: unknown) => {
+        if (request.current !== controller) return;
         setError(
-          error instanceof ApiError ? error.message : "Search failed. Try again.",
-        ),
-      )
-      .finally(() => setSearching(false));
+          caught instanceof ApiError ? caught.message : "Search failed. Try again.",
+        );
+      })
+      .finally(() => {
+        if (request.current === controller) setSearching(false);
+      });
+  }
+
+  // Only external URL changes (header search, history) reach here. Submissions
+  // run directly and record the query, so their own URL write is skipped.
+  useEffect(() => {
+    const value = searchParams.get("q")?.trim() ?? "";
+    if (value === handledQuery.current) return;
+    runSearch(value);
   }, [navigate, searchParams]);
 
   function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = query.trim();
     if (!value) return;
-    setSearchParams({ q: value });
+    setSearchParams({ q: value }, { replace: true });
+    runSearch(value);
   }
 
   return (
@@ -59,35 +86,39 @@ export function FindCreatorPage() {
       <header>
         <h1>Find a creator.</h1>
       </header>
-      <form onSubmit={search} noValidate>
-        <label htmlFor="creator-query">
+      <form
+        className="find-search search-bar"
+        onSubmit={search}
+        noValidate
+        role="search"
+      >
+        <label htmlFor="creator-query" className="sr-only">
           Name or address
-          <input
-            id="creator-query"
-            name="creator-query"
-            type="text"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setResults([]);
-              setError(null);
-              setSearched(false);
-            }}
-            placeholder="Name or Kaspa address"
-            autoComplete="off"
-            spellCheck={false}
-          />
         </label>
-        {error && (
-          <p className="feedback inline error" role="alert">
-            {error}
-          </p>
-        )}
-        <button className="primary" type="submit" disabled={searching}>
-          {searching && <Spinner />}
-          {searching ? "Searching..." : "Search"}
+        <input
+          id="creator-query"
+          name="creator-query"
+          type="search"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setResults([]);
+            setError(null);
+            setSearched(false);
+          }}
+          placeholder="Name or Kaspa address"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <button type="submit" aria-label="Search" disabled={searching}>
+          {searching ? <Spinner /> : <Icon name="search" />}
         </button>
       </form>
+      {error && (
+        <p className="feedback inline error" role="alert">
+          {error}
+        </p>
+      )}
       {searched && !searching && results.length === 0 && !error && (
         <p className="feedback">No creators found.</p>
       )}

@@ -20,7 +20,7 @@ export function GlobalSearch() {
   }
 
   return (
-    <form className="global-search" onSubmit={submitSearch} role="search">
+    <form className="global-search search-bar" onSubmit={submitSearch} role="search">
       <label htmlFor="global-search-input" className="sr-only">
         Search by name or Kaspa address
       </label>

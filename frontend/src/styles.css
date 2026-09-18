@@ -166,33 +166,31 @@ nav a {
 
 /* Global search */
 
-.global-search {
+.search-bar {
   position: relative;
   display: flex;
   align-items: center;
-  width: min(20rem, 30vw);
 }
-.global-search input {
+.search-bar input {
   width: 100%;
   min-width: 0;
   min-height: 2.75rem;
   padding: 0.55rem 2.5rem 0.55rem 0.85rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--card-line);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--paper);
-  font-size: 0.85rem;
   text-transform: none;
   letter-spacing: 0;
 }
-.global-search input::placeholder {
+.search-bar input::placeholder {
   color: var(--muted);
 }
-.global-search input:focus {
+.search-bar input:focus {
   border-color: var(--acid);
   outline: none;
 }
-.global-search button {
+.search-bar button {
   position: absolute;
   right: 0;
   display: inline-grid;
@@ -204,9 +202,15 @@ nav a {
   color: var(--muted);
   background: transparent;
 }
-.global-search button:hover,
-.global-search button:focus-visible {
+.search-bar button:hover:not(:disabled),
+.search-bar button:focus-visible {
   color: var(--acid);
+}
+.global-search {
+  width: min(20rem, 30vw);
+}
+.global-search input {
+  font-size: 0.85rem;
 }
 
 /* Account */
@@ -786,6 +790,9 @@ progress {
 .find-page form {
   margin-top: 2rem;
 }
+.find-search input {
+  font-size: 0.95rem;
+}
 .creator-results {
   display: grid;
   gap: 0.6rem;
@@ -1125,8 +1132,7 @@ progress {
 .creator-posts {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-auto-rows: 1fr;
-  gap: 2rem;
+  gap: 2.75rem;
   margin-top: 3rem;
   padding-top: 2.5rem;
   border-top: 1px solid var(--line);
@@ -1142,8 +1148,8 @@ progress {
 .post-tile-media {
   position: relative;
   aspect-ratio: 9 / 16;
-  max-height: calc(100vh - 21rem);
-  max-height: calc(100dvh - 21rem);
+  max-height: calc(100vh - 24rem);
+  max-height: calc(100dvh - 24rem);
   background: #050807;
   border-bottom: 1px solid var(--line);
   color: var(--muted);
@@ -1192,7 +1198,6 @@ progress {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  min-height: 6.25rem;
   padding: 1rem 1.1rem;
 }
 .post-tile-copy p {
@@ -1202,12 +1207,12 @@ progress {
   overflow: hidden;
   margin: 0;
   color: var(--paper);
-  font-size: 1rem;
-  line-height: 1.45;
+  font-size: 1.05rem;
+  font-weight: 400;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .post-tile-date {
-  margin-top: auto;
   color: var(--paper);
   font:
     0.68rem "DM Mono",
@@ -1399,8 +1404,8 @@ main:has(.message.is-centered) {
 
 @media (max-width: 720px) {
   .post-tile-media {
-    max-height: calc(100vh - 24rem);
-    max-height: calc(100dvh - 24rem);
+    max-height: calc(100vh - 27rem);
+    max-height: calc(100dvh - 27rem);
   }
   nav {
     flex-wrap: wrap;

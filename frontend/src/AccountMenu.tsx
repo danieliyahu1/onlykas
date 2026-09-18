@@ -53,7 +53,7 @@ export function AccountMenu({
         </button>
         <p className="account-address">{shortenAddress(address)}</p>
         <Link className="menu-button" to={`/creator/${address}`}>
-          Your page
+          My page
         </Link>
         <button className="menu-button" onClick={onSignOut}>
           Sign out
