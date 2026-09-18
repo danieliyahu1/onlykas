@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { mediaHintError, parsePostPrice, validatePost } from "@onlykas/shared";
+import { mediaHintError, validatePost } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { uploadMedia, type UploadResult } from "./upload.js";
 import { Icon } from "./Icons.js";
@@ -23,7 +23,6 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
     caption: DEFAULT_CAPTION,
     priceKas: DEFAULT_PRICE_KAS,
   });
-  const free = parsePostPrice(form.priceKas) === 0n;
 
   const { toast, showToast, dismissToast } = useToast();
 
@@ -185,7 +184,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
 
             <p className="publish-free-note">Publishing is free.</p>
             <button className="primary publish-action" disabled={!selectedFile || busy}>
-              {publishButtonLabel(actionLabel, selectedFile !== null, free)}
+              {actionLabel}
             </button>
           </div>
         </form>
@@ -199,14 +198,4 @@ function publishActionLabel(signingIn: boolean, uploading: boolean): string {
   if (signingIn) return "Signing in...";
   if (uploading) return "Publishing...";
   return "Publish";
-}
-
-function publishButtonLabel(
-  actionLabel: string,
-  hasMedia: boolean,
-  isFree: boolean,
-): string {
-  if (!hasMedia || actionLabel !== "Publish") return actionLabel;
-  if (isFree) return COPY.publishForFree;
-  return actionLabel;
 }

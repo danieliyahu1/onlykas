@@ -106,7 +106,7 @@ describe("creator publish experience", () => {
     );
   });
 
-  it("reads a zero price as free and any amount as paid", async () => {
+  it("keeps one Publish label whatever the price", async () => {
     const user = userEvent.setup();
     renderPage();
     await user.upload(
@@ -120,9 +120,7 @@ describe("creator publish experience", () => {
 
     await user.clear(price);
     await user.type(price, "0");
-    expect(
-      screen.getByRole("button", { name: "Publish for free" }),
-    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeVisible();
 
     await user.clear(price);
     await user.type(price, "0.1");
@@ -140,7 +138,7 @@ describe("creator publish experience", () => {
     const price = screen.getByLabelText(/Price/);
     await user.clear(price);
     await user.type(price, "0");
-    await user.click(screen.getByRole("button", { name: "Publish for free" }));
+    await user.click(screen.getByRole("button", { name: "Publish" }));
 
     expect(uploadMedia).toHaveBeenCalledWith(
       expect.any(File),
