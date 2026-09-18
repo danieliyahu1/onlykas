@@ -1,6 +1,11 @@
 import { NETWORK } from "@onlykas/shared";
 import { COPY } from "./copy.js";
-import { api, authenticate, signPreparedPayment } from "./kasware.js";
+import {
+  SESSION_EXPIRED_EVENT,
+  api,
+  authenticate,
+  signPreparedPayment,
+} from "./kasware.js";
 
 const address = `kaspatest:${"q".repeat(60)}`;
 
@@ -119,6 +124,42 @@ describe("Kasware authentication", () => {
       message: COPY.serverDown,
       status: 0,
     });
+    fetchMock.mockRestore();
+  });
+
+  it("announces an expired session when a protected request is unauthorized", async () => {
+    const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "AUTHENTICATION_REQUIRED" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const listener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+
+    await expect(api("/api/profile")).rejects.toMatchObject({ status: 401 });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
+    fetchMock.mockRestore();
+  });
+
+  it("keeps the session check from announcing an expired session", async () => {
+    const fetchMock = vi.spyOn(window, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "AUTH_REQUIRED" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const listener = vi.fn();
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener);
+
+    await expect(api("/api/auth/session")).rejects.toMatchObject({
+      status: 401,
+    });
+
+    expect(listener).not.toHaveBeenCalled();
+    window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
     fetchMock.mockRestore();
   });
 });

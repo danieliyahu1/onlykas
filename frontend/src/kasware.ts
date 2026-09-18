@@ -34,14 +34,14 @@ export async function signPreparedPayment(
   signInputs?: number[],
 ): Promise<string> {
   try {
-    const inputs =
-      (JSON.parse(transaction) as { inputs?: unknown[] }).inputs ?? [];
+    const inputs = (JSON.parse(transaction) as { inputs?: unknown[] }).inputs ?? [];
     return await kasware().signPskt({
       txJsonString: transaction,
       options: {
-        signInputs: (signInputs ?? inputs.map((_, index) => index)).map(
-          (index) => ({ index, sighashType: 1 }),
-        ),
+        signInputs: (signInputs ?? inputs.map((_, index) => index)).map((index) => ({
+          index,
+          sighashType: 1,
+        })),
       },
     });
   } catch (caught) {
@@ -128,10 +128,17 @@ export async function authenticate(): Promise<string> {
   return address;
 }
 
-export async function api<T = unknown>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+export const SESSION_EXPIRED_EVENT = "onlykas:session-expired";
+
+const SESSION_PATH = "/api/auth/session";
+
+function notifySessionExpired() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
+}
+
+export async function api<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   logger.debug("api_request", {
     method: init?.method ?? "GET",
     path,
@@ -145,14 +152,13 @@ export async function api<T = unknown>(
   });
   const headerRequestId = response.headers.get("x-request-id") ?? undefined;
   const body =
-    response.status === 204
-      ? null
-      : ((await response.json()) as ApiErrorBody);
+    response.status === 204 ? null : ((await response.json()) as ApiErrorBody);
   if (!response.ok) {
     const error = toApiError(response.status, {
       ...(body ?? {}),
       requestId: body?.requestId ?? headerRequestId,
     });
+    if (response.status === 401 && path !== SESSION_PATH) notifySessionExpired();
     logger.error("api_failed", {
       method: init?.method ?? "GET",
       path,

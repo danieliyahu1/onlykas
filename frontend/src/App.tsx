@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import type { ProfileResponse } from "@onlykas/shared";
 import { COPY } from "./copy.js";
-import { authenticate, kasware, api } from "./kasware.js";
+import { authenticate, kasware, api, SESSION_EXPIRED_EVENT } from "./kasware.js";
 import { HomePage } from "./HomePage.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage } from "./CreatorPage.js";
@@ -31,6 +31,19 @@ export function App() {
   const [savingName, setSavingName] = useState(false);
 
   const { toast, showToast, dismissToast } = useToast();
+  const signedIn = useRef(false);
+
+  useEffect(() => {
+    signedIn.current = address !== null;
+  }, [address]);
+
+  useEffect(() => {
+    const expired = () => {
+      if (signedIn.current) window.location.reload();
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, expired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expired);
+  }, []);
 
   useEffect(() => {
     if (!address) {
@@ -89,7 +102,7 @@ export function App() {
     const changed = () => {
       setAddress(null);
       dismissToast();
-      void api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+      void logoutAndReload();
     };
     wallet.on("accountsChanged", changed);
     wallet.on("networkChanged", changed);
@@ -119,7 +132,17 @@ export function App() {
   async function signOut() {
     setAddress(null);
     dismissToast();
+    await logoutAndReload();
+  }
+
+  async function logoutAndReload() {
     await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    window.location.reload();
+  }
+
+  async function signInAndRefresh() {
+    const authenticatedAddress = await signIn();
+    if (authenticatedAddress) window.location.reload();
   }
 
   async function saveName() {
@@ -180,7 +203,7 @@ export function App() {
               <button
                 className="nav-link"
                 disabled={signingIn || checkingSession}
-                onClick={() => void signIn()}
+                onClick={() => void signInAndRefresh()}
                 aria-label="Sign in with Kasware"
                 title="Sign in with Kasware"
               >
