@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import type { PostResponse } from "@onlykas/shared";
-import { api, signPreparedPayment } from "./kasware.js";
+import { isVideoMedia, type PostResponse } from "@onlykas/shared";
+import { api } from "./kasware.js";
+import { unlockPost } from "./purchase.js";
 import { Toast, useToast } from "./Toast.js";
+import { Spinner } from "./Spinner.js";
 import { HomeLink, Message } from "./Message.js";
 import { errorText } from "./errors.js";
 import { formatKas, shortenAddress } from "./format.js";
@@ -50,7 +52,12 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
     showToast(notice, "notice");
   }, [notice, showToast]);
 
-  if (loading) return <Message title="Loading..." />;
+  if (loading)
+    return (
+      <Message title="Loading..." center>
+        <Spinner />
+      </Message>
+    );
   if (!post)
     return (
       <Message title={loadError ?? "This post isn't available."}>
@@ -66,15 +73,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
     setBusy("unlock");
     dismissToast();
     try {
-      const prepared = await api<{ id: string; transaction: string }>(
-        `/api/posts/${currentPost.id}/payments/prepare`,
-        { method: "POST" },
-      );
-      const signed = await signPreparedPayment(prepared.transaction);
-      const result = await api<{ state: string; message?: string }>(
-        `/api/payments/${prepared.id}/finalize`,
-        { method: "POST", body: JSON.stringify({ signedTransaction: signed }) },
-      );
+      const result = await unlockPost(currentPost.id);
       if (result.state === "CONFIRMED") {
         setPost({ ...currentPost, canView: true });
         showToast(result.message ?? "Unlocked.", "success");
@@ -110,7 +109,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
     }
   }
 
-  const isVideo = currentPost.mediaType.startsWith("video/");
+  const isVideo = isVideoMedia(currentPost.mediaType);
   const mediaLabel = currentPost.caption || (isVideo ? "Video" : "Photo");
   const mediaUrl = `/api/posts/${encodeURIComponent(currentPost.id)}/media`;
 
@@ -140,10 +139,11 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
         ) : (
           <div className="post-actions">
             <button
-              className="primary"
+              className="buy"
               disabled={busy !== null || signingIn}
               onClick={() => void unlock()}
             >
+              {busy === "unlock" && <Spinner />}
               {busy === "unlock"
                 ? "Unlocking..."
                 : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
@@ -153,6 +153,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
               disabled={busy !== null || signingIn}
               onClick={() => void checkSubscription()}
             >
+              {busy === "subscription" && <Spinner />}
               {busy === "subscription"
                 ? "Checking subscription..."
                 : "Already subscribed?"}

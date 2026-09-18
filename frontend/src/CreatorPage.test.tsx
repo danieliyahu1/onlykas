@@ -88,6 +88,35 @@ describe("CreatorPage subscription actions", () => {
     await waitFor(() => expect(screen.getByText("Subscribed")).toBeVisible());
   });
 
+  it("shows preparing before wallet approval and confirming after", async () => {
+    let resolveSign!: (value: string) => void;
+    const sign = new Promise<string>((resolve) => {
+      resolveSign = resolve;
+    });
+    let resolveFinalize!: (value: { state: string }) => void;
+    const finalize = new Promise<{ state: string }>((resolve) => {
+      resolveFinalize = resolve;
+    });
+    vi.mocked(api)
+      .mockResolvedValueOnce(creator(false, true))
+      .mockResolvedValueOnce({ id: "purchase", transaction: "{}", signInputs: [1] })
+      .mockImplementationOnce(() => finalize)
+      .mockResolvedValueOnce(creator(false, true, true));
+    vi.mocked(signPreparedPayment).mockImplementationOnce(() => sign);
+    const user = userEvent.setup();
+    renderCreator(consumerAddress);
+
+    await user.click(await screen.findByRole("button", { name: "Subscribe" }));
+
+    expect(await screen.findByRole("button", { name: "Preparing..." })).toBeDisabled();
+
+    resolveSign("signed");
+    expect(await screen.findByRole("button", { name: "Confirming..." })).toBeDisabled();
+
+    resolveFinalize({ state: "CONFIRMED" });
+    await waitFor(() => expect(screen.getByText("Subscribed")).toBeVisible());
+  });
+
   it("uses the wallet address as identity when the creator has no name", async () => {
     vi.mocked(api).mockResolvedValueOnce(unnamedCreator());
     renderCreator(null);
@@ -98,7 +127,7 @@ describe("CreatorPage subscription actions", () => {
     expect(screen.getByRole("button", { name: "Copy Kaspa address" })).toBeVisible();
   });
 
-  it("shows a lock state for every post on the creator profile", async () => {
+  it("shows locked posts with an unlock action and unlocked posts with a watch link", async () => {
     vi.mocked(api).mockResolvedValueOnce({
       ...creator(false, true),
       posts: [
@@ -108,10 +137,42 @@ describe("CreatorPage subscription actions", () => {
     });
     renderCreator(null);
 
-    expect(await screen.findByText("Locked")).toBeVisible();
-    expect(screen.getByText("Unlocked")).toBeVisible();
+    expect(await screen.findByRole("button", { name: /unlock/i })).toBeVisible();
     expect(screen.getByText("Locked one")).toBeVisible();
     expect(screen.getByText("Open one")).toBeVisible();
+    expect(screen.getByRole("link", { name: /watch/i })).toHaveAttribute(
+      "href",
+      "/post/open-post",
+    );
+  });
+
+  it("buys a locked post directly from the profile card", async () => {
+    vi.mocked(api)
+      .mockResolvedValueOnce({
+        ...creator(false, true),
+        posts: [post("locked-post", "Locked one", false)],
+      })
+      .mockResolvedValueOnce({ id: "pay-1", transaction: "{}" })
+      .mockResolvedValueOnce({ state: "CONFIRMED", message: "Unlocked." });
+    vi.mocked(signPreparedPayment).mockResolvedValue("signed");
+    const user = userEvent.setup();
+    renderCreator(consumerAddress);
+
+    await user.click(await screen.findByRole("button", { name: /unlock/i }));
+
+    expect(api).toHaveBeenCalledWith("/api/posts/locked-post/payments/prepare", {
+      method: "POST",
+    });
+    expect(signPreparedPayment).toHaveBeenCalledWith("{}");
+    expect(api).toHaveBeenCalledWith("/api/payments/pay-1/finalize", {
+      method: "POST",
+      body: JSON.stringify({ signedTransaction: "signed" }),
+    });
+    expect(await screen.findByRole("link", { name: /watch/i })).toHaveAttribute(
+      "href",
+      "/post/locked-post",
+    );
+    expect(screen.getByText("Unlocked.")).toBeVisible();
   });
 
   it("refreshes after the viewer signs in without a page refresh", async () => {

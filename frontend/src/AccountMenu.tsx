@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Icon } from "./Icons.js";
+import { Spinner } from "./Spinner.js";
 import { shortenAddress } from "./format.js";
 
 type AccountMenuProps = {
@@ -28,7 +29,8 @@ export function AccountMenu({
   return (
     <details className="account">
       <summary aria-label={summaryLabel(loading, error, displayName)}>
-        <Icon name="user" /> {greeting(loading, error, displayName)}
+        {loading ? <Spinner /> : <Icon name="user" />}{" "}
+        {greeting(loading, error, displayName)}
       </summary>
       <div className="account-menu">
         <label htmlFor="display-name">Display name</label>
@@ -43,7 +45,11 @@ export function AccountMenu({
           disabled={saving || loading || Boolean(error)}
           onClick={onSaveName}
         >
-          {saving ? "Saving..." : "Save"} <Icon name="check" />
+          <span className="menu-label">
+            {saving && <Spinner />}
+            {saving ? "Saving..." : "Save"}
+          </span>
+          <Icon name="check" />
         </button>
         <p className="account-address">{shortenAddress(address)}</p>
         <Link className="menu-button" to={`/creator/${address}`}>

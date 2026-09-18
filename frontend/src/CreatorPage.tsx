@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { CreatorResponse, PostResponse } from "@onlykas/shared";
+import {
+  isFreePost,
+  isVideoMedia,
+  type CreatorResponse,
+  type PostResponse,
+} from "@onlykas/shared";
 import { api, signPreparedPayment } from "./kasware.js";
+import { finalizeSubscription, prepareSubscription, unlockPost } from "./purchase.js";
+import { PostTile, PostTileAction, PostTileMedia } from "./PostTile.js";
+import { Spinner } from "./Spinner.js";
 import { Toast, useToast } from "./Toast.js";
-import { LockIcon } from "./Icons.js";
 import { HomeLink, Message } from "./Message.js";
+import { COPY } from "./copy.js";
 import { errorText } from "./errors.js";
-import { formatKas, shortenAddress } from "./format.js";
+import { formatKas, relativeTime, shortenAddress } from "./format.js";
 import type { WalletProps } from "./wallet.js";
 
 type CreatorPageProps = WalletProps & {
   onVisibilityChange?: (isPublic: boolean) => Promise<unknown>;
 };
+
+type SubscriptionStage = "preparing" | "confirming" | null;
 
 export function CreatorPage({
   address,
@@ -21,8 +31,8 @@ export function CreatorPage({
 }: CreatorPageProps) {
   const { address: creatorAddress = "" } = useParams();
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  const [busy, setBusy] = useState<SubscriptionStage>(null);
+  const [busyPostId, setBusyPostId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
@@ -35,8 +45,6 @@ export function CreatorPage({
     if (isNewCreator) {
       setLoading(true);
       setCreator(null);
-    } else {
-      setRefreshing(true);
     }
     setLoadError(null);
     try {
@@ -52,7 +60,6 @@ export function CreatorPage({
     } finally {
       if (currentRequest === requestId.current) {
         setLoading(false);
-        setRefreshing(false);
       }
     }
   }
@@ -61,7 +68,12 @@ export function CreatorPage({
     void loadCreator();
   }, [creatorAddress, address]);
 
-  if (loading) return <Message title="Loading..." />;
+  if (loading)
+    return (
+      <Message title="Loading..." center>
+        <Spinner />
+      </Message>
+    );
   if (!creator)
     return (
       <Message title={loadError ?? "This creator isn't available."}>
@@ -78,7 +90,7 @@ export function CreatorPage({
     const wallet = address ?? (await signIn());
     if (!wallet) return;
     const actingAsOwner = wallet === currentCreator.address;
-    setBusy(true);
+    setBusy("preparing");
     dismissToast();
     try {
       const prepared = await prepareSubscription(actingAsOwner, currentCreator.address);
@@ -86,6 +98,7 @@ export function CreatorPage({
         prepared.transaction,
         prepared.signInputs,
       );
+      setBusy("confirming");
       const result = await finalizeSubscription(
         actingAsOwner,
         prepared.id,
@@ -103,7 +116,36 @@ export function CreatorPage({
     } catch (error) {
       showToast(errorText(error, "Payment failed. Nothing was charged."), "error");
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  }
+
+  async function buyPost(target: PostResponse) {
+    const buyer = address ?? (await signIn());
+    if (!buyer) return;
+    setBusyPostId(target.id);
+    dismissToast();
+    try {
+      const result = await unlockPost(target.id);
+      if (result.state === "CONFIRMED") {
+        setCreator((previous) =>
+          previous
+            ? {
+                ...previous,
+                posts: previous.posts.map((p) =>
+                  p.id === target.id ? { ...p, canView: true } : p,
+                ),
+              }
+            : previous,
+        );
+        showToast(result.message ?? COPY.unlocked, "success");
+      } else {
+        showToast(result.message ?? COPY.purchasePending, "info");
+      }
+    } catch (error) {
+      showToast(errorText(error, "Payment failed. Nothing was charged."), "error");
+    } finally {
+      setBusyPostId(null);
     }
   }
 
@@ -157,6 +199,7 @@ export function CreatorPage({
                 disabled={visibilityBusy}
                 onClick={() => void toggleVisibility()}
               >
+                {visibilityBusy && <Spinner />}
                 {visibilityBusy ? "Saving..." : "Change"}
               </button>
             </div>
@@ -164,20 +207,26 @@ export function CreatorPage({
         </div>
         {showSubscription && (
           <div className="access-strip">
-            <p className="access-facts">One day of access · 10 KAS</p>
+            <p className="access-facts">{COPY.membershipAccess}</p>
             <SubscriptionAction
               membership={currentCreator.membership}
               owner={owner}
-              busy={busy}
-              disabled={busy || signingIn}
+              stage={busy}
+              disabled={busy !== null || signingIn}
               onAction={() => void membershipAction()}
             />
-            {refreshing && <span className="access-status">Refreshing...</span>}
           </div>
         )}
-        <div className="post-grid">
+        <div className="creator-posts">
           {currentCreator.posts.length ? (
-            currentCreator.posts.map((post) => <PostCard key={post.id} post={post} />)
+            currentCreator.posts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                busy={busyPostId === post.id}
+                onBuy={buyPost}
+              />
+            ))
           ) : (
             <div className="empty-posts">
               <p>No posts yet.</p>
@@ -195,46 +244,22 @@ export function CreatorPage({
   );
 }
 
-async function prepareSubscription(actingAsOwner: boolean, creatorAddress: string) {
-  const path = actingAsOwner
-    ? "/api/membership/offers/prepare"
-    : `/api/membership/${encodeURIComponent(creatorAddress)}/prepare`;
-  return api<{ id: string; transaction: string; signInputs: number[] }>(path, {
-    method: "POST",
-  });
-}
-
-async function finalizeSubscription(
-  actingAsOwner: boolean,
-  preparedId: string,
-  signedTransaction: string,
-) {
-  const path = actingAsOwner
-    ? `/api/membership/offers/${preparedId}/finalize`
-    : `/api/membership/purchases/${preparedId}/finalize`;
-  return api<{ state: string }>(path, {
-    method: "POST",
-    body: JSON.stringify({ signedTransaction }),
-  });
-}
-
-function subscriptionLabel(owner: boolean, busy: boolean): string {
-  if (owner && busy) return "Starting...";
-  if (owner) return "Start subscription";
-  if (busy) return "Confirming payment...";
-  return "Subscribe";
+function subscriptionLabel(owner: boolean, stage: SubscriptionStage): string {
+  if (stage === "confirming") return "Confirming...";
+  if (stage === "preparing") return owner ? "Starting..." : "Preparing...";
+  return owner ? "Start subscription" : "Subscribe";
 }
 
 function SubscriptionAction({
   membership,
   owner,
-  busy,
+  stage,
   disabled,
   onAction,
 }: {
   membership: CreatorResponse["membership"];
   owner: boolean;
-  busy: boolean;
+  stage: SubscriptionStage;
   disabled: boolean;
   onAction: () => void;
 }) {
@@ -243,29 +268,55 @@ function SubscriptionAction({
   if (!canStart) return <span className="access-status">Subscription live</span>;
   return (
     <button className="primary" disabled={disabled} onClick={onAction}>
-      {subscriptionLabel(owner, busy)}
+      {stage !== null && <Spinner />}
+      {subscriptionLabel(owner, stage)}
     </button>
   );
 }
 
-function PostCard({ post }: { post: PostResponse }) {
-  const free = post.priceSompi === "0";
+function PostCard({
+  post,
+  busy,
+  onBuy,
+}: {
+  post: PostResponse;
+  busy: boolean;
+  onBuy: (post: PostResponse) => void;
+}) {
+  const free = isFreePost(post.priceSompi);
+  const unlocked = free || post.canView;
+  const isVideo = isVideoMedia(post.mediaType);
+  const mediaUrl = `/api/posts/${encodeURIComponent(post.id)}/media`;
+
   return (
-    <Link to={`/post/${post.id}`} className="post-card">
-      <span
-        className={`post-lock ${free ? "is-free" : post.canView ? "unlocked" : "locked"}`}
-      >
-        {!free && <LockIcon open={post.canView} />}
-        <span className="sr-only">
-          {free ? "Free" : post.canView ? "Unlocked" : "Locked"}
-        </span>
-      </span>
-      <div className="post-card-copy">
-        <p>{post.caption}</p>
-      </div>
-      <span className={free ? "post-price free" : "post-price"}>
-        {free ? "Free" : `${formatKas(post.priceSompi)} KAS`}
-      </span>
-    </Link>
+    <PostTile
+      media={
+        <PostTileMedia
+          thumbnail={unlocked && !isVideo ? mediaUrl : undefined}
+          overlay={!unlocked ? "locked" : isVideo ? "video" : "none"}
+        />
+      }
+      caption={post.caption}
+      date={relativeTime(post.publishedAt)}
+      action={
+        <PostTileAction>
+          {unlocked ? (
+            <Link className="secondary" to={`/post/${post.id}`}>
+              {free ? "Watch · Free" : "Watch"}
+            </Link>
+          ) : (
+            <button
+              className="buy"
+              type="button"
+              disabled={busy}
+              onClick={() => onBuy(post)}
+            >
+              {busy && <Spinner />}
+              {busy ? "Unlocking..." : `Unlock · ${formatKas(post.priceSompi)} KAS`}
+            </button>
+          )}
+        </PostTileAction>
+      }
+    />
   );
 }

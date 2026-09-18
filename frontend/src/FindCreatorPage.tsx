@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { isKaspaTestnetAddress, type CreatorSearchResult } from "@onlykas/shared";
 import { api, ApiError } from "./kasware.js";
+import { Spinner } from "./Spinner.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
 
 export function FindCreatorPage() {
@@ -83,6 +84,7 @@ export function FindCreatorPage() {
           </p>
         )}
         <button className="primary" type="submit" disabled={searching}>
+          {searching && <Spinner />}
           {searching ? "Searching..." : "Search"}
         </button>
       </form>

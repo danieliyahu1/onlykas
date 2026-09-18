@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CreatorSearchResult } from "@onlykas/shared";
+import { COPY } from "./copy.js";
 import { LockIcon } from "./Icons.js";
 import { api } from "./kasware.js";
 import { useAsyncResource } from "./useAsyncResource.js";
@@ -27,8 +28,7 @@ export function HomePage() {
       <section className="home-section">
         <h2 className="home-section-title">Here to support a creator?</h2>
         <p className="home-lede">
-          Unlock their work or subscribe for a day. Your KAS goes straight to
-          them.
+          Unlock their work or subscribe for a day. Your KAS goes straight to them.
         </p>
         <FanCreators />
         <Link className="secondary" to="/creators">
@@ -51,7 +51,7 @@ function CreatorPreview() {
         <span className="wallet-address">kaspa:qpchy8…09rle5a7</span>
       </div>
       <div className="access-strip">
-        <p className="access-facts">One day of access · 10 KAS</p>
+        <p className="access-facts">{COPY.membershipAccess}</p>
         <span className="access-status">Subscribed</span>
       </div>
       <div className="post-grid">
@@ -74,9 +74,7 @@ function FanCreators() {
     (signal) => api<CreatorSearchResult[]>("/api/creators/public", { signal }),
     [],
   );
-  const creators = (data ?? [])
-    .filter((creator) => creator.displayName)
-    .slice(0, 4);
+  const creators = (data ?? []).filter((creator) => creator.displayName).slice(0, 4);
   if (!creators.length) return null;
   return (
     <ul className="fan-creators">

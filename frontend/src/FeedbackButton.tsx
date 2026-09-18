@@ -3,6 +3,7 @@ import { FEEDBACK_MAX_MESSAGE } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { api, ApiError } from "./kasware.js";
 import { logger } from "./logger.js";
+import { Spinner } from "./Spinner.js";
 import { Toast, useToast } from "./Toast.js";
 
 export function FeedbackButton() {
@@ -103,6 +104,7 @@ export function FeedbackButton() {
           )}
           <div className="feedback-actions">
             <button type="submit" className="primary" disabled={sending}>
+              {sending && <Spinner />}
               {sending ? "Sending..." : COPY.feedbackSend}
             </button>
           </div>

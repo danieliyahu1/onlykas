@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import type { CreatorSearchResult } from "@onlykas/shared";
 import { api, ApiError } from "./kasware.js";
+import { Spinner } from "./Spinner.js";
 import { useAsyncResource } from "./useAsyncResource.js";
 
 export function PublicCreatorsPage() {
@@ -31,7 +32,11 @@ export function PublicCreatorsPage() {
           {error}
         </p>
       )}
-      {loading && <p className="feedback inline">Loading...</p>}
+      {loading && (
+        <p className="feedback inline">
+          <Spinner /> Loading...
+        </p>
+      )}
       {!loading && !error && creators.length === 0 && (
         <p className="feedback inline">No creators yet.</p>
       )}

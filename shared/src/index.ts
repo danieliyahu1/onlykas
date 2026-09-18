@@ -105,13 +105,15 @@ export function parseKasToSompi(value: string): bigint | null {
 export function parsePostPrice(value: string): bigint | null {
   const match = /^(\d+)(?:\.(\d{1,8}))?$/.exec(value.trim());
   if (!match || !match[1]) return null;
-  return (
-    BigInt(match[1]) * 100_000_000n + BigInt((match[2] ?? "").padEnd(8, "0"))
-  );
+  return BigInt(match[1]) * 100_000_000n + BigInt((match[2] ?? "").padEnd(8, "0"));
 }
 
 export function isFreePost(priceSompi: string): boolean {
   return priceSompi === "0";
+}
+
+export function isVideoMedia(mediaType: MediaType): boolean {
+  return mediaType.startsWith("video/");
 }
 
 export function validatePost(caption: string, price: string): string[] {

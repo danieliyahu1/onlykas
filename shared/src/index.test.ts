@@ -3,6 +3,7 @@ import {
   MAX_IMAGE_BYTES,
   isFreePost,
   isKaspaTestnetAddress,
+  isVideoMedia,
   mediaHintError,
   parseKasToSompi,
   parsePostPrice,
@@ -39,6 +40,12 @@ describe("post validation", () => {
   it("flags free posts by their stored sompi value", () => {
     expect(isFreePost("0")).toBe(true);
     expect(isFreePost("1")).toBe(false);
+  });
+
+  it("flags video media types", () => {
+    expect(isVideoMedia("video/mp4")).toBe(true);
+    expect(isVideoMedia("video/webm")).toBe(true);
+    expect(isVideoMedia("image/png")).toBe(false);
   });
 
   it("normalizes text and enforces visible character limits", () => {

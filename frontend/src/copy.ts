@@ -28,6 +28,7 @@ export const COPY = {
     "You are supporting this creator with {price} KAS. Kasware will show the network fee before you approve. This payment cannot be reversed.",
   paymentCancelled: "Payment cancelled.",
   unlocked: "Unlocked.",
+  membershipAccess: "One day of access · 10 KAS",
   insufficientFunds: "You need enough KAS for the post and the network fee.",
   transactionRejected: "Transaction rejected. Nothing was charged. Try again.",
   purchasePending: "Purchase pending. Do not pay again.",

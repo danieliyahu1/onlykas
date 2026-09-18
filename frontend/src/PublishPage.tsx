@@ -4,6 +4,7 @@ import { mediaHintError, validatePost } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { uploadMedia, type UploadResult } from "./upload.js";
 import { Icon } from "./Icons.js";
+import { Spinner } from "./Spinner.js";
 import { errorText } from "./errors.js";
 import { Toast, useToast } from "./Toast.js";
 import type { WalletProps } from "./wallet.js";
@@ -89,9 +90,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
       const result = await uploadFile(selectedFile);
       if (!result) return;
       navigate(`/post/${result.id}`, {
-        state: result.duplicate
-          ? { notice: COPY.mediaAlreadyPublished }
-          : undefined,
+        state: result.duplicate ? { notice: COPY.mediaAlreadyPublished } : undefined,
       });
     } finally {
       setSubmitting(false);
@@ -184,6 +183,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
 
             <p className="publish-free-note">Publishing is free.</p>
             <button className="primary publish-action" disabled={!selectedFile || busy}>
+              {busy && <Spinner />}
               {actionLabel}
             </button>
           </div>

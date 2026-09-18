@@ -15,6 +15,7 @@ import { SocialLinks } from "./SocialLinks.js";
 import { GlobalSearch } from "./GlobalSearch.js";
 import { AccountMenu } from "./AccountMenu.js";
 import { HomeLink, Message } from "./Message.js";
+import { Spinner } from "./Spinner.js";
 import { errorText } from "./errors.js";
 import { Toast, useToast } from "./Toast.js";
 
@@ -183,6 +184,7 @@ export function App() {
                 aria-label="Sign in with Kasware"
                 title="Sign in with Kasware"
               >
+                {(signingIn || checkingSession) && <Spinner />}
                 {signInLabel(checkingSession, signingIn)}
               </button>
             )}
