@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { PostResponse } from "@onlykas/shared";
@@ -163,6 +163,20 @@ describe("PostPage", () => {
         </Routes>
       </MemoryRouter>,
     );
+
+    expect(await screen.findByRole("img", { name: "A private moment" })).toBeVisible();
+    expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it("refetches access when the tab regains focus", async () => {
+    vi.mocked(api)
+      .mockResolvedValueOnce(post("focus-post", "A private moment", false))
+      .mockResolvedValueOnce(post("focus-post", "A private moment", true));
+    renderPost(post("focus-post", "A private moment", false), consumerAddress);
+
+    expect(await screen.findByRole("button", { name: /unlock for/i })).toBeVisible();
+
+    fireEvent.focus(window);
 
     expect(await screen.findByRole("img", { name: "A private moment" })).toBeVisible();
     expect(api).toHaveBeenCalledTimes(2);

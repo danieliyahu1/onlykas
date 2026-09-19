@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { isVideoMedia, type PostResponse } from "@onlykas/shared";
 import { api } from "./kasware.js";
@@ -15,7 +15,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const { id = "" } = useParams();
   const location = useLocation();
   const [post, setPost] = useState<PostResponse | null>(null);
-  const [busy, setBusy] = useState<null | "unlock" | "subscription">(null);
+  const [busy, setBusy] = useState<null | "unlock">(null);
   const [mediaError, setMediaError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -23,28 +23,38 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const notice = (location.state as { notice?: string } | null)?.notice;
   const shownNotice = useRef(false);
 
+  const loadPost = useCallback(async () => {
+    try {
+      const value = await api<PostResponse>(`/api/posts/${encodeURIComponent(id)}`);
+      setPost(value);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(errorText(error, "This post isn't available."));
+      setPost(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
-    let active = true;
     setPost(null);
     setLoading(true);
     setMediaError(false);
     setLoadError(null);
-    void (async () => {
-      try {
-        const value = await api<PostResponse>(`/api/posts/${encodeURIComponent(id)}`);
-        if (active) setPost(value);
-      } catch (error) {
-        if (!active) return;
-        setLoadError(errorText(error, "This post isn't available."));
-        setPost(null);
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
+    void loadPost();
+  }, [address, loadPost]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") void loadPost();
     };
-  }, [address, id]);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [loadPost]);
 
   useEffect(() => {
     if (!notice || shownNotice.current) return;
@@ -82,28 +92,6 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
       showToast(result.message ?? "Your payment is confirming. Don't pay again.");
     } catch (error) {
       showToast(errorText(error, "Payment failed. Nothing was charged."), "error");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function checkSubscription() {
-    const buyer = address ?? (await signIn());
-    if (!buyer) return;
-    setBusy("subscription");
-    dismissToast();
-    try {
-      const refreshed = await api<PostResponse>(
-        `/api/posts/${encodeURIComponent(currentPost.id)}`,
-      );
-      setPost(refreshed);
-      if (!refreshed.canView)
-        showToast("Your subscription doesn't include this creator.", "error");
-    } catch (error) {
-      showToast(
-        errorText(error, "Couldn't check your subscription. Try again."),
-        "error",
-      );
     } finally {
       setBusy(null);
     }
@@ -147,16 +135,6 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
               {busy === "unlock"
                 ? "Unlocking..."
                 : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
-            </button>
-            <button
-              className="secondary"
-              disabled={busy !== null || signingIn}
-              onClick={() => void checkSubscription()}
-            >
-              {busy === "subscription" && <Spinner />}
-              {busy === "subscription"
-                ? "Checking subscription..."
-                : "Already subscribed?"}
             </button>
           </div>
         )}
