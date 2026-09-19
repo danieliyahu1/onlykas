@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
-import type { ProfileResponse } from "@onlykas/shared";
+import { NETWORK, type ProfileResponse } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { authenticate, kasware, api, SESSION_EXPIRED_EVENT } from "./kasware.js";
 import { HomePage } from "./HomePage.js";
@@ -18,6 +18,7 @@ import { HomeLink, Message } from "./Message.js";
 import { Spinner } from "./Spinner.js";
 import { errorText } from "./errors.js";
 import { Toast, useToast } from "./Toast.js";
+import { reloadPage } from "./navigation.js";
 
 export function App() {
   const mainRef = useRef<HTMLElement>(null);
@@ -31,15 +32,15 @@ export function App() {
   const [savingName, setSavingName] = useState(false);
 
   const { toast, showToast, dismissToast } = useToast();
-  const signedIn = useRef(false);
+  const signedInAddress = useRef<string | null>(null);
 
   useEffect(() => {
-    signedIn.current = address !== null;
+    signedInAddress.current = address;
   }, [address]);
 
   useEffect(() => {
     const expired = () => {
-      if (signedIn.current) window.location.reload();
+      if (signedInAddress.current) reloadPage();
     };
     window.addEventListener(SESSION_EXPIRED_EVENT, expired);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expired);
@@ -78,6 +79,7 @@ export function App() {
 
   useEffect(() => {
     let active = true;
+    let reconciling = false;
     let wallet;
     try {
       wallet = kasware();
@@ -85,25 +87,45 @@ export function App() {
       if (active) setCheckingSession(false);
       return;
     }
-    void (async () => {
+    const reconcile = async () => {
+      const signedIn = signedInAddress.current;
+      if (!signedIn || reconciling) return;
+      reconciling = true;
       try {
-        const [accounts, session] = await Promise.all([
-          wallet.getAccounts(),
-          api<{ address: string }>("/api/auth/session"),
-        ]);
-        if (active && accounts[0] && accounts[0] === session.address)
-          setAddress(session.address);
+        const accounts = await wallet.getAccounts().catch(() => []);
+        const walletAddress = accounts[0];
+        if (!walletAddress) return;
+        if (!sameAddress(walletAddress, signedIn)) {
+          await signOut();
+          return;
+        }
+        const network = await wallet.getNetwork().catch(() => NETWORK);
+        if (network !== NETWORK) showToast(COPY.wrongNetwork, "notice");
+      } finally {
+        reconciling = false;
+      }
+    };
+    void (async () => {
+      let restored: string | null = null;
+      try {
+        const session = await api<{ address: string }>("/api/auth/session");
+        restored = session.address;
+        if (active) setAddress(session.address);
       } catch {
         // A missing or expired server session simply requires sign-in.
-      } finally {
-        if (active) setCheckingSession(false);
       }
+      if (restored && active) {
+        const accounts = await wallet.getAccounts().catch(() => []);
+        if (accounts[0] && !sameAddress(accounts[0], restored)) {
+          await signOut();
+          return;
+        }
+      }
+      if (active) setCheckingSession(false);
     })();
     const changed = () => {
-      if (!signedIn.current) return;
-      setAddress(null);
-      dismissToast();
-      void logoutAndReload();
+      if (!signedInAddress.current) return;
+      void reconcile();
     };
     wallet.on("accountsChanged", changed);
     wallet.on("networkChanged", changed);
@@ -138,12 +160,7 @@ export function App() {
 
   async function logoutAndReload() {
     await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    window.location.reload();
-  }
-
-  async function signInAndRefresh() {
-    const authenticatedAddress = await signIn();
-    if (authenticatedAddress) window.location.reload();
+    reloadPage();
   }
 
   async function saveName() {
@@ -204,7 +221,7 @@ export function App() {
               <button
                 className="nav-link"
                 disabled={signingIn || checkingSession}
-                onClick={() => void signInAndRefresh()}
+                onClick={() => void signIn()}
                 aria-label="Sign in with Kasware"
                 title="Sign in with Kasware"
               >
@@ -278,4 +295,8 @@ function signInLabel(checkingSession: boolean, signingIn: boolean): string {
   if (checkingSession) return "Checking session...";
   if (signingIn) return "Signing in...";
   return "Sign in";
+}
+
+function sameAddress(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
 }
