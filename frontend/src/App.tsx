@@ -100,6 +100,7 @@ export function App() {
       }
     })();
     const changed = () => {
+      if (!signedIn.current) return;
       setAddress(null);
       dismissToast();
       void logoutAndReload();
