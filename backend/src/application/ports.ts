@@ -133,6 +133,8 @@ export interface PaymentGateway {
     buyer: string,
     creator: string,
     amountSompi: string,
+    postId: string,
+    mediaDigest: string,
   ): Promise<boolean>;
 }
 

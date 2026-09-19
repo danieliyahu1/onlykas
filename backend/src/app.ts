@@ -1042,6 +1042,8 @@ async function purchaseAccess(d: AppDependencies, post: Post, buyer: string) {
     buyer,
     post.creator,
     post.priceSompi,
+    post.id,
+    post.mediaDigest,
   );
   metrics.paymentVerificationAttempt(ok);
   return ok;
@@ -1060,6 +1062,8 @@ async function purchasedPostIds(d: AppDependencies, posts: Post[], buyer: string
         buyer,
         post.creator,
         post.priceSompi,
+        post.id,
+        post.mediaDigest,
       );
       metrics.paymentVerificationAttempt(ok);
       if (ok) unlocked.add(post.id);

@@ -4,6 +4,8 @@ import type { PaymentGateway } from "./application/ports.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 import { platformFeeSompi } from "./payment-fee.js";
+import { parsePpvPayload, ppvPayload } from "./ppv-payload.js";
+import { submitMembershipTransactionOverWrpc } from "./membership-gateway.js";
 
 const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const ZERO_SUBNETWORK = "0".repeat(40);
@@ -12,8 +14,9 @@ const VERIFY_BASE_DELAY_MS = 1_000;
 const VERIFY_MAX_DELAY_MS = 4_000;
 const CHANGE_DUST_SOMPI = 2_200_000n;
 type Sleep = (milliseconds: number) => Promise<void>;
+type PaymentTransactionRelay = (signedTransaction: string) => Promise<string>;
 type Utxo = { outpoint: { transactionId: string; index: number }; utxoEntry: { amount: string; scriptPublicKey: { scriptPublicKey: string }; blockDaaScore: string; isCoinbase: boolean } };
-type ChainTransaction = { is_accepted?: boolean; inputs?: { previous_outpoint_resolved?: { script_public_key_address?: string } }[]; outputs?: { amount?: string | number; script_public_key_address?: string }[] };
+type ChainTransaction = { is_accepted?: boolean; payload?: string; inputs?: { previous_outpoint_resolved?: { script_public_key_address?: string } }[]; outputs?: { amount?: string | number; script_public_key_address?: string }[] };
 
 export class KaspaPaymentGateway implements PaymentGateway {
 constructor(
@@ -22,6 +25,7 @@ constructor(
     private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
     private readonly logger: Logger = defaultLogger,
     private readonly metrics: Metrics = defaultMetrics,
+    private readonly relay: PaymentTransactionRelay = submitMembershipTransactionOverWrpc,
   ) {}
 
   async prepare(post: Post, buyer: string): Promise<PreparedPayment> {
@@ -33,6 +37,7 @@ constructor(
     const fee = platformFeeSompi(amount);
     const creatorAmount = amount - fee;
     const outputCount = fee > 0n ? 3 : 2;
+    const payload = ppvPayload(post.id, post.mediaDigest);
     const rate = estimate.normalBuckets[0]?.feerate ?? estimate.priorityBucket.feerate;
     const buyerScript = scriptFor(buyer);
     const selected: Utxo[] = [];
@@ -41,9 +46,9 @@ constructor(
       if (`0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}` !== buyerScript) continue;
       selected.push(utxo);
       total += BigInt(utxo.utxoEntry.amount);
-      if (total >= amount + estimatedFee(selected, rate, outputCount)) break;
+      if (total >= amount + estimatedFee(selected, rate, outputCount, payload)) break;
     }
-    const networkFee = estimatedFee(selected, rate, outputCount);
+    const networkFee = estimatedFee(selected, rate, outputCount, payload);
     if (total < amount + networkFee) {
       this.logger.warn("payment_prepare_insufficient_funds", {
         postId: post.id,
@@ -57,7 +62,7 @@ constructor(
     if (fee > 0n) outputs.push({ value: fee.toString(), scriptPublicKey: scriptFor(this.platformFeeAddress), covenant: null });
     const change = total - amount - networkFee;
     if (change >= CHANGE_DUST_SOMPI) outputs.push({ value: change.toString(), scriptPublicKey: buyerScript, covenant: null });
-    const transaction = JSON.stringify({ id: "0".repeat(64), version: 0, inputs: selected.map((utxo) => ({ transactionId: utxo.outpoint.transactionId, index: utxo.outpoint.index, sequence: "0", sigOpCount: 1, computeBudget: 0, signatureScript: "", utxo: { amount: utxo.utxoEntry.amount, scriptPublicKey: `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}`, blockDaaScore: utxo.utxoEntry.blockDaaScore, isCoinbase: utxo.utxoEntry.isCoinbase } })), outputs, subnetworkId: ZERO_SUBNETWORK, lockTime: "0", gas: "0", storageMass: "20000", payload: "" });
+    const transaction = JSON.stringify({ id: "0".repeat(64), version: 0, inputs: selected.map((utxo) => ({ transactionId: utxo.outpoint.transactionId, index: utxo.outpoint.index, sequence: "0", sigOpCount: 1, computeBudget: 0, signatureScript: "", utxo: { amount: utxo.utxoEntry.amount, scriptPublicKey: `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey}`, blockDaaScore: utxo.utxoEntry.blockDaaScore, isCoinbase: utxo.utxoEntry.isCoinbase } })), outputs, subnetworkId: ZERO_SUBNETWORK, lockTime: "0", gas: "0", storageMass: "20000", payload });
     this.logger.debug("payment_prepared", {
       postId: post.id,
       inputCount: selected.length,
@@ -76,10 +81,14 @@ constructor(
     if (!sameTransaction(original, signed)) return this.reject("PREPARED_TRANSACTION_CHANGED");
     if (!hasAllSignatures(signed)) return this.reject("INVALID_SIGNATURES");
     await this.validateInputs(signed);
-    const result = await this.request<{ transactionId?: string; error?: string }>("submit_transaction", "/transactions", { method: "POST", body: JSON.stringify({ transaction: toSubmitTransaction(signed), allowOrphan: false }) });
-    if (result.error || !result.transactionId) return this.reject(result.error ?? "TRANSACTION_REJECTED", result.transactionId ?? null);
-    this.logger.info("payment_submitted", { transactionIdPrefix: result.transactionId.slice(0, 12) });
-    return this.status(result.transactionId);
+    let transactionId: string;
+    try {
+      transactionId = await this.relay(signedTransaction);
+    } catch (error) {
+      return this.reject(error instanceof Error ? error.message : "TRANSACTION_REJECTED");
+    }
+    this.logger.info("payment_submitted", { transactionIdPrefix: transactionId.slice(0, 12) });
+    return this.status(transactionId);
   }
 
   private reject(reason: string, transactionId: string | null = null): PaymentSubmission {
@@ -95,13 +104,15 @@ constructor(
     return { isAccepted: value?.is_accepted ? true : null, transactionId, rejection: null };
   }
 
-  async verifyPurchase(transactionId: string, buyer: string, creator: string, amountSompi: string): Promise<boolean> {
+  async verifyPurchase(transactionId: string, buyer: string, creator: string, amountSompi: string, postId: string, mediaDigest: string): Promise<boolean> {
     const tx = await this.requestRetryingMissing<ChainTransaction>(
       "verify_purchase",
       `/transactions/${transactionId}?inputs=true&outputs=true&resolve_previous_outpoints=full`,
     );
     if (!tx) return false;
     if (!tx.is_accepted || !tx.inputs?.length || !tx.outputs?.length) return false;
+    const payload = parsePpvPayload(tx.payload);
+    if (tx.payload && (!payload || payload.postId !== postId || payload.mediaDigest !== mediaDigest.toLowerCase())) return false;
     if (!tx.inputs.every((input) => input.previous_outpoint_resolved?.script_public_key_address === buyer)) return false;
     const amount = BigInt(amountSompi);
     const fee = platformFeeSompi(amount);
@@ -156,9 +167,8 @@ class KaspaRequestError extends Error {
 
 function scriptFor(address: string): string { const data = address.slice(address.lastIndexOf(":") + 1, -8).split("").map((char) => CHARSET.indexOf(char)); const bytes: number[] = []; let buffer = 0n; let bits = 0; for (const value of data) { buffer = (buffer << 5n) | BigInt(value); bits += 5; while (bits >= 8) { bits -= 8; bytes.push(Number((buffer >> BigInt(bits)) & 255n)); buffer &= (1n << BigInt(bits)) - 1n; } } if (bytes[0] !== 0 || bytes.length !== 33) throw new Error("INVALID_CREATOR_ADDRESS"); return `000020${bytes.slice(1).map((byte) => byte.toString(16).padStart(2, "0")).join("")}ac`; }
 function digest(value: string) { return createHash("sha256").update(value).digest("hex"); }
-function estimatedFee(inputs: Utxo[], rate: number, outputs: number) { if (!Number.isFinite(rate) || rate <= 0) throw new Error("INVALID_FEE_RATE"); const inputSize = inputs.length * (32 + 4 + 8 + 66 + 8 + 2); const outputSize = outputs * (8 + 2 + 8 + 34); const transactionSize = 2 + 8 + inputSize + 8 + outputSize + 8 + 20 + 8 + 32 + 8; const scriptPublicKeyMass = 10 * outputs * (2 + 34); const computeMass = transactionSize + scriptPublicKeyMass + 100 * inputs.length * 50; const estimated = BigInt(Math.ceil(computeMass * rate)); const relayFloor = 100n * BigInt(computeMass); return estimated > relayFloor ? estimated : relayFloor; }
+function estimatedFee(inputs: Utxo[], rate: number, outputs: number, payload: string) { if (!Number.isFinite(rate) || rate <= 0) throw new Error("INVALID_FEE_RATE"); const inputSize = inputs.length * (32 + 4 + 8 + 66 + 8 + 2); const outputSize = outputs * (8 + 2 + 8 + 34); const transactionSize = 2 + 8 + inputSize + 8 + outputSize + 8 + 20 + 8 + 32 + 8 + payload.length / 2; const scriptPublicKeyMass = 10 * outputs * (2 + 34); const computeMass = transactionSize + scriptPublicKeyMass + 100 * inputs.length * 50; const estimated = BigInt(Math.ceil(computeMass * rate)); const relayFloor = 100n * BigInt(computeMass); return estimated > relayFloor ? estimated : relayFloor; }
 function rejected(rejection: string, transactionId: string | null = null): PaymentSubmission { return { isAccepted: false, transactionId, rejection }; }
 function hasAllSignatures(transaction: Record<string, unknown>) { return Array.isArray(transaction.inputs) && transaction.inputs.length > 0 && transaction.inputs.every((input) => { const signature = (input as Record<string, unknown>).signatureScript; return typeof signature === "string" && signature.length > 0 && signature.length % 2 === 0 && /^[0-9a-f]+$/i.test(signature) && signature.endsWith("01"); }); }
 function isTransactionShape(transaction: Record<string, unknown>) { return transaction.version === 0 && Array.isArray(transaction.inputs) && transaction.inputs.length > 0 && Array.isArray(transaction.outputs) && transaction.outputs.length > 0 && typeof transaction.subnetworkId === "string" && typeof transaction.lockTime === "string" && typeof transaction.gas === "string" && typeof transaction.storageMass === "string" && typeof transaction.payload === "string"; }
 function sameTransaction(original: Record<string, unknown>, signed: Record<string, unknown>) { const keys = ["version", "outputs", "subnetworkId", "lockTime", "gas", "storageMass", "payload"]; if (!keys.every((key) => JSON.stringify(original[key]) === JSON.stringify(signed[key]))) return false; const normalize = (value: unknown) => (value as Record<string, unknown>[]).map((input) => { const utxo = input.utxo as Record<string, unknown>; return { transactionId: input.transactionId, index: input.index, sequence: input.sequence, sigOpCount: input.sigOpCount, computeBudget: input.computeBudget ?? 0, utxo: { amount: utxo.amount, scriptPublicKey: utxo.scriptPublicKey, blockDaaScore: utxo.blockDaaScore, isCoinbase: utxo.isCoinbase } }; }); return JSON.stringify(normalize(original.inputs)) === JSON.stringify(normalize(signed.inputs)); }
-function toSubmitTransaction(transaction: Record<string, unknown>) { return { version: transaction.version, inputs: (transaction.inputs as Record<string, unknown>[]).map((input) => ({ previousOutpoint: { transactionId: input.transactionId, index: input.index }, signatureScript: input.signatureScript, sequence: Number(input.sequence), sigOpCount: input.sigOpCount })), outputs: (transaction.outputs as Record<string, unknown>[]).map((output) => ({ amount: Number(output.value), scriptPublicKey: { version: parseInt(String(output.scriptPublicKey).slice(0, 4), 16), scriptPublicKey: String(output.scriptPublicKey).slice(4) } })), lockTime: Number(transaction.lockTime), subnetworkId: transaction.subnetworkId }; }
