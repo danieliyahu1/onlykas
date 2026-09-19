@@ -1,4 +1,4 @@
-import { formatKas, formatTime, shortenAddress } from "./format.js";
+import { formatKas, formatTime, relativeTime, shortenAddress } from "./format.js";
 import { creatorAddressFromRoute, creatorPath } from "./creator-url.js";
 
 describe("formatKas", () => {
@@ -24,6 +24,18 @@ describe("formatTime", () => {
   it("falls back to zero for a duration that is not a number", () => {
     expect(formatTime(Number.NaN)).toBe("0:00");
     expect(formatTime(Number.POSITIVE_INFINITY)).toBe("0:00");
+  });
+});
+
+describe("relativeTime", () => {
+  const now = Date.parse("2026-09-19T12:00:00.000Z");
+
+  it("uses an unambiguous minute label", () => {
+    expect(relativeTime("2026-09-19T11:26:00.000Z", now)).toBe("34 min");
+  });
+
+  it("keeps larger relative units concise", () => {
+    expect(relativeTime("2026-09-19T10:00:00.000Z", now)).toBe("2h");
   });
 });
 
