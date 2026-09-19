@@ -82,6 +82,27 @@ afterEach(() => {
 });
 
 describe("session and wallet reconciliation", () => {
+  it("restores the server session when Kasware is not installed", async () => {
+    mockApi({ session: { address: signedInAddress } });
+
+    render(<App />);
+
+    expect(await screen.findByText(/Hi,/i)).toBeInTheDocument();
+    expect(apiMock).toHaveBeenCalledWith("/api/auth/session");
+    expect(apiMock).not.toHaveBeenCalledWith("/api/auth/logout", expect.anything());
+    expect(reloadMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the sign-in button when Kasware is not installed and there is no session", async () => {
+    mockApi();
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("button", { name: "Sign in with Kasware" }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the signed-in header when the wallet withholds its accounts", async () => {
     installWallet({ getAccounts: vi.fn(async () => []) });
     mockApi({ session: { address: signedInAddress } });

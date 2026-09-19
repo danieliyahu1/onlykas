@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import { NETWORK, type ProfileResponse } from "@onlykas/shared";
 import { COPY } from "./copy.js";
-import { authenticate, kasware, api, SESSION_EXPIRED_EVENT } from "./kasware.js";
+import { authenticate, walletOrNull, api, SESSION_EXPIRED_EVENT } from "./kasware.js";
 import { HomePage } from "./HomePage.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage } from "./CreatorPage.js";
@@ -80,16 +80,10 @@ export function App() {
   useEffect(() => {
     let active = true;
     let reconciling = false;
-    let wallet;
-    try {
-      wallet = kasware();
-    } catch {
-      if (active) setCheckingSession(false);
-      return;
-    }
+    const wallet = walletOrNull();
     const reconcile = async () => {
       const signedIn = signedInAddress.current;
-      if (!signedIn || reconciling) return;
+      if (!signedIn || reconciling || !wallet) return;
       reconciling = true;
       try {
         const accounts = await wallet.getAccounts().catch(() => []);
@@ -114,7 +108,7 @@ export function App() {
       } catch {
         // A missing or expired server session simply requires sign-in.
       }
-      if (restored && active) {
+      if (restored && active && wallet) {
         const accounts = await wallet.getAccounts().catch(() => []);
         if (accounts[0] && !sameAddress(accounts[0], restored)) {
           await signOut();
@@ -123,16 +117,21 @@ export function App() {
       }
       if (active) setCheckingSession(false);
     })();
-    const changed = () => {
-      if (!signedInAddress.current) return;
-      void reconcile();
-    };
-    wallet.on("accountsChanged", changed);
-    wallet.on("networkChanged", changed);
+    if (wallet) {
+      const changed = () => {
+        if (!signedInAddress.current) return;
+        void reconcile();
+      };
+      wallet.on("accountsChanged", changed);
+      wallet.on("networkChanged", changed);
+      return () => {
+        active = false;
+        wallet.removeListener("accountsChanged", changed);
+        wallet.removeListener("networkChanged", changed);
+      };
+    }
     return () => {
       active = false;
-      wallet.removeListener("accountsChanged", changed);
-      wallet.removeListener("networkChanged", changed);
     };
   }, []);
 

@@ -63,6 +63,10 @@ export function kasware(): Kasware {
   return window.kasware;
 }
 
+export function walletOrNull(): Kasware | null {
+  return window.kasware ?? null;
+}
+
 export async function authenticate(): Promise<string> {
   logger.info("auth_started");
   const wallet = kasware();
