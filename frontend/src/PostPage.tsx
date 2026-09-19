@@ -5,6 +5,7 @@ import { api } from "./kasware.js";
 import { unlockPost } from "./purchase.js";
 import { Toast, useToast } from "./Toast.js";
 import { Spinner } from "./Spinner.js";
+import { LockIcon } from "./Icons.js";
 import { HomeLink, Message } from "./Message.js";
 import { errorText } from "./errors.js";
 import { formatKas, shortenAddress } from "./format.js";
@@ -104,40 +105,45 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   return (
     <>
       <article className="single-post">
-        <h1 className="caption">{currentPost.caption}</h1>
-        {currentPost.canView && !mediaError ? (
-          isVideo ? (
-            <VideoPlayer
-              src={mediaUrl}
-              label={mediaLabel}
-              onError={() => setMediaError(true)}
-            />
-          ) : (
-            <img
-              className="post-media"
-              src={mediaUrl}
-              alt={mediaLabel}
-              onError={() => setMediaError(true)}
-            />
-          )
-        ) : mediaError ? (
-          <p className="feedback inline" role="alert">
-            This media isn&apos;t available right now.
-          </p>
-        ) : (
-          <div className="post-actions">
-            <button
-              className="buy"
-              disabled={busy !== null || signingIn}
-              onClick={() => void unlock()}
-            >
-              {busy === "unlock" && <Spinner />}
-              {busy === "unlock"
-                ? "Unlocking..."
-                : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
-            </button>
-          </div>
+        {currentPost.caption && (
+          <h1 className="caption">{currentPost.caption}</h1>
         )}
+        <div className="post-stage">
+          {currentPost.canView && !mediaError ? (
+            isVideo ? (
+              <VideoPlayer
+                src={mediaUrl}
+                label={mediaLabel}
+                onError={() => setMediaError(true)}
+              />
+            ) : (
+              <img
+                className="post-media"
+                src={mediaUrl}
+                alt={mediaLabel}
+                onError={() => setMediaError(true)}
+              />
+            )
+          ) : mediaError ? (
+            <p className="feedback inline" role="alert">
+              This media isn&apos;t available right now.
+            </p>
+          ) : (
+            <div className="post-locked">
+              <LockIcon open={false} />
+              <button
+                className="buy"
+                disabled={busy !== null || signingIn}
+                onClick={() => void unlock()}
+              >
+                {busy === "unlock" && <Spinner />}
+                {busy === "unlock"
+                  ? "Unlocking..."
+                  : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
+              </button>
+            </div>
+          )}
+        </div>
         <Link className="creator-link" to={`/creator/${currentPost.creator}`}>
           View creator · {shortenAddress(currentPost.creator)}
         </Link>

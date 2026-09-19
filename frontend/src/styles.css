@@ -1357,32 +1357,68 @@ progress {
 
 /* Single post */
 
+main:has(.single-post) {
+  align-items: stretch;
+  padding: clamp(1rem, 3vh, 2rem) clamp(1rem, 4vw, 3rem);
+  scrollbar-gutter: auto;
+}
 .single-post,
 .message {
   width: min(100%, 56rem);
 }
+.single-post {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
 .single-post .caption {
+  order: 2;
+  flex: 0 0 auto;
   max-width: 40rem;
-  margin: 0 0 1.5rem;
-  font-size: clamp(1.5rem, 3vw, 2.25rem);
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+  margin: clamp(0.75rem, 2vh, 1.25rem) 0 0;
+  color: var(--paper);
+  font-size: clamp(1rem, 1.5vw, 1.15rem);
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
-.single-post img,
-.single-post video,
-.video-player {
+.single-post .post-stage {
+  order: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   width: 100%;
-  max-height: 70vh;
-  object-fit: contain;
-  margin: 1.5rem 0;
+  border: 1px solid var(--line);
   background: #050807;
+  overflow: hidden;
+}
+.single-post .post-media,
+.single-post .video-player {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-height: none;
+  object-fit: contain;
+  margin: 0;
+  background: #050807;
+}
+.single-post .video-player {
+  border: 0;
+}
+.single-post .post-stage .feedback {
+  margin: 1.5rem;
 }
 .post-media {
   display: block;
 }
 .video-player {
   position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line);
   outline: none;
@@ -1393,9 +1429,12 @@ progress {
 }
 .video-player video {
   display: block;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
-  max-height: calc(70vh - 4rem);
+  max-height: none;
   margin: 0;
+  object-fit: contain;
 }
 .video-play {
   position: absolute;
@@ -1462,19 +1501,29 @@ progress {
     monospace;
   white-space: nowrap;
 }
-.post-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+.post-locked {
+  display: grid;
+  justify-items: center;
+  gap: clamp(1rem, 3vh, 1.75rem);
+  padding: 2rem;
+  text-align: center;
 }
-.post-actions .primary,
-.post-actions .secondary,
-.post-actions .buy {
-  flex: 1 1 12rem;
+.post-locked .post-lock-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--muted);
+}
+.post-locked .buy {
+  min-width: 14rem;
+  min-height: 3rem;
+  padding: 0.85rem 1.6rem;
 }
 .creator-link {
+  order: 3;
   display: inline-block;
-  margin-top: 2rem;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: clamp(0.5rem, 1.5vh, 1rem);
   color: var(--muted);
   font:
     0.78rem "DM Mono",
