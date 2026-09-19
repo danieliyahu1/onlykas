@@ -46,9 +46,18 @@ export function LockIcon({ open }: { open: boolean }) {
   );
 }
 
-export type VideoIconName = "fullscreen" | "mute" | "pause" | "play" | "unmute";
+export type VideoIconName =
+  | "exit-fullscreen"
+  | "fullscreen"
+  | "mute"
+  | "pause"
+  | "play"
+  | "unmute";
 
 const videoPaths: Record<VideoIconName, ReactNode> = {
+  "exit-fullscreen": (
+    <path d="M9 3v6H3M15 3v6h6M21 15h-6v6M9 21v-6H3" />
+  ),
   fullscreen: <path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6" />,
   mute: <path d="M3 10v4h4l5 4V6l-5 4H3M16 9l5 6M21 9l-5 6" />,
   pause: <path d="M7 4v16M17 4v16" />,

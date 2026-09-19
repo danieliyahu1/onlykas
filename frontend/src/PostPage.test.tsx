@@ -48,7 +48,9 @@ describe("PostPage", () => {
     expect(video).not.toBeNull();
     expect(video).toHaveAttribute("preload", "metadata");
     expect(video).toHaveAttribute("playsinline");
-    expect(screen.getAllByRole("button", { name: "Play video" })).toHaveLength(2);
+    expect(
+      screen.queryByRole("button", { name: /play video/i }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Fullscreen video" })).toBeVisible();
   });
 
