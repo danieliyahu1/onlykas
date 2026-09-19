@@ -402,6 +402,30 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     });
     return r.rows.map(postFromRow);
   }
+  async deletePost(id: string) {
+    const transaction = await this.client.transaction("write");
+    try {
+      const found = await transaction.execute({
+        sql: `SELECT * FROM posts WHERE id=?`,
+        args: [id],
+      });
+      if (!found.rows[0]) {
+        await transaction.rollback();
+        return null;
+      }
+      const post = postFromRow(found.rows[0]);
+      await transaction.execute({
+        sql: `DELETE FROM purchases WHERE post_id=?`,
+        args: [id],
+      });
+      await transaction.execute({ sql: `DELETE FROM posts WHERE id=?`, args: [id] });
+      await transaction.commit();
+      return post;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
   async createPurchase(v: Purchase): Promise<DuplicateOutcome> {
     try {
       await this.execute({

@@ -546,6 +546,80 @@ describe("anonymous media access", () => {
   });
 });
 
+describe("post deletion", () => {
+  const creator = `kaspatest:${"c".repeat(60)}`;
+  const other = `kaspatest:${"o".repeat(60)}`;
+
+  async function session(store: MemoryStore, address: string) {
+    await store.createSession({
+      id: "delete-session",
+      address,
+      expiresAt: Date.now() + 60_000,
+    });
+    return "onlykas_session=delete-session";
+  }
+
+  it("requires a session", async () => {
+    const store = new MemoryStore();
+    await store.publishPost({ ...post("paid-post"), creator });
+    const { app } = testApp(store);
+
+    const response = await request(app).delete("/api/posts/paid-post");
+
+    expect(response.status).toBe(401);
+    expect(await store.getPost("paid-post")).not.toBeNull();
+  });
+
+  it("refuses a viewer who is not the creator", async () => {
+    const store = new MemoryStore();
+    await store.publishPost({ ...post("paid-post"), creator });
+    const cookie = await session(store, other);
+    const { app } = testApp(store);
+
+    const response = await request(app)
+      .delete("/api/posts/paid-post")
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(403);
+    expect(await store.getPost("paid-post")).not.toBeNull();
+  });
+
+  it("deletes the creator's post, its media, and its purchases", async () => {
+    const store = new MemoryStore();
+    await store.publishPost({
+      ...post("paid-post"),
+      creator,
+      mediaKey: "media/creator/ab/digest",
+    });
+    await store.createPurchase({
+      postId: "paid-post",
+      buyer: other,
+      transactionId: "tx-1",
+    });
+    const cookie = await session(store, creator);
+    const removedMedia: string[] = [];
+    const storage: ObjectStorage = {
+      putFile: async () => undefined,
+      readRange: async () => ({
+        bytes: new Uint8Array(),
+        size: 0,
+        contentType: "image/jpeg",
+      }),
+      delete: async (key) => void removedMedia.push(key),
+    };
+    const { app } = testApp(store, undefined, undefined, storage);
+
+    const response = await request(app)
+      .delete("/api/posts/paid-post")
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(204);
+    expect(await store.getPost("paid-post")).toBeNull();
+    expect(await store.getPurchase("paid-post", other)).toBeNull();
+    expect(removedMedia).toEqual(["media/creator/ab/digest"]);
+  });
+});
+
 describe("publish failure diagnostics", () => {
   const creator = `kaspatest:${"c".repeat(60)}`;
 

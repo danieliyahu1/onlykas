@@ -186,6 +186,14 @@ export class MemoryStore implements Repositories {
       .sort((a, b) => b.publishedAt - a.publishedAt)
       .map((v) => structuredClone(v));
   }
+  async deletePost(id: string) {
+    const v = this.posts.get(id);
+    if (!v) return null;
+    this.posts.delete(id);
+    for (const [key, value] of this.purchases)
+      if (value.postId === id) this.purchases.delete(key);
+    return structuredClone(v);
+  }
   async createPurchase(v: Purchase): Promise<DuplicateOutcome> {
     const duplicate = [...this.purchases.values()].some(
       (x) => x.transactionId === v.transactionId,

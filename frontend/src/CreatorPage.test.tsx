@@ -312,3 +312,53 @@ describe("CreatorPage profile visibility", () => {
     expect(screen.queryByText("Visibility: Public")).not.toBeInTheDocument();
   });
 });
+
+describe("CreatorPage post deletion", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("lets the owner delete a post after confirming", async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(true, false),
+      posts: [post("own-post", "My moment", true)],
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderCreator(creatorAddress);
+
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+
+    expect(confirm).toHaveBeenCalled();
+    expect(api).toHaveBeenCalledWith("/api/posts/own-post", { method: "DELETE" });
+    expect(await screen.findByText("Post deleted.")).toBeVisible();
+    expect(screen.queryByText("My moment")).not.toBeInTheDocument();
+  });
+
+  it("keeps the post when the owner cancels the confirmation", async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(true, false),
+      posts: [post("own-post", "My moment", true)],
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    renderCreator(creatorAddress);
+
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+
+    expect(api).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("My moment")).toBeVisible();
+  });
+
+  it("hides the delete action from visitors", async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(false, true),
+      posts: [post("own-post", "My moment", true)],
+    });
+    renderCreator(consumerAddress);
+
+    expect(await screen.findByText("My moment")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument();
+  });
+});

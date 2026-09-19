@@ -57,6 +57,7 @@ import {
 import { FeedbackError, type FeedbackService } from "./adapters/feedback/feedback.js";
 import { RateLimiter } from "./adapters/http/rate-limit.js";
 import { createPublishPostUseCase } from "./application/publication-use-cases.js";
+import { createDeletePostUseCase } from "./application/delete-post.js";
 import { MembershipAccess } from "./application/membership-access.js";
 import { StorageError } from "./r2-storage.js";
 import { discardTempDir } from "./temp-files.js";
@@ -122,6 +123,11 @@ export function createApp(d: AppDependencies) {
     verifyMedia: d.verifyMedia ?? verifyMediaFile,
     createId: randomUUID,
     pendingTtlMs: PREPARED_TTL_MS,
+  });
+  const deletePost = createDeletePostUseCase({
+    posts: d.store,
+    storage: d.storage,
+    logger,
   });
   app.disable("x-powered-by");
   app.use((req, res, next) => {
@@ -455,6 +461,17 @@ export function createApp(d: AppDependencies) {
           ),
         ),
       );
+    }),
+  );
+  app.delete(
+    "/api/posts/:id",
+    optional,
+    required,
+    asyncHandler(async (req, res) => {
+      const result = await deletePost(param(req, "id"), req.walletSession!.address);
+      if (result.kind === "NOT_FOUND") return apiError(res, 404, "POST_NOT_FOUND");
+      if (result.kind === "FORBIDDEN") return apiError(res, 403, "POST_FORBIDDEN");
+      res.status(204).end();
     }),
   );
   app.post(

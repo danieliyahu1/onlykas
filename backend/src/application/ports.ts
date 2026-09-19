@@ -73,6 +73,7 @@ export interface PostRepository {
   getPost(id: string): Promise<Post | null>;
   findPostByMedia(creator: string, digest: string): Promise<Post | null>;
   creatorPosts(address: string): Promise<Post[]>;
+  deletePost(id: string): Promise<Post | null>;
 }
 
 export interface PurchaseRepository {

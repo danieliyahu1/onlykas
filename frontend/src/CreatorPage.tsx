@@ -33,6 +33,7 @@ export function CreatorPage({
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
   const [busy, setBusy] = useState<SubscriptionStage>(null);
   const [busyPostId, setBusyPostId] = useState<string | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
@@ -149,6 +150,30 @@ export function CreatorPage({
     }
   }
 
+  async function deletePost(target: PostResponse) {
+    if (
+      !window.confirm("Delete this post and its media? This can't be undone.")
+    )
+      return;
+    setDeletingPostId(target.id);
+    dismissToast();
+    try {
+      await api(`/api/posts/${encodeURIComponent(target.id)}`, {
+        method: "DELETE",
+      });
+      setCreator((previous) =>
+        previous
+          ? { ...previous, posts: previous.posts.filter((p) => p.id !== target.id) }
+          : previous,
+      );
+      showToast("Post deleted.", "success");
+    } catch (error) {
+      showToast(errorText(error, "Couldn't delete the post."), "error");
+    } finally {
+      setDeletingPostId(null);
+    }
+  }
+
   async function copyAddress() {
     try {
       await navigator.clipboard.writeText(currentCreator.address);
@@ -225,6 +250,9 @@ export function CreatorPage({
                 post={post}
                 busy={busyPostId === post.id}
                 onBuy={buyPost}
+                owner={owner}
+                deleting={deletingPostId === post.id}
+                onDelete={deletePost}
               />
             ))
           ) : (
@@ -278,10 +306,16 @@ function PostCard({
   post,
   busy,
   onBuy,
+  owner,
+  deleting,
+  onDelete,
 }: {
   post: PostResponse;
   busy: boolean;
   onBuy: (post: PostResponse) => void;
+  owner: boolean;
+  deleting: boolean;
+  onDelete: (post: PostResponse) => void;
 }) {
   const free = isFreePost(post.priceSompi);
   const unlocked = free || post.canView;
@@ -314,6 +348,17 @@ function PostCard({
             >
               {busy && <Spinner />}
               {busy ? "Unlocking..." : `Unlock · ${formatKas(post.priceSompi)} KAS`}
+            </button>
+          )}
+          {owner && (
+            <button
+              className="delete-post"
+              type="button"
+              disabled={deleting}
+              onClick={() => onDelete(post)}
+            >
+              {deleting && <Spinner />}
+              {deleting ? "Deleting..." : "Delete"}
             </button>
           )}
         </PostTileAction>

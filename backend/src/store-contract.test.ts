@@ -135,6 +135,22 @@ describe.each([
     expect(await store.membershipReceipts(buyer, "other-creator")).toEqual([]);
   });
 
+  it("deletes a post together with its purchases", async () => {
+    await store.publishPost(post("post-del", creator, now));
+    await store.createPurchase({
+      postId: "post-del",
+      buyer,
+      transactionId: "tx-del",
+    });
+
+    const deleted = await store.deletePost("post-del");
+
+    expect(deleted).toMatchObject({ id: "post-del" });
+    expect(await store.getPost("post-del")).toBeNull();
+    expect(await store.getPurchase("post-del", buyer)).toBeNull();
+    expect(await store.deletePost("post-del")).toBeNull();
+  });
+
   it("rolls, expires, and prunes sessions", async () => {
     const session = { id: "session-1", address: buyer, expiresAt: now + 1 };
 
