@@ -80,6 +80,28 @@ describe("PostPage", () => {
     expect(api).toHaveBeenCalledTimes(3);
   });
 
+  it("shows unlocking only after wallet approval", async () => {
+    let resolveSign!: (value: string) => void;
+    const signing = new Promise<string>((resolve) => {
+      resolveSign = resolve;
+    });
+    vi.mocked(api)
+      .mockResolvedValueOnce(post("approval-post", "A paid moment", false))
+      .mockResolvedValueOnce({ id: "pay-1", transaction: "{}" })
+      .mockImplementationOnce(() => new Promise(() => undefined));
+    vi.mocked(signPreparedPayment).mockReturnValueOnce(signing);
+    renderPost(post("approval-post", "A paid moment", false), consumerAddress);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /unlock for/i }));
+
+    expect(await screen.findByRole("button", { name: "Approve in wallet..." })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Unlocking..." })).not.toBeInTheDocument();
+
+    resolveSign("signed");
+    expect(await screen.findByRole("button", { name: "Unlocking..." })).toBeDisabled();
+  });
+
   it("tells the buyer when the payment is still confirming", async () => {
     vi.mocked(api)
       .mockResolvedValueOnce(post("paid-post", "A paid moment", false))

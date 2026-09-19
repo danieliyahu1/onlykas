@@ -14,12 +14,16 @@ interface PreparedSubscription extends PreparedTransaction {
   signInputs: number[];
 }
 
-export async function unlockPost(postId: string): Promise<PurchaseResult> {
+export async function unlockPost(
+  postId: string,
+  onApproved?: () => void,
+): Promise<PurchaseResult> {
   const prepared = await api<PreparedTransaction>(
     `/api/posts/${encodeURIComponent(postId)}/payments/prepare`,
     { method: "POST" },
   );
   const signedTransaction = await signPreparedPayment(prepared.transaction);
+  onApproved?.();
   return api<PurchaseResult>(`/api/payments/${prepared.id}/finalize`, {
     method: "POST",
     body: JSON.stringify({ signedTransaction }),

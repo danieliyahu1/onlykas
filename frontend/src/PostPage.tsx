@@ -17,7 +17,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const { id = "" } = useParams();
   const location = useLocation();
   const [post, setPost] = useState<PostResponse | null>(null);
-  const [busy, setBusy] = useState<null | "unlock">(null);
+  const [busy, setBusy] = useState<null | "approval" | "unlock">(null);
   const [mediaError, setMediaError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -82,10 +82,10 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   async function unlock() {
     const buyer = address ?? (await signIn());
     if (!buyer) return;
-    setBusy("unlock");
+    setBusy("approval");
     dismissToast();
     try {
-      const result = await unlockPost(currentPost.id);
+      const result = await unlockPost(currentPost.id, () => setBusy("unlock"));
       if (result.state === "CONFIRMED") {
         setPost({ ...currentPost, canView: true });
         showToast(result.message ?? "Unlocked.", "success");
@@ -137,10 +137,12 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
                 disabled={busy !== null || signingIn}
                 onClick={() => void unlock()}
               >
-                {busy === "unlock" && <Spinner />}
+                {busy && <Spinner />}
                 {busy === "unlock"
                   ? "Unlocking..."
-                  : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
+                  : busy === "approval"
+                    ? "Approve in wallet..."
+                    : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
               </button>
             </div>
           )}

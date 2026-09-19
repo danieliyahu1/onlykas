@@ -40,6 +40,7 @@ export function CreatorPage({
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
   const [busy, setBusy] = useState<SubscriptionStage>(null);
   const [busyPostId, setBusyPostId] = useState<string | null>(null);
+  const [approvedPostId, setApprovedPostId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -136,9 +137,10 @@ export function CreatorPage({
     const buyer = address ?? (await signIn());
     if (!buyer) return;
     setBusyPostId(target.id);
+    setApprovedPostId(null);
     dismissToast();
     try {
-      const result = await unlockPost(target.id);
+      const result = await unlockPost(target.id, () => setApprovedPostId(target.id));
       if (result.state === "CONFIRMED") {
         setCreator((previous) =>
           previous
@@ -158,6 +160,7 @@ export function CreatorPage({
       showToast(errorText(error, "Payment failed. Nothing was charged."), "error");
     } finally {
       setBusyPostId(null);
+      setApprovedPostId(null);
     }
   }
 
@@ -260,6 +263,7 @@ export function CreatorPage({
                 key={post.id}
                 post={post}
                 busy={busyPostId === post.id}
+                approved={approvedPostId === post.id}
                 onBuy={buyPost}
                 owner={owner}
                 deleting={deletingPostId === post.id}
@@ -316,6 +320,7 @@ function SubscriptionAction({
 function PostCard({
   post,
   busy,
+  approved,
   onBuy,
   owner,
   deleting,
@@ -323,6 +328,7 @@ function PostCard({
 }: {
   post: PostResponse;
   busy: boolean;
+  approved: boolean;
   onBuy: (post: PostResponse) => void;
   owner: boolean;
   deleting: boolean;
@@ -358,7 +364,11 @@ function PostCard({
               onClick={() => onBuy(post)}
             >
               {busy && <Spinner />}
-              {busy ? "Unlocking..." : `Unlock · ${formatKas(post.priceSompi)} KAS`}
+              {approved
+                ? "Unlocking..."
+                : busy
+                  ? "Approve in wallet..."
+                  : `Unlock · ${formatKas(post.priceSompi)} KAS`}
             </button>
           )}
           {owner && (
