@@ -264,7 +264,7 @@ export function App() {
           </Routes>
         </main>
         <footer>
-          <span>Early access · Kaspa testnet</span>
+          <span>Early access</span>
           <div className="footer-links">
             <SocialLinks />
             <FeedbackButton />

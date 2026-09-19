@@ -316,7 +316,7 @@ footer {
 }
 .social-button:hover,
 .social-button:focus-visible {
-  color: var(--paper);
+  color: var(--acid);
 }
 .social-button svg {
   width: 1.05rem;
@@ -338,7 +338,7 @@ footer {
 }
 .feedback-button:hover,
 .feedback-button:focus-visible {
-  color: var(--paper);
+  color: var(--acid);
 }
 
 /* Page layout */
