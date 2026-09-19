@@ -221,9 +221,9 @@ export class MemoryStore implements Repositories {
     this.membershipPurchaseRecords.set(v.transactionId, structuredClone(v));
     return "CREATED";
   }
-  async membershipPurchases(buyer: string) {
+  async membershipReceipts(buyer: string, creator: string) {
     return [...this.membershipPurchaseRecords.values()]
-      .filter((v) => v.buyer === buyer)
+      .filter((v) => v.buyer === buyer && v.creator === creator)
       .map((v) => structuredClone(v));
   }
   async finalizePurchase(id: string, value: Purchase): Promise<DuplicateOutcome> {

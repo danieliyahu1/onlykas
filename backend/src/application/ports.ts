@@ -96,7 +96,10 @@ export interface CovenantRepository {
 
 export interface MembershipPurchaseRepository {
   createMembershipPurchase(value: MembershipPurchase): Promise<DuplicateOutcome>;
-  membershipPurchases(buyer: string): Promise<MembershipPurchase[]>;
+  membershipReceipts(
+    buyer: string,
+    creator: string,
+  ): Promise<MembershipPurchase[]>;
   finalizeMembershipPurchase(
     preparedMembershipId: string,
     value: MembershipPurchase,
@@ -180,6 +183,11 @@ export interface MembershipVerifier {
     expectedCovenantId?: string,
     expectedCreator?: string,
   ): Promise<MembershipCheck[]>;
+  findMembership(
+    owner: string,
+    creator: string,
+    expectedCovenantId?: string,
+  ): Promise<MembershipCheck | null>;
   verifyUtxo(
     transactionId: string,
     outputIndex: number,

@@ -57,6 +57,7 @@ import {
 import { FeedbackError, type FeedbackService } from "./adapters/feedback/feedback.js";
 import { RateLimiter } from "./adapters/http/rate-limit.js";
 import { createPublishPostUseCase } from "./application/publication-use-cases.js";
+import { MembershipAccess } from "./application/membership-access.js";
 import { StorageError } from "./r2-storage.js";
 import { discardTempDir } from "./temp-files.js";
 
@@ -114,6 +115,7 @@ export function createApp(d: AppDependencies) {
     validateDisplayName,
   });
   const discovery = createDiscoveryUseCases({ profiles: d.store });
+  const membershipAccess = new MembershipAccess(d.store, d.store, d.membershipVerifier);
   const publishPost = createPublishPostUseCase({
     posts: d.store,
     storage: d.storage,
@@ -414,7 +416,7 @@ export function createApp(d: AppDependencies) {
         posts = await d.store.creatorPosts(address),
         offered = Boolean(await d.store.getCreatorCovenant(address)),
         active = Boolean(
-          viewer && !isOwner && (await membershipAccess(d, address, viewer)),
+          viewer && !isOwner && (await membershipAccess.isActive(viewer, address)),
         ),
         profile = await profiles.get(address);
       const unlocked = new Set(posts.filter((p) => isFreePost(p.priceSompi)).map((p) => p.id));
@@ -449,7 +451,7 @@ export function createApp(d: AppDependencies) {
               (viewer &&
                 (viewer === p.creator ||
                   (await purchaseAccess(d, p, viewer)) ||
-                  (await membershipAccess(d, p.creator, viewer)))),
+                  (await membershipAccess.isActive(viewer, p.creator)))),
           ),
         ),
       );
@@ -802,6 +804,7 @@ export function createApp(d: AppDependencies) {
       const outcome = await d.store.finalizeMembershipPurchase(id, {
         transactionId: submission.transactionId,
         buyer: value.buyer,
+        creator: value.creator,
       });
       await d.store.saveMembershipWorkflow({
         preparedMembershipId: id,
@@ -855,6 +858,7 @@ export function createApp(d: AppDependencies) {
       const outcome = await d.store.createMembershipPurchase({
         transactionId: b.transactionId,
         buyer,
+        creator: b.creator,
       });
       if (outcome === "DUPLICATE")
         return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS");
@@ -915,7 +919,7 @@ export function createApp(d: AppDependencies) {
         if (
           viewer !== p.creator &&
           !(await purchaseAccess(d, p, viewer)) &&
-          !(await membershipAccess(d, p.creator, viewer))
+          !(await membershipAccess.isActive(viewer, p.creator))
         ) {
           metrics.mediaDeliveryAttempt(req.method, "forbidden", "none");
           return apiError(res, 403, "MEDIA_FORBIDDEN");
@@ -1045,21 +1049,6 @@ async function purchasedPostIds(d: AppDependencies, posts: Post[], buyer: string
     }
   }
   return unlocked;
-}
-async function membershipAccess(d: AppDependencies, creator: string, buyer: string) {
-  const mapping = await d.store.getCreatorCovenant(creator);
-  if (!mapping || !d.membershipVerifier) return false;
-  for (const purchase of await d.store.membershipPurchases(buyer)) {
-    const check = await d.membershipVerifier.verifyUtxo(
-      purchase.transactionId,
-      1,
-      buyer,
-      mapping.covenantId,
-      creator,
-    );
-    if (check.status === "VALID") return true;
-  }
-  return false;
 }
 function postResponse(p: Post, canView: boolean): PostResponse {
   return {

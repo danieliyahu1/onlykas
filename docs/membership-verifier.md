@@ -26,26 +26,34 @@ A membership is recognized only when all of these checks pass:
 - the transaction has version `1`;
 - its hex payload decodes to JSON with protocol `onlykas`, version `1`, and
   token type `membership`;
-- the payload reveals `memberRedeemScript` and membership metadata;
+- the payload reveals `memberRedeemScript`;
 - the redeem script matches the compiled SilverScript template and decodes to
   non-minter state;
 - hashing that redeem script produces the covenant output's P2SH script;
-- the membership output contains exactly 50,000,000 sompi;
 - the output has a consensus covenant ID, matching `expectedCovenantId` when
   one is supplied;
 - the output is authorized by covenant input `0`;
 - the owner public key in covenant state derives the reported testnet-10
   address;
 - the creator public key in state matches the creator whose offer is checked;
-- the transaction pays exactly 9.9 KAS to that creator, 0.1 KAS to the platform
-  address committed in covenant state, and creates the member's 50,000,000-sompi
-  discovery pointer;
-- the payload platform address matches the platform address committed in state;
-- the payload expiry matches state and its creation DAA plus 864,000 DAA;
 - the covenant output still appears in the UTXO set for its P2SH address.
 
 The last check prevents a spent token from remaining valid when an unrelated
 discovery output still exists.
+
+The verifier trusts the contract once it is on chain. The covenant enforces the
+payment amounts, platform address, and lifetime at mint time; the verifier does
+not re-check them. The reported owner, creator, platform, and expiry come from
+covenant state.
+
+## Creator-scoped discovery
+
+Access checks resolve a subscription for one creator at a time. The access use
+case checks stored receipts first, then falls back to `findMembership(owner,
+creator)`, which scans the owner address's 0.5 KAS discovery pointers and returns
+the first valid covenant for that creator. A discovered covenant is cached as a
+receipt.
+
 
 ## Status semantics
 

@@ -3,10 +3,11 @@ import { createApp } from "./app.js";
 import { createMetrics, type Metrics } from "./metrics.js";
 import { MemoryStore } from "./memory-store.js";
 import type { EventLogger, Logger } from "./observability.js";
-import type { Post } from "./domain/models.js";
+import type { MembershipCheck, Post } from "./domain/models.js";
 import { StorageError } from "./r2-storage.js";
 import type { VerifiedMedia } from "./adapters/media/media.js";
 import type {
+  MembershipVerifier,
   ObjectStorage,
   PaymentGateway,
   Repositories,
@@ -446,6 +447,84 @@ describe("free posts", () => {
   });
 });
 
+describe("subscription recognition", () => {
+  const creator = `kaspatest:${"c".repeat(60)}`;
+  const viewer = `kaspatest:${"b".repeat(60)}`;
+
+  async function viewerSession(store: MemoryStore) {
+    await store.createSession({
+      id: "member-session",
+      address: viewer,
+      expiresAt: Date.now() + 60_000,
+    });
+    return "onlykas_session=member-session";
+  }
+
+  function membershipCheck(status: MembershipCheck["status"]): MembershipCheck {
+    return {
+      transactionId: "tx-1",
+      outputIndex: 1,
+      covenantId: "covenant-1",
+      kind: "token",
+      tokenType: "membership",
+      owner: viewer,
+      contentCreator: creator,
+      platformAddress: creator,
+      createdAtDaa: "1",
+      expiresAtDaa: "2",
+      createdAt: null,
+      validUntil: null,
+      status,
+    };
+  }
+
+  it("recognizes a subscriber found on chain without a stored receipt", async () => {
+    const store = new MemoryStore();
+    await store.publishPost({ ...post("paid-post"), creator });
+    await store.saveCreatorCovenant({ creator, covenantId: "covenant-1" });
+    const cookie = await viewerSession(store);
+    const findMembership = vi.fn(async () => membershipCheck("VALID"));
+    const verifier: MembershipVerifier = {
+      verifyAddress: async () => [],
+      findMembership,
+      verifyUtxo: async () => membershipCheck("NOT_MEMBERSHIP"),
+    };
+    const { app } = testApp(store, undefined, undefined, undefined, undefined, verifier);
+
+    const creatorResponse = await request(app)
+      .get(`/api/creators/${creator}`)
+      .set("Cookie", cookie);
+    expect(creatorResponse.body.membership).toEqual({ offered: true, active: true });
+    expect(creatorResponse.body.posts[0].canView).toBe(true);
+    expect(findMembership).toHaveBeenCalledWith(viewer, creator, "covenant-1");
+    expect(await store.membershipReceipts(viewer, creator)).toHaveLength(1);
+
+    const postResponse = await request(app)
+      .get("/api/posts/paid-post")
+      .set("Cookie", cookie);
+    expect(postResponse.body.canView).toBe(true);
+  });
+
+  it("keeps a viewer locked when no membership is found on chain", async () => {
+    const store = new MemoryStore();
+    await store.publishPost({ ...post("paid-post"), creator });
+    await store.saveCreatorCovenant({ creator, covenantId: "covenant-1" });
+    const cookie = await viewerSession(store);
+    const verifier: MembershipVerifier = {
+      verifyAddress: async () => [],
+      findMembership: async () => null,
+      verifyUtxo: async () => membershipCheck("NOT_MEMBERSHIP"),
+    };
+    const { app } = testApp(store, undefined, undefined, undefined, undefined, verifier);
+
+    const response = await request(app)
+      .get(`/api/creators/${creator}`)
+      .set("Cookie", cookie);
+    expect(response.body.membership.active).toBe(false);
+    expect(response.body.posts[0].canView).toBe(false);
+  });
+});
+
 describe("anonymous media access", () => {
   it("serves free post media without a session", async () => {
     const store = new MemoryStore();
@@ -557,6 +636,7 @@ function testApp(
   metrics?: Metrics,
   storageOverride?: ObjectStorage,
   verifyMediaOverride?: (path: string) => Promise<VerifiedMedia>,
+  membershipVerifier?: MembershipVerifier,
 ) {
   const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
   const record =
@@ -585,6 +665,7 @@ function testApp(
     walletVerifier: { verify: async () => false },
     ...(paymentGateway ? { paymentGateway } : {}),
     ...(verifyMediaOverride ? { verifyMedia: verifyMediaOverride } : {}),
+    ...(membershipVerifier ? { membershipVerifier } : {}),
     publicOrigin: "http://localhost:5173",
     logger,
     ...(metrics ? { metrics } : {}),

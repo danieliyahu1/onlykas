@@ -172,6 +172,15 @@ export const migrations: Migration[] = [
       "CREATE INDEX IF NOT EXISTS pending_publications_expiry ON pending_publications (expires_at)",
     ],
   },
+  {
+    version: 7,
+    name: "membership_receipt_creator",
+    statements: [
+      "ALTER TABLE membership_purchases ADD COLUMN creator TEXT",
+      "DROP INDEX IF EXISTS membership_purchases_buyer",
+      "CREATE INDEX IF NOT EXISTS membership_purchases_buyer_creator ON membership_purchases (buyer, creator)",
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {

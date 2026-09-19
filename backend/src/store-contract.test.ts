@@ -121,7 +121,7 @@ describe.each([
 
   it("enforces one covenant per creator and unique membership receipts", async () => {
     const covenant = { creator, covenantId: "covenant-1" };
-    const membership = { transactionId: "membership-1", buyer };
+    const membership = { transactionId: "membership-1", buyer, creator };
 
     await store.saveCreatorCovenant(covenant);
     expect(await store.getCreatorCovenant(creator)).toEqual(covenant);
@@ -131,7 +131,8 @@ describe.each([
 
     expect(await store.createMembershipPurchase(membership)).toBe("CREATED");
     expect(await store.createMembershipPurchase(membership)).toBe("DUPLICATE");
-    expect(await store.membershipPurchases(buyer)).toEqual([membership]);
+    expect(await store.membershipReceipts(buyer, creator)).toEqual([membership]);
+    expect(await store.membershipReceipts(buyer, "other-creator")).toEqual([]);
   });
 
   it("rolls, expires, and prunes sessions", async () => {
@@ -188,7 +189,7 @@ describe.each([
       kind: "purchase",
       expiresAt: now + 1_000,
     });
-    const membership = { transactionId: "membership-finalized", buyer };
+    const membership = { transactionId: "membership-finalized", buyer, creator };
 
     expect(
       await store.finalizeMembershipPurchase("prepared-membership", membership),

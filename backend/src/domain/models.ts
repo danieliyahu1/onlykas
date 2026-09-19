@@ -63,6 +63,7 @@ export interface CreatorCovenant {
 export interface MembershipPurchase {
   transactionId: string;
   buyer: string;
+  creator: string;
 }
 
 export interface PreparedMembershipTransaction {

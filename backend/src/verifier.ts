@@ -5,13 +5,8 @@ import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 import {
   addressPublicKey,
-  addressScript,
   decodeMembershipRedeemScript,
-  MEMBERSHIP_CREATOR_SHARE,
-  MEMBERSHIP_DURATION_DAA,
   MEMBERSHIP_INDEX_VALUE,
-  MEMBERSHIP_OUTPUT_VALUE,
-  MEMBERSHIP_PLATFORM_SHARE,
   membershipAddress,
   membershipScript,
   parseMembershipPayloadDetails,
@@ -84,6 +79,29 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
     }));
   }
 
+  async findMembership(
+    owner: string,
+    creator: string,
+    expectedCovenantId?: string,
+  ): Promise<MembershipCheck | null> {
+    const [utxos, currentDaa] = await Promise.all([this.utxos(owner), this.currentDaa()]);
+    const pointers = utxos.filter((utxo) => bigintOrNull(utxo.utxoEntry.amount) === MEMBERSHIP_INDEX_VALUE);
+    for (const pointer of pointers) {
+      const transaction = await this.transaction(pointer.outpoint.transactionId);
+      const check = await this.checkMemberOutput(
+        pointer.outpoint.transactionId,
+        1,
+        transaction,
+        currentDaa,
+        owner,
+        expectedCovenantId,
+        creator,
+      );
+      if (check.status === "VALID") return check;
+    }
+    return null;
+  }
+
   async verifyUtxo(
     transactionId: string,
     outputIndex: number,
@@ -128,12 +146,8 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
       !payload ||
       !state ||
       state.isMinter ||
-      outputAmount(output) !== MEMBERSHIP_OUTPUT_VALUE ||
       outputScript(output) !== membershipScript(state) ||
       outputAuthorizingInput(output) !== 0 ||
-      payload.metadata.platformAddress !== keyAddress(state.platform) ||
-      payload.metadata.expiresAtDaa !== state.expiresAtDaa ||
-      payload.metadata.createdAtDaa + MEMBERSHIP_DURATION_DAA !== state.expiresAtDaa ||
       (expectedCovenantId !== undefined && covenantId !== expectedCovenantId)
     ) return notMembership(transactionId, outputIndex, covenantId);
 
@@ -142,25 +156,14 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
     const platformAddress = keyAddress(state.platform);
     if (!owner || !creator || !platformAddress) return notMembership(transactionId, outputIndex, covenantId);
     if (state.owner !== addressPublicKey(owner))
-      return membership(transactionId, outputIndex, covenantId, owner, creator, payload.metadata, currentDaa, "OWNER_MISMATCH", this.now);
+      return membership(transactionId, outputIndex, covenantId, owner, creator, platformAddress, payload.metadata.createdAtDaa, state.expiresAtDaa, currentDaa, "OWNER_MISMATCH", this.now);
     if (state.creator !== addressPublicKey(creator))
       return notMembership(transactionId, outputIndex, covenantId);
-
-    const creatorPayment = transaction.outputs?.[2];
-    const platformPayment = transaction.outputs?.[3];
-    const ownerPointer = transaction.outputs?.[4];
-    if (
-      outputAmount(creatorPayment) !== MEMBERSHIP_CREATOR_SHARE ||
-      outputScript(creatorPayment) !== addressScript(creator) ||
-      outputAmount(platformPayment) !== MEMBERSHIP_PLATFORM_SHARE ||
-      outputScript(platformPayment) !== addressScript(platformAddress) ||
-      outputAmount(ownerPointer) !== MEMBERSHIP_INDEX_VALUE ||
-      outputScript(ownerPointer) !== addressScript(owner) ||
-      !(await this.isUnspent(membershipAddress(state), transactionId, outputIndex))
-    ) return notMembership(transactionId, outputIndex, covenantId);
+    if (!(await this.isUnspent(membershipAddress(state), transactionId, outputIndex)))
+      return notMembership(transactionId, outputIndex, covenantId);
 
     const status = state.expiresAtDaa > currentDaa ? "VALID" : "EXPIRED";
-    return membership(transactionId, outputIndex, covenantId, owner, creator, payload.metadata, currentDaa, status, this.now);
+    return membership(transactionId, outputIndex, covenantId, owner, creator, platformAddress, payload.metadata.createdAtDaa, state.expiresAtDaa, currentDaa, status, this.now);
   }
 
   private async isUnspent(address: string, transactionId: string, outputIndex: number): Promise<boolean> {
@@ -205,16 +208,13 @@ function membership(
   covenantId: string,
   owner: string,
   contentCreator: string,
-  metadata: {
-    platformAddress: string;
-    createdAtDaa: bigint;
-    expiresAtDaa: bigint;
-  },
+  platformAddress: string,
+  createdAtDaa: bigint,
+  expiresAtDaa: bigint,
   currentDaa: bigint,
   status: MembershipCheck["status"],
   now: () => number,
 ): MembershipCheck {
-  const createdDaa = metadata.createdAtDaa;
   const estimate = (score: bigint) => new Date(now() + Number(score - currentDaa) * DAA_MILLISECONDS).toISOString();
   return {
     transactionId,
@@ -224,11 +224,11 @@ function membership(
     tokenType: "membership",
     owner,
     contentCreator,
-    platformAddress: metadata.platformAddress,
-    createdAtDaa: metadata.createdAtDaa.toString(),
-    expiresAtDaa: metadata.expiresAtDaa.toString(),
-    createdAt: estimate(createdDaa),
-    validUntil: estimate(metadata.expiresAtDaa),
+    platformAddress,
+    createdAtDaa: createdAtDaa.toString(),
+    expiresAtDaa: expiresAtDaa.toString(),
+    createdAt: estimate(createdAtDaa),
+    validUntil: estimate(expiresAtDaa),
     status,
   };
 }
@@ -239,10 +239,6 @@ function outputCovenantId(output: ChainOutput | undefined): string | null {
 
 function outputAuthorizingInput(output: ChainOutput): number | null {
   return output.covenant_authorizing_input ?? output.authorizing_input ?? output.covenant?.authorizing_input ?? output.covenant?.authorizingInput ?? null;
-}
-
-function outputAmount(output: ChainOutput | undefined): bigint | null {
-  return bigintOrNull(output?.amount ?? output?.value);
 }
 
 function outputScript(output: ChainOutput | undefined): string | null {

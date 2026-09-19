@@ -450,8 +450,8 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
   async createMembershipPurchase(v: MembershipPurchase): Promise<DuplicateOutcome> {
     try {
       await this.execute({
-        sql: `INSERT INTO membership_purchases (transaction_id,buyer) VALUES (?,?)`,
-        args: [v.transactionId, v.buyer],
+        sql: `INSERT INTO membership_purchases (transaction_id,buyer,creator) VALUES (?,?,?)`,
+        args: [v.transactionId, v.buyer, v.creator],
       });
       return "CREATED";
     } catch (error) {
@@ -459,10 +459,10 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
       throw error;
     }
   }
-  async membershipPurchases(buyer: string) {
+  async membershipReceipts(buyer: string, creator: string) {
     const r = await this.execute({
-      sql: `SELECT * FROM membership_purchases WHERE buyer=?`,
-      args: [buyer],
+      sql: `SELECT * FROM membership_purchases WHERE buyer=? AND creator=?`,
+      args: [buyer, creator],
     });
     return r.rows.map(membershipPurchaseFromRow);
   }
@@ -489,8 +489,8 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     return this.transactionalFinalize(
       id,
       "prepared_memberships",
-      `INSERT INTO membership_purchases (transaction_id,buyer) VALUES (?,?)`,
-      [value.transactionId, value.buyer],
+      `INSERT INTO membership_purchases (transaction_id,buyer,creator) VALUES (?,?,?)`,
+      [value.transactionId, value.buyer, value.creator],
     );
   }
   private async transactionalFinalize(
@@ -580,6 +580,7 @@ const creatorCovenantFromRow = (r: Record<string, unknown>): CreatorCovenant => 
 const membershipPurchaseFromRow = (r: Record<string, unknown>): MembershipPurchase => ({
   transactionId: text(r.transaction_id),
   buyer: text(r.buyer),
+  creator: text(r.creator),
 });
 const preparedPaymentFromRow = (r: Record<string, unknown>): PreparedPaymentRecord => ({
   id: text(r.id),
