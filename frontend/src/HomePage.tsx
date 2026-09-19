@@ -20,6 +20,42 @@ export function HomePage() {
         </div>
       </section>
 
+      <section className="home-section home-why">
+        <h2 className="home-section-title">Where your money goes.</h2>
+        <p className="home-lede">
+          Three things creators want to know. OnlyKas answers all three.
+        </p>
+        <ul className="home-money">
+          <li>
+            <p className="money-claim">You keep 99%.</p>
+            <p className="money-detail">
+              OnlyKas takes 1%. That is the whole fee.
+            </p>
+          </li>
+          <li>
+            <p className="money-claim">You get paid on the spot.</p>
+            <p className="money-detail">
+              The moment a fan pays, the money is yours. No request, no
+              minimum, no hold.
+            </p>
+          </li>
+          <li>
+            <p className="money-claim">No one can hold your money.</p>
+            <p className="money-detail">
+              The money goes straight from your fans to you.
+            </p>
+          </li>
+        </ul>
+        <a
+          className="home-powered"
+          href="https://kaspa.org/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Powered by Kaspa
+        </a>
+      </section>
+
       <section className="home-section">
         <h2 className="home-section-title">What your fans see</h2>
         <CreatorPreview />

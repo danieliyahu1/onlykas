@@ -39,7 +39,28 @@ describe("HomePage", () => {
         name: "Get paid by the people who love your work.",
       }),
     ).toBeVisible();
-    expect(screen.getByText(/You keep 99%/i)).toBeVisible();
+    expect(
+      screen.getByText("Publish a photo or a video. Set your price. You keep 99%."),
+    ).toBeVisible();
+    await screen.findByText("What your fans see");
+  });
+
+  it("tells creators what they keep, when they get it, and who controls it", async () => {
+    const { container } = renderHome();
+
+    expect(screen.getByText("Where your money goes.")).toBeVisible();
+    expect(screen.getByText("You keep 99%.")).toBeVisible();
+    expect(screen.getByText("You get paid on the spot.")).toBeVisible();
+    expect(screen.getByText("No one can hold your money.")).toBeVisible();
+    expect(screen.getByText("Powered by Kaspa")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Powered by Kaspa" }),
+    ).toHaveAttribute("href", "https://kaspa.org/");
+
+    const copy = (container.textContent ?? "").toLowerCase();
+    for (const rival of ["onlyfans", "patreon"]) {
+      expect(copy).not.toContain(rival);
+    }
     await screen.findByText("What your fans see");
   });
 

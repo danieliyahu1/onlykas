@@ -658,6 +658,68 @@ main:has(.home-page) {
   }
 }
 
+/* Home money */
+
+.home-money {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 52rem);
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+.home-money li {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.money-claim {
+  margin: 0;
+  color: var(--paper);
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+.money-detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.home-powered {
+  margin: 0.75rem 0 0;
+  color: var(--acid);
+  font:
+    500 0.72rem "DM Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  text-decoration: none;
+  background-image: linear-gradient(var(--acid-strong), var(--acid-strong));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  transition:
+    color 0.12s ease,
+    background-size 0.18s ease;
+}
+.home-powered:hover,
+.home-powered:focus-visible {
+  color: var(--acid-strong);
+  background-size: 100% 1px;
+}
+@media (min-width: 720px) {
+  .home-money {
+    grid-template-columns: repeat(3, 1fr);
+    width: min(100%, 60rem);
+  }
+}
+
 /* Publishing */
 
 .publish-card {
