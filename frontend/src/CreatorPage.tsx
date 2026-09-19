@@ -294,6 +294,7 @@ function PostCard({
         <PostTileMedia
           thumbnail={unlocked && !isVideo ? mediaUrl : undefined}
           overlay={!unlocked ? "locked" : isVideo ? "video" : "none"}
+          to={`/post/${encodeURIComponent(post.id)}`}
         />
       }
       caption={post.caption}

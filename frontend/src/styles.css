@@ -1155,6 +1155,15 @@ progress {
   color: var(--muted);
   overflow: hidden;
 }
+.post-tile-media.is-link {
+  display: block;
+  text-decoration: none;
+  cursor: pointer;
+}
+.post-tile-media.is-link:focus-visible {
+  outline: 2px solid var(--acid);
+  outline-offset: 2px;
+}
 .post-tile-media .post-lock-icon {
   position: absolute;
   top: 50%;

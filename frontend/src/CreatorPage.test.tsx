@@ -146,6 +146,23 @@ describe("CreatorPage subscription actions", () => {
     );
   });
 
+  it("links each post's media to the post page", async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(false, true),
+      posts: [
+        post("locked-post", "Locked one", false),
+        post("open-post", "Open one", true),
+      ],
+    });
+    renderCreator(null);
+
+    const mediaLinks = await screen.findAllByRole("link", { name: "Open post" });
+    expect(mediaLinks.map((link) => link.getAttribute("href"))).toEqual([
+      "/post/locked-post",
+      "/post/open-post",
+    ]);
+  });
+
   it("buys a locked post directly from the profile card", async () => {
     vi.mocked(api)
       .mockResolvedValueOnce({

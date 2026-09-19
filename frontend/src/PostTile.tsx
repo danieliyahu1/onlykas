@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { LockIcon, VideoIcon } from "./Icons.js";
 
 export type PostTileOverlay = "none" | "locked" | "video";
@@ -29,12 +30,14 @@ export function PostTile({
 export function PostTileMedia({
   thumbnail,
   overlay,
+  to,
 }: {
   thumbnail?: string | undefined;
   overlay: PostTileOverlay;
+  to?: string | undefined;
 }) {
-  return (
-    <div className="post-tile-media">
+  const content = (
+    <>
       {thumbnail ? (
         <img className="post-tile-thumb" src={thumbnail} alt="" loading="lazy" />
       ) : null}
@@ -43,8 +46,18 @@ export function PostTileMedia({
           {overlay === "locked" ? <LockIcon open={false} /> : <VideoIcon name="play" />}
         </span>
       )}
-    </div>
+    </>
   );
+
+  if (to) {
+    return (
+      <Link className="post-tile-media is-link" to={to} aria-label="Open post">
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className="post-tile-media">{content}</div>;
 }
 
 export function PostTileAction({ children }: { children: ReactNode }) {
