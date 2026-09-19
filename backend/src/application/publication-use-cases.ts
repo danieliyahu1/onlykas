@@ -43,7 +43,7 @@ export function createPublishPostUseCase(dependencies: {
       mediaType: media.mediaType,
       mediaSize: media.size,
       mediaDigest: media.digest,
-      mediaKey: `media/blake3/${media.digest.slice(0, 2)}/${media.digest}`,
+      mediaKey: `media/${input.creator}/${media.digest.slice(0, 2)}/${media.digest}`,
       publishedAt: input.now,
     };
     const duplicateResult = async (): Promise<PublishPostResult> => ({

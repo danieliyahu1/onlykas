@@ -53,6 +53,41 @@ describe("publish post use case", () => {
     expect(uploads).toBe(1);
   });
 
+  it("names media by creator so two creators can store the same digest", async () => {
+    const store = new MemoryStore();
+    const publish = createPublishPostUseCase({
+      posts: store,
+      storage: storage(),
+      verifyMedia: async () => media,
+      createId: () => "post-1",
+      pendingTtlMs: 60_000,
+    });
+
+    const first = await publish({
+      creator: "creator-a",
+      caption: "caption",
+      priceSompi: "100",
+      sourcePath: "media",
+      now: 1_000,
+    });
+    const second = await publish({
+      creator: "creator-b",
+      caption: "caption",
+      priceSompi: "100",
+      sourcePath: "media",
+      now: 1_000,
+    });
+
+    expect(first).toMatchObject({
+      kind: "CREATED",
+      post: { mediaKey: `media/creator-a/aa/${media.digest}` },
+    });
+    expect(second).toMatchObject({
+      kind: "CREATED",
+      post: { mediaKey: `media/creator-b/aa/${media.digest}` },
+    });
+  });
+
   it("releases an abandoned reservation and attempts cleanup after storage failure", async () => {
     const store = new MemoryStore();
     let deleted = 0;
