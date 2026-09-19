@@ -31,7 +31,10 @@ describe("KaspaPaymentGateway preparation", () => {
       mediaSize: 1, mediaDigest: "a".repeat(64), mediaKey: "key", publishedAt: 0,
     }, buyer);
     const transaction = JSON.parse(prepared.transaction) as { payload: string; outputs: { value: string; scriptPublicKey: string }[] };
-    expect(parsePpvPayload(transaction.payload)).toMatchObject({ postId: "post-1", mediaDigest: "a".repeat(64) });
+    expect(parsePpvPayload(transaction.payload)).toMatchObject({
+      postId: "post-1",
+      mediaHash: { algorithm: "blake3-256", encoding: "hex", digest: "a".repeat(64) },
+    });
     expect(transaction.outputs[0]).toEqual({ value: "100000000", scriptPublicKey: addressScript(creator), covenant: null });
     expect(transaction.outputs.some((output) => output.scriptPublicKey === addressScript(feeAddress))).toBe(false);
   });
@@ -143,6 +146,59 @@ describe("KaspaPaymentGateway purchase verification", () => {
     )).resolves.toBe(true);
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(sleep.mock.calls).toEqual([[1_000], [2_000]]);
+  });
+
+  it("accepts a legacy payload that stored a bare media digest", async () => {
+    const legacyPayload = Buffer.from(JSON.stringify({
+      protocol: "onlykas",
+      version: 1,
+      type: "post-purchase",
+      postId: "post-1",
+      mediaDigest: "a".repeat(64),
+    })).toString("hex");
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      Response.json({
+        is_accepted: true,
+        payload: legacyPayload,
+        inputs: [{ previous_outpoint_resolved: { script_public_key_address: "kaspatest:buyer" } }],
+        outputs: [
+          { amount: "100000000", script_public_key_address: "kaspatest:creator" },
+        ],
+      }),
+    ));
+    const gateway = new KaspaPaymentGateway(feeAddress);
+
+    await expect(gateway.verifyPurchase(
+      "a".repeat(64),
+      "kaspatest:buyer",
+      "kaspatest:creator",
+      "100000000",
+      "post-1",
+      "a".repeat(64),
+    )).resolves.toBe(true);
+  });
+
+  it("rejects a purchase whose payload commits to different media", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      Response.json({
+        is_accepted: true,
+        payload: ppvPayload("post-1", "b".repeat(64)),
+        inputs: [{ previous_outpoint_resolved: { script_public_key_address: "kaspatest:buyer" } }],
+        outputs: [
+          { amount: "100000000", script_public_key_address: "kaspatest:creator" },
+        ],
+      }),
+    ));
+    const gateway = new KaspaPaymentGateway(feeAddress);
+
+    await expect(gateway.verifyPurchase(
+      "a".repeat(64),
+      "kaspatest:buyer",
+      "kaspatest:creator",
+      "100000000",
+      "post-1",
+      "a".repeat(64),
+    )).resolves.toBe(false);
   });
 
   it("rejects a purchase that omits the platform fee once it is due", async () => {

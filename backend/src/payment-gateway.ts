@@ -112,7 +112,7 @@ constructor(
     if (!tx) return false;
     if (!tx.is_accepted || !tx.inputs?.length || !tx.outputs?.length) return false;
     const payload = parsePpvPayload(tx.payload);
-    if (tx.payload && (!payload || payload.postId !== postId || payload.mediaDigest !== mediaDigest.toLowerCase())) return false;
+    if (tx.payload && (!payload || payload.postId !== postId || payload.mediaHash.digest !== mediaDigest.toLowerCase())) return false;
     if (!tx.inputs.every((input) => input.previous_outpoint_resolved?.script_public_key_address === buyer)) return false;
     const amount = BigInt(amountSompi);
     const fee = platformFeeSompi(amount);
