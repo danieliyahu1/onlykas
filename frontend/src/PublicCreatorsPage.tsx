@@ -3,6 +3,7 @@ import type { CreatorSearchResult } from "@onlykas/shared";
 import { api, ApiError } from "./kasware.js";
 import { Spinner } from "./Spinner.js";
 import { useAsyncResource } from "./useAsyncResource.js";
+import { creatorPath } from "./creator-url.js";
 
 export function PublicCreatorsPage() {
   const navigate = useNavigate();
@@ -45,7 +46,7 @@ export function PublicCreatorsPage() {
           <button
             className="creator-result"
             key={creator.address}
-            onClick={() => navigate(`/creator/${encodeURIComponent(creator.address)}`)}
+            onClick={() => navigate(creatorPath(creator.address))}
           >
             <strong>{creator.displayName ?? creator.displayAddress}</strong>
             {creator.displayName && <span>{creator.displayAddress}</span>}

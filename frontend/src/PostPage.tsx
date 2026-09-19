@@ -11,6 +11,7 @@ import { errorText } from "./errors.js";
 import { formatKas, shortenAddress } from "./format.js";
 import { VideoPlayer } from "./VideoPlayer.js";
 import type { WalletProps } from "./wallet.js";
+import { creatorPath } from "./creator-url.js";
 
 export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const { id = "" } = useParams();
@@ -144,7 +145,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
             </div>
           )}
         </div>
-        <Link className="creator-link" to={`/creator/${currentPost.creator}`}>
+        <Link className="creator-link" to={creatorPath(currentPost.creator)}>
           View creator · {shortenAddress(currentPost.creator)}
         </Link>
       </article>

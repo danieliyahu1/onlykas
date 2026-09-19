@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Icon } from "./Icons.js";
 import { Spinner } from "./Spinner.js";
 import { shortenAddress } from "./format.js";
+import { creatorPath } from "./creator-url.js";
 
 type AccountMenuProps = {
   address: string;
@@ -52,7 +53,7 @@ export function AccountMenu({
           <Icon name="check" />
         </button>
         <p className="account-address">{shortenAddress(address)}</p>
-        <Link className="menu-button" to={`/creator/${address}`}>
+        <Link className="menu-button" to={creatorPath(address)}>
           My page
         </Link>
         <button className="menu-button" onClick={onSignOut}>

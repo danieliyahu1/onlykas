@@ -1,4 +1,5 @@
 import { formatKas, formatTime, shortenAddress } from "./format.js";
+import { creatorAddressFromRoute, creatorPath } from "./creator-url.js";
 
 describe("formatKas", () => {
   it("renders whole KAS without trailing zeros", () => {
@@ -30,5 +31,22 @@ describe("shortenAddress", () => {
   it("keeps the head and tail of the address", () => {
     const address = `kaspatest:${"q".repeat(60)}`;
     expect(shortenAddress(address)).toBe("kaspatest:qqqqqq...qqqqqqqq");
+  });
+});
+
+describe("creator URL", () => {
+  it("omits the network prefix from creator paths", () => {
+    const address = `kaspatest:${"q".repeat(60)}`;
+
+    expect(creatorPath(address)).toBe(`/creator/${"q".repeat(60)}`);
+  });
+
+  it("restores the network prefix when reading a short creator path", () => {
+    const address = "q".repeat(60);
+
+    expect(creatorAddressFromRoute(address)).toBe(`kaspatest:${address}`);
+    expect(creatorAddressFromRoute(`kaspatest:${address}`)).toBe(
+      `kaspatest:${address}`,
+    );
   });
 });

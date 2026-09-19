@@ -4,6 +4,7 @@ import { COPY } from "./copy.js";
 import { LockIcon } from "./Icons.js";
 import { api } from "./kasware.js";
 import { useAsyncResource } from "./useAsyncResource.js";
+import { creatorPath } from "./creator-url.js";
 
 export function HomePage() {
   return (
@@ -116,7 +117,7 @@ function FanCreators() {
     <ul className="fan-creators">
       {creators.map((creator) => (
         <li key={creator.address}>
-          <Link to={`/creator/${encodeURIComponent(creator.address)}`}>
+          <Link to={creatorPath(creator.address)}>
             {creator.displayName}
           </Link>
         </li>

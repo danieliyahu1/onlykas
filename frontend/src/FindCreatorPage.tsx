@@ -5,6 +5,7 @@ import { api, ApiError } from "./kasware.js";
 import { Icon } from "./Icons.js";
 import { Spinner } from "./Spinner.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
+import { creatorPath } from "./creator-url.js";
 
 export function FindCreatorPage() {
   const navigate = useNavigate();
@@ -33,7 +34,7 @@ export function FindCreatorPage() {
       return;
     }
     if (isKaspaTestnetAddress(value)) {
-      navigate(`/creator/${encodeURIComponent(value)}`, { replace: true });
+      navigate(creatorPath(value), { replace: true });
       setSearching(false);
       return;
     }
@@ -127,7 +128,7 @@ export function FindCreatorPage() {
           <button
             className="creator-result"
             key={result.address}
-            onClick={() => navigate(`/creator/${encodeURIComponent(result.address)}`)}
+            onClick={() => navigate(creatorPath(result.address))}
           >
             <strong>{result.displayName ?? result.displayAddress}</strong>
             {result.displayName && <span>{result.displayAddress}</span>}

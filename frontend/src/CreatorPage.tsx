@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   isFreePost,
   isVideoMedia,
@@ -16,6 +16,11 @@ import { COPY } from "./copy.js";
 import { errorText } from "./errors.js";
 import { formatKas, relativeTime, shortenAddress } from "./format.js";
 import type { WalletProps } from "./wallet.js";
+import {
+  creatorAddressFromRoute,
+  creatorPath,
+  hasTestnetPrefix,
+} from "./creator-url.js";
 
 type CreatorPageProps = WalletProps & {
   onVisibilityChange?: (isPublic: boolean) => Promise<unknown>;
@@ -29,7 +34,9 @@ export function CreatorPage({
   signingIn,
   onVisibilityChange,
 }: CreatorPageProps) {
-  const { address: creatorAddress = "" } = useParams();
+  const navigate = useNavigate();
+  const { address: routeAddress = "" } = useParams();
+  const creatorAddress = creatorAddressFromRoute(routeAddress);
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
   const [busy, setBusy] = useState<SubscriptionStage>(null);
   const [busyPostId, setBusyPostId] = useState<string | null>(null);
@@ -66,8 +73,12 @@ export function CreatorPage({
   }
 
   useEffect(() => {
+    if (hasTestnetPrefix(routeAddress)) {
+      navigate(creatorPath(creatorAddress), { replace: true });
+      return;
+    }
     void loadCreator();
-  }, [creatorAddress, address]);
+  }, [creatorAddress, address, navigate, routeAddress]);
 
   if (loading)
     return (
