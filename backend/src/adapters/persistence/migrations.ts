@@ -218,6 +218,43 @@ export const migrations: Migration[] = [
       "CREATE INDEX IF NOT EXISTS prepared_memberships_expiry ON prepared_memberships (expires_at)",
     ],
   },
+  {
+    version: 10,
+    name: "membership_cancellation_history",
+    statements: [
+      `CREATE TABLE creator_covenant_history (
+        creator TEXT NOT NULL,
+        covenant_id TEXT NOT NULL,
+        price_sompi TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'CANCELED')),
+        PRIMARY KEY (creator, covenant_id),
+        UNIQUE (covenant_id)
+      )`,
+      `INSERT INTO creator_covenant_history (creator,covenant_id,price_sompi,status)
+        SELECT creator,covenant_id,COALESCE(price_sompi,'0'),
+          CASE WHEN status='CANCELED' THEN 'CANCELED' ELSE 'ACTIVE' END
+        FROM creator_covenants`,
+      `UPDATE creator_covenants SET status='ACTIVE' WHERE status='LEGACY'`,
+      `CREATE TABLE prepared_memberships_v3 (
+        id TEXT PRIMARY KEY NOT NULL,
+        transaction_json TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        covenant_id TEXT NOT NULL,
+        sign_inputs TEXT NOT NULL,
+        member_output_index INTEGER,
+        creator TEXT NOT NULL,
+        buyer TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('offer', 'purchase', 'update', 'cancel')),
+        expires_at INTEGER NOT NULL CHECK (expires_at > 0),
+        price_sompi TEXT,
+        version INTEGER NOT NULL DEFAULT 1
+      )`,
+      `INSERT INTO prepared_memberships_v3 SELECT * FROM prepared_memberships`,
+      "DROP TABLE prepared_memberships",
+      "ALTER TABLE prepared_memberships_v3 RENAME TO prepared_memberships",
+      "CREATE INDEX IF NOT EXISTS prepared_memberships_expiry ON prepared_memberships (expires_at)",
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {
@@ -260,6 +297,7 @@ export async function resetDatabase(client: Client): Promise<void> {
     "prepared_payments",
     "membership_purchases",
     "creator_covenants",
+    "creator_covenant_history",
     "purchases",
     "posts",
     "profiles",

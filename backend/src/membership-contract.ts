@@ -184,6 +184,22 @@ export function membershipUpdateSignatureScript(
     .toString();
 }
 
+export function membershipCancelSignatureScript(
+  currentRedeemScript: string,
+  fundingInputIndex: number,
+): string {
+  const builder = new ScriptBuilder({ flags: { covenantsEnabled: true } });
+  builder.addData(byteHex(fundingInputIndex));
+  builder.addData(
+    contract.entries.__covenant_entrypoint_auth_cancelMembership.dispatch_tag,
+  );
+  return ScriptBuilder.fromScript(builder.toString(), {
+    flags: { covenantsEnabled: true },
+  })
+    .addData(currentRedeemScript)
+    .toString();
+}
+
 export function membershipPayload(
   memberRedeemScript: string,
   metadata: Omit<MembershipMetadata, "membershipOutputIndex">,

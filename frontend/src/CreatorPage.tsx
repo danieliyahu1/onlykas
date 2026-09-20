@@ -10,8 +10,10 @@ import {
 import { api, signPreparedPayment } from "./kasware.js";
 import {
   finalizePriceUpdate,
+  finalizeCancellation,
   finalizeSubscription,
   preparePriceUpdate,
+  prepareCancellation,
   prepareSubscription,
   unlockPost,
 } from "./purchase.js";
@@ -109,7 +111,8 @@ export function CreatorPage({
   const currentCreator = creator;
   const owner = currentCreator.isOwner || address === currentCreator.address;
   const showSubscription =
-    owner || currentCreator.membership.offered || currentCreator.membership.active;
+    owner || currentCreator.membership.offered || currentCreator.membership.active ||
+    currentCreator.membership.canceled;
 
   async function membershipAction() {
     const wallet = address ?? (await signIn());
@@ -179,6 +182,31 @@ export function CreatorPage({
       if (result.state === "CONFIRMED") await loadCreator();
     } catch (error) {
       showToast(errorText(error, "Price update failed. Nothing was charged."), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function cancelMembership() {
+    const wallet = address ?? (await signIn());
+    if (!wallet || wallet !== currentCreator.address) return;
+    if (!window.confirm("Close this subscription permanently? Existing memberships remain valid until expiry, but this cannot be undone.")) return;
+    setBusy("preparing");
+    dismissToast();
+    try {
+      const prepared = await prepareCancellation();
+      const signedTransaction = await signPreparedPayment(prepared.transaction, prepared.signInputs);
+      setBusy("confirming");
+      const result = await finalizeCancellation(prepared.id, signedTransaction);
+      showToast(
+        result.state === "CONFIRMED"
+          ? "Subscription closed permanently."
+          : "Your cancellation is confirming. Don't repeat it.",
+        result.state === "CONFIRMED" ? "success" : "info",
+      );
+      if (result.state === "CONFIRMED") await loadCreator();
+    } catch (error) {
+      showToast(errorText(error, "Cancellation failed. Nothing was charged."), "error");
     } finally {
       setBusy(null);
     }
@@ -318,6 +346,16 @@ export function CreatorPage({
                   : membershipAction())
               }
             />
+            {owner && currentCreator.membership.offered && (
+              <button
+                className="text-button danger-action"
+                type="button"
+                disabled={busy !== null || signingIn}
+                onClick={() => void cancelMembership()}
+              >
+                Close subscription permanently
+              </button>
+            )}
           </div>
         )}
         <div className="creator-posts">
@@ -375,6 +413,8 @@ function SubscriptionAction({
   onAction: () => void;
 }) {
   if (membership.active) return <span className="access-status">Subscribed</span>;
+  if (!owner && membership.canceled)
+    return <span className="access-status">Subscription closed</span>;
   if (!owner && !membership.offered)
     return <span className="access-status">Subscription live</span>;
   if (owner)

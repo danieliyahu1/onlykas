@@ -460,15 +460,22 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
   }
   async getCreatorCovenant(creator: string) {
     const r = await this.execute({
-      sql: `SELECT * FROM creator_covenants WHERE creator=?`,
+      sql: `SELECT * FROM creator_covenants WHERE creator=? AND status<>'CANCELED'`,
       args: [creator],
     });
     return r.rows[0] ? creatorCovenantFromRow(r.rows[0]) : null;
   }
+  async listCreatorCovenants(creator: string) {
+    const r = await this.execute({
+      sql: `SELECT * FROM creator_covenant_history WHERE creator=?`,
+      args: [creator],
+    });
+    return r.rows.map(creatorCovenantFromRow);
+  }
   async saveCreatorCovenant(v: CreatorCovenant): Promise<DuplicateOutcome> {
     try {
       await this.execute({
-        sql: `INSERT INTO creator_covenants (creator,covenant_id,price_sompi) VALUES (?,?,?)`,
+        sql: `INSERT INTO creator_covenants (creator,covenant_id,price_sompi,status) VALUES (?,?,?,'ACTIVE')`,
         args: [v.creator, v.covenantId, v.priceSompi],
       });
       return "CREATED";
@@ -480,8 +487,8 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
   async createMembershipPurchase(v: MembershipPurchase): Promise<DuplicateOutcome> {
     try {
       await this.execute({
-        sql: `INSERT INTO membership_purchases (transaction_id,buyer,creator) VALUES (?,?,?)`,
-        args: [v.transactionId, v.buyer, v.creator],
+        sql: `INSERT INTO membership_purchases (transaction_id,buyer,creator,covenant_id) VALUES (?,?,?,?)`,
+        args: [v.transactionId, v.buyer, v.creator, v.covenantId ?? null],
       });
       return "CREATED";
     } catch (error) {
@@ -505,12 +512,39 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     );
   }
   async finalizeOffer(id: string, value: CreatorCovenant): Promise<DuplicateOutcome> {
-    return this.transactionalFinalize(
-      id,
-      "prepared_memberships",
-      `INSERT INTO creator_covenants (creator,covenant_id,price_sompi) VALUES (?,?,?)`,
-      [value.creator, value.covenantId, value.priceSompi],
-    );
+    const transaction = await this.client.transaction("write");
+    try {
+      const current = await transaction.execute({
+        sql: `SELECT status FROM creator_covenants WHERE creator=?`,
+        args: [value.creator],
+      });
+      if (current.rows[0] && current.rows[0].status !== "CANCELED") {
+        await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+        await transaction.commit();
+        return "DUPLICATE";
+      }
+      try {
+        await transaction.execute({
+          sql: `INSERT INTO creator_covenants (creator,covenant_id,price_sompi,status) VALUES (?,?,?,'ACTIVE') ON CONFLICT(creator) DO UPDATE SET covenant_id=excluded.covenant_id,price_sompi=excluded.price_sompi,status='ACTIVE'`,
+          args: [value.creator, value.covenantId, value.priceSompi],
+        });
+        await transaction.execute({
+          sql: `INSERT INTO creator_covenant_history (creator,covenant_id,price_sompi,status) VALUES (?,?,?,'ACTIVE')`,
+          args: [value.creator, value.covenantId, value.priceSompi],
+        });
+      } catch (error) {
+        if (!isUniqueConstraint(error)) throw error;
+        await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+        await transaction.commit();
+        return "DUPLICATE";
+      }
+      await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+      await transaction.commit();
+      return "CREATED";
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
   }
   async finalizePriceUpdate(
     id: string,
@@ -519,7 +553,7 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     const transaction = await this.client.transaction("write");
     try {
       const result = await transaction.execute({
-        sql: `UPDATE creator_covenants SET price_sompi=? WHERE creator=? AND covenant_id=?`,
+        sql: `UPDATE creator_covenants SET price_sompi=?,status='ACTIVE' WHERE creator=? AND covenant_id=? AND status<>'CANCELED'`,
         args: [value.priceSompi, value.creator, value.covenantId],
       });
       if (result.rowsAffected !== 1) {
@@ -531,9 +565,40 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
         return "DUPLICATE";
       }
       await transaction.execute({
+        sql: `UPDATE creator_covenant_history SET price_sompi=?,status='ACTIVE' WHERE creator=? AND covenant_id=?`,
+        args: [value.priceSompi, value.creator, value.covenantId],
+      });
+      await transaction.execute({
         sql: "DELETE FROM prepared_memberships WHERE id=?",
         args: [id],
       });
+      await transaction.commit();
+      return "CREATED";
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+  async finalizeCancellation(
+    id: string,
+    value: Pick<CreatorCovenant, "creator" | "covenantId">,
+  ): Promise<DuplicateOutcome> {
+    const transaction = await this.client.transaction("write");
+    try {
+      const result = await transaction.execute({
+        sql: `UPDATE creator_covenants SET status='CANCELED' WHERE creator=? AND covenant_id=? AND status<>'CANCELED'`,
+        args: [value.creator, value.covenantId],
+      });
+      if (result.rowsAffected !== 1) {
+        await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+        await transaction.commit();
+        return "DUPLICATE";
+      }
+      await transaction.execute({
+        sql: `UPDATE creator_covenant_history SET status='CANCELED' WHERE creator=? AND covenant_id=?`,
+        args: [value.creator, value.covenantId],
+      });
+      await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
       await transaction.commit();
       return "CREATED";
     } catch (error) {
@@ -548,8 +613,8 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     return this.transactionalFinalize(
       id,
       "prepared_memberships",
-      `INSERT INTO membership_purchases (transaction_id,buyer,creator) VALUES (?,?,?)`,
-      [value.transactionId, value.buyer, value.creator],
+      `INSERT INTO membership_purchases (transaction_id,buyer,creator,covenant_id) VALUES (?,?,?,?)`,
+      [value.transactionId, value.buyer, value.creator, value.covenantId ?? null],
     );
   }
   private async transactionalFinalize(
@@ -636,11 +701,16 @@ const creatorCovenantFromRow = (r: Record<string, unknown>): CreatorCovenant => 
   creator: text(r.creator),
   covenantId: text(r.covenant_id),
   priceSompi: text(r.price_sompi),
+  ...(r.status === "CANCELED" ? { status: "CANCELED" as const } : {}),
 });
 const membershipPurchaseFromRow = (r: Record<string, unknown>): MembershipPurchase => ({
   transactionId: text(r.transaction_id),
   buyer: text(r.buyer),
   creator: text(r.creator),
+  covenantId:
+    r.covenant_id === null || r.covenant_id === undefined
+      ? undefined
+      : text(r.covenant_id),
 });
 const preparedPaymentFromRow = (r: Record<string, unknown>): PreparedPaymentRecord => ({
   id: text(r.id),

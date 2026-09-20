@@ -21,6 +21,7 @@ export class MemoryStore implements Repositories {
   readonly pendingPosts = new Map<string, { post: Post; expiresAt: number }>();
   readonly purchases = new Map<string, Purchase>();
   readonly creatorCovenants = new Map<string, CreatorCovenant>();
+  readonly creatorCovenantHistory = new Map<string, CreatorCovenant>();
   readonly membershipPurchaseRecords = new Map<string, MembershipPurchase>();
   readonly preparedPaymentRecords = new Map<string, PreparedPaymentRecord>();
   readonly paymentWorkflows = new Map<string, PaymentWorkflow>();
@@ -211,7 +212,14 @@ export class MemoryStore implements Repositories {
   }
   async getCreatorCovenant(creator: string) {
     const v = this.creatorCovenants.get(creator);
-    return v ? structuredClone(v) : null;
+    return !v || v.status === "CANCELED"
+      ? null
+      : { creator: v.creator, covenantId: v.covenantId, priceSompi: v.priceSompi };
+  }
+  async listCreatorCovenants(creator: string) {
+    return [...this.creatorCovenantHistory.values()]
+      .filter((v) => v.creator === creator)
+      .map((v) => structuredClone(v));
   }
   async saveCreatorCovenant(v: CreatorCovenant): Promise<DuplicateOutcome> {
     if (
@@ -219,7 +227,9 @@ export class MemoryStore implements Repositories {
       [...this.creatorCovenants.values()].some((x) => x.covenantId === v.covenantId)
     )
       return "DUPLICATE";
-    this.creatorCovenants.set(v.creator, structuredClone(v));
+    const value = { ...v, status: "ACTIVE" as const };
+    this.creatorCovenants.set(v.creator, value);
+    this.creatorCovenantHistory.set(v.covenantId, value);
     return "CREATED";
   }
   async createMembershipPurchase(v: MembershipPurchase): Promise<DuplicateOutcome> {
@@ -238,7 +248,10 @@ export class MemoryStore implements Repositories {
     return outcome;
   }
   async finalizeOffer(id: string, value: CreatorCovenant): Promise<DuplicateOutcome> {
-    const outcome = await this.saveCreatorCovenant(value);
+    const current = this.creatorCovenants.get(value.creator);
+    const outcome = current?.status === "CANCELED"
+      ? this.saveNewCovenant(value)
+      : await this.saveCreatorCovenant(value);
     this.preparedMembershipRecords.delete(id);
     return outcome;
   }
@@ -251,8 +264,30 @@ export class MemoryStore implements Repositories {
       this.preparedMembershipRecords.delete(id);
       return "DUPLICATE";
     }
-    this.creatorCovenants.set(value.creator, structuredClone(value));
+    const updated = { ...value, status: "ACTIVE" as const };
+    this.creatorCovenants.set(value.creator, updated);
+    this.creatorCovenantHistory.set(value.covenantId, updated);
     this.preparedMembershipRecords.delete(id);
+    return "CREATED";
+  }
+  async finalizeCancellation(id: string, value: Pick<CreatorCovenant, "creator" | "covenantId">) {
+    const existing = this.creatorCovenants.get(value.creator);
+    if (!existing || existing.covenantId !== value.covenantId || existing.status === "CANCELED") {
+      this.preparedMembershipRecords.delete(id);
+      return "DUPLICATE" as const;
+    }
+    const canceled = { ...existing, status: "CANCELED" as const };
+    this.creatorCovenants.set(value.creator, canceled);
+    this.creatorCovenantHistory.set(value.covenantId, canceled);
+    this.preparedMembershipRecords.delete(id);
+    return "CREATED" as const;
+  }
+  private saveNewCovenant(value: CreatorCovenant): DuplicateOutcome {
+    if ([...this.creatorCovenantHistory.values()].some((x) => x.covenantId === value.covenantId))
+      return "DUPLICATE";
+    const active = { ...value, status: "ACTIVE" as const };
+    this.creatorCovenants.set(value.creator, active);
+    this.creatorCovenantHistory.set(value.covenantId, active);
     return "CREATED";
   }
   async finalizeMembershipPurchase(

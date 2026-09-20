@@ -78,3 +78,19 @@ export async function finalizePriceUpdate(
     body: JSON.stringify({ signedTransaction }),
   });
 }
+
+export async function prepareCancellation(): Promise<PreparedSubscription> {
+  return api<PreparedSubscription>("/api/membership/cancel/prepare", {
+    method: "POST",
+  });
+}
+
+export async function finalizeCancellation(
+  preparedId: string,
+  signedTransaction: string,
+): Promise<PurchaseResult> {
+  return api<PurchaseResult>(`/api/membership/cancel/${preparedId}/finalize`, {
+    method: "POST",
+    body: JSON.stringify({ signedTransaction }),
+  });
+}

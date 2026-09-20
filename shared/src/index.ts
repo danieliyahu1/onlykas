@@ -41,6 +41,7 @@ export interface CreatorResponse {
   isOwner: boolean;
   membership: {
     offered: boolean;
+    canceled?: boolean;
     active: boolean;
     priceSompi?: string | null;
     durationDays?: number | null;

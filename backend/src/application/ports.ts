@@ -88,6 +88,7 @@ export interface PurchaseRepository {
 
 export interface CovenantRepository {
   getCreatorCovenant(creator: string): Promise<CreatorCovenant | null>;
+  listCreatorCovenants?(creator: string): Promise<CreatorCovenant[]>;
   saveCreatorCovenant(value: CreatorCovenant): Promise<DuplicateOutcome>;
   finalizeOffer(
     preparedMembershipId: string,
@@ -96,6 +97,10 @@ export interface CovenantRepository {
   finalizePriceUpdate(
     preparedMembershipId: string,
     value: CreatorCovenant,
+  ): Promise<DuplicateOutcome>;
+  finalizeCancellation?(
+    preparedMembershipId: string,
+    value: Pick<CreatorCovenant, "creator" | "covenantId">,
   ): Promise<DuplicateOutcome>;
 }
 
@@ -155,6 +160,11 @@ export interface MembershipGateway {
     covenantId: string,
     currentPriceSompi: string,
     newPriceSompi: string,
+  ): Promise<PreparedMembershipTransaction>;
+  prepareCancellation(
+    creator: string,
+    covenantId: string,
+    priceSompi: string,
   ): Promise<PreparedMembershipTransaction>;
   submit(
     prepared: PreparedMembershipTransaction,

@@ -22,6 +22,7 @@ describe("membership contract codec", () => {
     expect(Object.keys(artifact.contracts.Membership.entries)).toEqual([
       "__covenant_entrypoint_auth_updateMembership",
       "mint",
+      "__covenant_entrypoint_auth_cancelMembership",
     ]);
   });
 

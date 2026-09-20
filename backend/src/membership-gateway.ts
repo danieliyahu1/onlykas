@@ -23,6 +23,7 @@ import {
   MEMBERSHIP_OUTPUT_VALUE,
   membershipAddress,
   membershipMintSignatureScript,
+  membershipCancelSignatureScript,
   membershipUpdateSignatureScript,
   membershipPayload,
   membershipRedeemScript,
@@ -380,6 +381,62 @@ export class KaspaMembershipGateway implements MembershipGateway {
       null,
     );
     result.priceSompi = newPriceSompi;
+    return result;
+  }
+
+  async prepareCancellation(
+    creator: string,
+    covenantIdHex: string,
+    priceSompi: string,
+  ): Promise<PreparedMembershipTransaction> {
+    const current = minterState(creator, this.platformFeeAddress, BigInt(priceSompi));
+    const canceled = { ...current, isMinter: false };
+    const [minterUtxos, creatorUtxos, rate] = await Promise.all([
+      this.utxos(membershipAddress(current)),
+      this.utxos(creator),
+      this.feeRate(),
+    ]);
+    const minterUtxo = await this.findMinterUtxo(minterUtxos, current, covenantIdHex);
+    if (!minterUtxo) throw new Error("MEMBERSHIP_OFFER_UNAVAILABLE");
+    const provisionalOutputs: PreparedOutput[] = [
+      {
+        value: MEMBERSHIP_OUTPUT_VALUE.toString(),
+        scriptPublicKey: membershipScript(canceled),
+        covenant: { authorizingInput: 0, covenantId: covenantIdHex },
+      },
+      { value: "0", scriptPublicKey: addressScript(creator), covenant: null },
+    ];
+    const minterInput = {
+      transactionId: minterUtxo.outpoint.transactionId,
+      index: minterUtxo.outpoint.index,
+      sequence: "0",
+      sigOpCount: 0,
+      computeBudget: COVENANT_COMPUTE_BUDGET,
+      signatureScript: membershipCancelSignatureScript(
+        membershipRedeemScript(current),
+        1,
+      ),
+      utxo: serializableUtxo(minterUtxo, covenantIdHex),
+    };
+    const selected = selectWalletUtxos(
+      creatorUtxos,
+      creator,
+      MEMBERSHIP_OUTPUT_VALUE,
+      (values) => estimatedFee([minterInput, ...values.map(walletInput)], provisionalOutputs, rate),
+    );
+    const inputs = [minterInput, ...selected.map(walletInput)];
+    const fee = estimatedFee(inputs, provisionalOutputs, rate);
+    const change = sumUtxos(selected) - MEMBERSHIP_OUTPUT_VALUE - fee;
+    const outputs = [provisionalOutputs[0]!];
+    if (change > 0n)
+      outputs.push({ value: change.toString(), scriptPublicKey: addressScript(creator), covenant: null });
+    const result = prepared(
+      transaction(inputs, outputs, ""),
+      covenantIdHex,
+      selected.map((_, index) => index + 1),
+      null,
+    );
+    result.priceSompi = priceSompi;
     return result;
   }
 

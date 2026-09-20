@@ -59,6 +59,7 @@ export interface CreatorCovenant {
   creator: string;
   covenantId: string;
   priceSompi: string;
+  status?: "ACTIVE" | "CANCELED";
 }
 
 export interface MembershipPurchase {
@@ -106,7 +107,7 @@ export interface PreparedMembershipRecord {
   memberOutputIndex: number | null;
   creator: string;
   buyer: string;
-  kind: "offer" | "purchase" | "update";
+  kind: "offer" | "purchase" | "update" | "cancel";
   expiresAt: number;
   priceSompi?: string | undefined;
 }

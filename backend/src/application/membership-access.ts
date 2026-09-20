@@ -13,28 +13,43 @@ export class MembershipAccess {
 
   async isActive(buyer: string, creator: string): Promise<boolean> {
     if (!this.verifier) return false;
-    const covenantId = (await this.covenants.getCreatorCovenant(creator))?.covenantId;
+    const current = await this.covenants.getCreatorCovenant(creator);
+    const known = this.covenants.listCreatorCovenants
+      ? await this.covenants.listCreatorCovenants(creator)
+      : current
+        ? [current]
+        : [];
+    const covenantIds = new Set(known.map((value) => value.covenantId));
+    if (current) covenantIds.add(current.covenantId);
     for (const receipt of await this.receipts.membershipReceipts(buyer, creator)) {
-      const check = await this.verifier.verifyUtxo(
-        receipt.transactionId,
-        1,
-        buyer,
-        covenantId,
-        creator,
-      );
-      if (check.status === "VALID") return true;
+      const ids = receipt.covenantId ? [receipt.covenantId] : [...covenantIds];
+      for (const covenantId of ids) {
+        const check = await this.verifier.verifyUtxo(
+          receipt.transactionId,
+          1,
+          buyer,
+          covenantId,
+          creator,
+        );
+        if (check.status === "VALID") return true;
+      }
     }
-    const found = await this.verifier.findMembership(buyer, creator, covenantId);
-    if (!found) return false;
-    try {
-      await this.receipts.createMembershipPurchase({
-        transactionId: found.transactionId,
-        buyer,
-        creator,
-      });
-    } catch {
-      // Caching the discovery must never block a valid membership.
+    const ids = covenantIds.size ? [...covenantIds] : [undefined];
+    for (const covenantId of ids) {
+      const found = await this.verifier.findMembership(buyer, creator, covenantId);
+      if (!found) continue;
+      try {
+        await this.receipts.createMembershipPurchase({
+          transactionId: found.transactionId,
+          buyer,
+          creator,
+          ...(covenantId ? { covenantId } : {}),
+        });
+      } catch {
+        // Caching the discovery must never block a valid membership.
+      }
+      return true;
     }
-    return true;
+    return false;
   }
 }

@@ -434,6 +434,10 @@ h2 {
   text-decoration: underline;
   text-underline-offset: 0.25em;
 }
+
+.danger-action {
+  color: #b42318;
+}
 .text-button:hover,
 .text-button:focus-visible {
   color: var(--acid-strong);

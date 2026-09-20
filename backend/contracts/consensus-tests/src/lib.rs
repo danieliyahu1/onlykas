@@ -126,6 +126,17 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
         builder.drain()
     }
 
+    fn cancel_signature_script(
+        compiled: &CompiledContract,
+        current: &[u8],
+    ) -> Vec<u8> {
+        let mut builder = ScriptBuilder::with_flags(EngineFlags { covenants_enabled: true, ..Default::default() });
+        builder.add_data(&[1]).unwrap();
+        builder.add_data(compiled.dispatch_tags.get("__covenant_entrypoint_auth_cancelMembership").expect("cancel dispatch tag")).unwrap();
+        builder.add_data(current).unwrap();
+        builder.drain()
+    }
+
     fn execute(tx: &Transaction, entries: &[UtxoEntry], index: usize) -> Result<(), TxScriptError> {
         let populated = PopulatedTransaction::new(tx, entries.to_vec());
         let context = CovenantsContext::from_tx(&populated).map_err(TxScriptError::from)?;
@@ -247,5 +258,47 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
 
         assert_eq!(execute(&tx, &entries, 0), Ok(()));
         assert_eq!(execute(&tx, &entries, 1), Ok(()));
+    }
+
+    #[test]
+    fn membership_cancellation_disables_the_minter_and_requires_creator_input() {
+        let creator = key(1);
+        let platform = key(3);
+        let creator_key = creator.x_only_public_key().0.serialize();
+        let platform_key = platform.x_only_public_key().0.serialize();
+        let compiled = compile(&creator_key, &platform_key);
+        let current = state(&compiled, &creator_key, &platform_key, &creator_key, 0, PRICE as i64, true);
+        let canceled = state(&compiled, &creator_key, &platform_key, &creator_key, 0, PRICE as i64, false);
+        let creator_spk = p2pk(&creator_key);
+        let entries = vec![
+            UtxoEntry::new(DEPOSIT, pay_to_script_hash_script(&current), 1, false, Some(COVENANT_ID)),
+            UtxoEntry::new(1_000_000_000, creator_spk.clone(), 1, false, None),
+        ];
+        let unsigned = Transaction::new(
+            1,
+            vec![
+                TransactionInput::new_with_compute_budget(
+                    TransactionOutpoint { transaction_id: TransactionId::from_bytes([5; 32]), index: 0 },
+                    cancel_signature_script(&compiled, &current),
+                    0,
+                    COMPUTE_BUDGET,
+                ),
+                TransactionInput::new_with_compute_budget(
+                    TransactionOutpoint { transaction_id: TransactionId::from_bytes([6; 32]), index: 0 },
+                    vec![],
+                    0,
+                    COMPUTE_BUDGET,
+                ),
+            ],
+            vec![
+                TransactionOutput { value: DEPOSIT, script_public_key: pay_to_script_hash_script(&canceled), covenant: Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID }) },
+                TransactionOutput { value: 900_000_000, script_public_key: creator_spk, covenant: None },
+            ],
+            DAA,
+            Default::default(),
+            0,
+            vec![],
+        );
+        assert_eq!(execute(&unsigned, &entries, 0), Ok(()));
     }
 }

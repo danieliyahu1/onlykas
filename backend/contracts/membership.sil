@@ -91,4 +91,22 @@ contract Membership(
             isMinter: true
         });
     }
+
+    #[covenant(from = 1, to = 1)]
+    function cancelMembership(State prevState, byte fundingInputIndex) : (State) {
+        require(prevState.isMinter);
+        require(prevState.owner == prevState.creator);
+
+        byte[] creatorLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.creator)));
+        require(tx.inputs[unsigned(fundingInputIndex)].scriptPubKey == creatorLock);
+
+        return(State {
+            creator: prevState.creator,
+            platform: prevState.platform,
+            owner: prevState.owner,
+            expiresAtDaa: prevState.expiresAtDaa,
+            priceSompi: prevState.priceSompi,
+            isMinter: false
+        });
+    }
 }

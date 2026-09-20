@@ -422,6 +422,9 @@ export function createApp(d: AppDependencies) {
         isOwner = viewer === address,
         posts = await d.store.creatorPosts(address),
         covenant = await d.store.getCreatorCovenant(address),
+        history = d.store.listCreatorCovenants
+          ? await d.store.listCreatorCovenants(address)
+          : [],
         offered = Boolean(covenant),
         active = Boolean(
           viewer && !isOwner && (await membershipAccess.isActive(viewer, address)),
@@ -443,6 +446,9 @@ export function createApp(d: AppDependencies) {
         isOwner,
         membership: {
           offered,
+          ...(!covenant && history.some((value) => value.status === "CANCELED")
+            ? { canceled: true }
+            : {}),
           active,
           priceSompi: covenant?.priceSompi ?? null,
           durationDays: 30,
@@ -780,6 +786,77 @@ export function createApp(d: AppDependencies) {
     }),
   );
   app.post(
+    "/api/membership/cancel/prepare",
+    optional,
+    required,
+    asyncHandler(async (req, res) => {
+      if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const creator = req.walletSession!.address;
+      const mapping = await d.store.getCreatorCovenant(creator);
+      if (!mapping) return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
+      const value = await d.membershipGateway.prepareCancellation(
+        creator,
+        mapping.covenantId,
+        mapping.priceSompi,
+      );
+      const id = randomUUID();
+      await d.store.prunePreparedMemberships(now());
+      await d.store.savePreparedMembership({
+        id,
+        ...value,
+        creator,
+        buyer: creator,
+        kind: "cancel",
+        expiresAt: now() + PREPARED_TTL_MS,
+      });
+      res.status(201).json({ id, transaction: value.transaction, signInputs: value.signInputs });
+    }),
+  );
+  app.post(
+    "/api/membership/cancel/:id/finalize",
+    optional,
+    required,
+    asyncHandler(async (req, res) => {
+      if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      if (!d.store.finalizeCancellation) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const id = param(req, "id");
+      const value = await d.store.getPreparedMembership(id, now());
+      if (!value || value.kind !== "cancel" || value.creator !== req.walletSession!.address)
+        return apiError(res, 404, "MEMBERSHIP_CANCELLATION_NOT_FOUND");
+      const body = z.object({ signedTransaction: z.string().min(1) }).parse(req.body);
+      const submission = await d.membershipGateway.submit(value, body.signedTransaction);
+      if (submission.isAccepted !== true || !submission.transactionId) {
+        if (submission.isAccepted === null && submission.transactionId) {
+          await d.store.saveMembershipWorkflow({
+            preparedMembershipId: id,
+            state: "SUBMITTED",
+            transactionId: submission.transactionId,
+            rejection: null,
+          });
+        } else {
+          await d.store.deleteMembershipWorkflow(id);
+          await d.store.deletePreparedMembership(id);
+        }
+        return res.status(submission.isAccepted === null ? 202 : 422).json({
+          state: submission.isAccepted === null ? "PENDING" : "REJECTED",
+          transactionId: submission.transactionId,
+          rejection: submission.rejection,
+        });
+      }
+      const outcome = await d.store.finalizeCancellation(id, {
+        creator: value.creator,
+        covenantId: value.covenantId,
+      });
+      await d.store.deleteMembershipWorkflow(id);
+      if (outcome === "DUPLICATE") return apiError(res, 409, "MEMBERSHIP_CANCELLATION_STALE");
+      res.status(201).json({
+        state: "CONFIRMED",
+        transactionId: submission.transactionId,
+        covenantId: value.covenantId,
+      });
+    }),
+  );
+  app.post(
     "/api/membership/price/prepare",
     optional,
     required,
@@ -939,6 +1016,7 @@ export function createApp(d: AppDependencies) {
         transactionId: submission.transactionId,
         buyer: value.buyer,
         creator: value.creator,
+        covenantId: value.covenantId,
       });
       await d.store.saveMembershipWorkflow({
         preparedMembershipId: id,
@@ -968,10 +1046,12 @@ export function createApp(d: AppDependencies) {
             creator: z.string().regex(addressPattern),
             transactionId: z.string().regex(/^[0-9a-f]{64}$/i),
             outputIndex: z.literal(1),
+            covenantId: z.string().regex(/^[0-9a-f]{64}$/i).optional(),
           })
           .parse(req.body),
-        mapping = await d.store.getCreatorCovenant(b.creator);
-      if (!mapping) {
+        mapping = await d.store.getCreatorCovenant(b.creator),
+        covenantId = b.covenantId ?? mapping?.covenantId;
+      if (!covenantId) {
         metrics.membershipFinalizeAttempt("purchase", "covenant_not_found");
         return apiError(res, 404, "COVENANT_NOT_FOUND");
       }
@@ -980,7 +1060,7 @@ export function createApp(d: AppDependencies) {
           b.transactionId,
           b.outputIndex,
           buyer,
-          mapping.covenantId,
+          covenantId,
           b.creator,
         );
       if (check.status !== "VALID") {
@@ -993,6 +1073,7 @@ export function createApp(d: AppDependencies) {
         transactionId: b.transactionId,
         buyer,
         creator: b.creator,
+        covenantId,
       });
       if (outcome === "DUPLICATE")
         return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS");
