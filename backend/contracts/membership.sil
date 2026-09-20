@@ -58,7 +58,7 @@ contract Membership(
         require(tx.outputs[unsigned(ownerIndexOutputIndex)].value == INDEX_OUTPUT_VALUE);
 
         byte[] creatorLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.creator)));
-        int platformPayment = prevState.priceSompi / FEE_DENOMINATOR;
+        int platformPayment = (prevState.priceSompi + 50) / FEE_DENOMINATOR;
         if (platformPayment < MIN_FEE_SOMPI) {
             platformPayment = 0;
         }

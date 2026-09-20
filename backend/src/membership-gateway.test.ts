@@ -140,7 +140,7 @@ describe("KaspaMembershipGateway", () => {
       (sum, output) => sum + output.value,
       0n,
     );
-    expect(inputValue - outputValue).toBe(1_748_000n);
+    expect(inputValue - outputValue).toBe(1_748_900n);
   });
 
   it("prices fees from version 1 compute mass", async () => {

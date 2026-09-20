@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   isFreePost,
   isVideoMedia,
+  membershipFeeSompi,
   parseMembershipPrice,
   type CreatorResponse,
   type PostResponse,
@@ -23,6 +24,7 @@ import { Toast, useToast } from "./Toast.js";
 import { HomeLink, Message } from "./Message.js";
 import { COPY } from "./copy.js";
 import { errorText } from "./errors.js";
+import { ApiError } from "./api-error.js";
 import { formatKas, relativeTime, shortenAddress } from "./format.js";
 import type { WalletProps } from "./wallet.js";
 import {
@@ -150,6 +152,13 @@ export function CreatorPage({
       );
       if (result.state === "CONFIRMED") await loadCreator();
     } catch (error) {
+      if (
+        error instanceof ApiError &&
+        (error.code === "MEMBERSHIP_OFFER_STALE" ||
+          error.code === "MEMBERSHIP_OFFER_NOT_FOUND")
+      ) {
+        await loadCreator();
+      }
       showToast(errorText(error, "Payment failed. Nothing was charged."), "error");
     } finally {
       setBusy(null);
@@ -333,6 +342,9 @@ export function CreatorPage({
                 Existing memberships keep their expiry.
               </span>
             )}
+            {!owner && currentCreator.membership.offered && currentCreator.membership.priceSompi && (
+              <MembershipPaymentDetails priceSompi={currentCreator.membership.priceSompi} />
+            )}
             <SubscriptionAction
               membership={currentCreator.membership}
               owner={owner}
@@ -412,7 +424,16 @@ function SubscriptionAction({
   onPriceChange: (value: string) => void;
   onAction: () => void;
 }) {
-  if (membership.active) return <span className="access-status">Subscribed</span>;
+  if (membership.active)
+    return (
+      <div className="subscription-renewal">
+        <span className="access-status">Subscribed</span>
+        <button className="secondary" disabled={disabled} onClick={onAction}>
+          {stage !== null && <Spinner />}
+          Renew for 30 days
+        </button>
+      </div>
+    );
   if (!owner && membership.canceled)
     return <span className="access-status">Subscription closed</span>;
   if (!owner && !membership.offered)
@@ -441,6 +462,20 @@ function SubscriptionAction({
       {stage !== null && <Spinner />}
       {subscriptionLabel(owner, stage)}
     </button>
+  );
+}
+
+function MembershipPaymentDetails({ priceSompi }: { priceSompi: string }) {
+  const price = BigInt(priceSompi);
+  const fee = membershipFeeSompi(price);
+  return (
+    <span className="access-note">
+      Creator receives {formatKas((price - fee).toString())} KAS
+      {fee > 0n
+        ? ` · Platform fee ${formatKas(fee.toString())} KAS`
+        : " · Platform fee waived below 100 KAS"}
+      {" · Network fee paid by buyer"}
+    </span>
   );
 }
 

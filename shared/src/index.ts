@@ -124,7 +124,7 @@ export function parseMembershipPrice(value: string): bigint | null {
 }
 
 export function membershipFeeSompi(priceSompi: bigint): bigint {
-  const fee = priceSompi / 100n;
+  const fee = (priceSompi + 50n) / 100n;
   return fee >= 100_000_000n ? fee : 0n;
 }
 

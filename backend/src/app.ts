@@ -758,13 +758,22 @@ export function createApp(d: AppDependencies) {
         metrics.membershipPrepareAttempt("purchase", "offer_not_found");
         return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
       }
-      const value = await d.membershipGateway.prepareMint(
+      let value: Awaited<ReturnType<MembershipGateway["prepareMint"]>>;
+      try {
+        value = await d.membershipGateway.prepareMint(
           creator,
           buyer,
           mapping.covenantId,
           mapping.priceSompi,
-        ),
-        id = randomUUID();
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "MEMBERSHIP_OFFER_UNAVAILABLE")
+          return apiError(res, 409, "MEMBERSHIP_OFFER_STALE", "This offer changed. Refresh and try again.");
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+          return apiError(res, 422, "INSUFFICIENT_FUNDS", COPY.insufficientFunds);
+        throw error;
+      }
+      const id = randomUUID();
       logger.info("membership_prepare", {
         requestId: req.requestId,
         kind: "purchase",
