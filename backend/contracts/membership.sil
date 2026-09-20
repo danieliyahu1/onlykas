@@ -71,4 +71,24 @@ contract Membership(
             require(tx.outputs[unsigned(platformOutputIndex)].value == platformPayment);
         }
     }
+
+    #[covenant(from = 1, to = 1)]
+    function updateMembership(State prevState, int newPriceSompi, byte fundingInputIndex) : (State) {
+        require(prevState.isMinter);
+        require(prevState.owner == prevState.creator);
+        require(newPriceSompi >= MIN_PRICE_SOMPI);
+        require(newPriceSompi <= MAX_PRICE_SOMPI);
+
+        byte[] creatorLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.creator)));
+        require(tx.inputs[unsigned(fundingInputIndex)].scriptPubKey == creatorLock);
+
+        return(State {
+            creator: prevState.creator,
+            platform: prevState.platform,
+            owner: prevState.owner,
+            expiresAtDaa: prevState.expiresAtDaa,
+            priceSompi: newPriceSompi,
+            isMinter: true
+        });
+    }
 }

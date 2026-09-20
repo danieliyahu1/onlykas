@@ -99,7 +99,7 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
         builder.add_data(&[2]).unwrap();
         builder.add_data(&[3]).unwrap();
         builder.add_data(&[3]).unwrap();
-        builder.add_data(compiled.dispatch_tags.values().next().expect("mint dispatch tag")).unwrap();
+        builder.add_data(compiled.dispatch_tags.get("mint").expect("mint dispatch tag")).unwrap();
         builder.add_data(current).unwrap();
         builder.drain()
     }
@@ -111,6 +111,19 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
         let mut bytes = signature.as_ref().to_vec();
         bytes.push(SIG_HASH_ALL.to_u8());
         ScriptBuilder::new().add_data(&bytes).unwrap().drain()
+    }
+
+    fn update_signature_script(
+        compiled: &CompiledContract,
+        current: &[u8],
+        new_price: i64,
+    ) -> Vec<u8> {
+        let mut builder = ScriptBuilder::with_flags(EngineFlags { covenants_enabled: true, ..Default::default() });
+        builder.add_data(&new_price.to_le_bytes()).unwrap();
+        builder.add_data(&[1]).unwrap();
+        builder.add_data(compiled.dispatch_tags.get("__covenant_entrypoint_auth_updateMembership").expect("update dispatch tag")).unwrap();
+        builder.add_data(current).unwrap();
+        builder.drain()
     }
 
     fn execute(tx: &Transaction, entries: &[UtxoEntry], index: usize) -> Result<(), TxScriptError> {
@@ -130,7 +143,7 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
     }
 
     #[test]
-fn membership_mint_passes_consensus_vm_and_mass_limit() {
+    fn membership_mint_passes_consensus_vm_and_mass_limit() {
         let creator = key(1);
         let platform = key(3);
         let buyer = key(2);
@@ -187,5 +200,52 @@ fn membership_mint_passes_consensus_vm_and_mass_limit() {
         let normalized = Mass::new(non_contextual, contextual)
             .normalized_max(&kaspa_consensus_core::config::params::TESTNET_PARAMS.prior_block_mass_limits.cofactors());
         assert!(normalized <= 500_000, "transaction mass {normalized} exceeds the network limit");
+    }
+
+    #[test]
+    fn membership_price_update_preserves_covenant_and_requires_creator_input() {
+        let creator = key(1);
+        let platform = key(3);
+        let creator_key = creator.x_only_public_key().0.serialize();
+        let platform_key = platform.x_only_public_key().0.serialize();
+        let compiled = compile(&creator_key, &platform_key);
+        let current = state(&compiled, &creator_key, &platform_key, &creator_key, 0, PRICE as i64, true);
+        let updated = state(&compiled, &creator_key, &platform_key, &creator_key, 0, 2_000_000_000, true);
+        let creator_spk = p2pk(&creator_key);
+        let entries = vec![
+            UtxoEntry::new(DEPOSIT, pay_to_script_hash_script(&current), 1, false, Some(COVENANT_ID)),
+            UtxoEntry::new(1_000_000_000, creator_spk.clone(), 1, false, None),
+        ];
+        let unsigned = Transaction::new(
+            1,
+            vec![
+                TransactionInput::new_with_compute_budget(
+                    TransactionOutpoint { transaction_id: TransactionId::from_bytes([3; 32]), index: 0 },
+                    update_signature_script(&compiled, &current, 2_000_000_000),
+                    0,
+                    COMPUTE_BUDGET,
+                ),
+                TransactionInput::new_with_compute_budget(
+                    TransactionOutpoint { transaction_id: TransactionId::from_bytes([4; 32]), index: 0 },
+                    vec![],
+                    0,
+                    COMPUTE_BUDGET,
+                ),
+            ],
+            vec![
+                TransactionOutput { value: DEPOSIT, script_public_key: pay_to_script_hash_script(&updated), covenant: Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID }) },
+                TransactionOutput { value: 900_000_000, script_public_key: creator_spk, covenant: None },
+            ],
+            DAA,
+            Default::default(),
+            0,
+            vec![],
+        );
+        let mut inputs = unsigned.inputs.clone();
+        inputs[1].signature_script = buyer_signature(&unsigned, &entries, &creator);
+        let tx = Transaction::new(1, inputs, unsigned.outputs, DAA, Default::default(), 0, vec![]);
+
+        assert_eq!(execute(&tx, &entries, 0), Ok(()));
+        assert_eq!(execute(&tx, &entries, 1), Ok(()));
     }
 }

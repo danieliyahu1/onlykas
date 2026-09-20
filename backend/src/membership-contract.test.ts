@@ -3,6 +3,7 @@ import {
   decodeMembershipRedeemScript,
   MEMBERSHIP_DURATION_DAA,
   membershipMintSignatureScript,
+  membershipUpdateSignatureScript,
   membershipPayload,
   parseMembershipPayloadDetails,
   membershipRedeemScript,
@@ -17,8 +18,11 @@ const platformFeeAddress =
   "kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue";
 
 describe("membership contract codec", () => {
-  it("exposes minting but no transfer entrypoint", () => {
-    expect(Object.keys(artifact.contracts.Membership.entries)).toEqual(["mint"]);
+  it("exposes minting and creator-authorized price updates", () => {
+    expect(Object.keys(artifact.contracts.Membership.entries)).toEqual([
+      "__covenant_entrypoint_auth_updateMembership",
+      "mint",
+    ]);
   });
 
   it("round-trips state through the compiled v2.0.0 template", () => {
@@ -83,6 +87,25 @@ describe("membership contract codec", () => {
 
     expect(signatureScript).toMatch(/^[0-9a-f]+$/);
     expect(signatureScript.endsWith(membershipRedeemScript(minter))).toBe(true);
+  });
+
+  it("builds a creator-authorized price update invocation", () => {
+    const state: MembershipState = {
+      creator: addressPublicKey(creator),
+      platform: addressPublicKey(platformFeeAddress),
+      owner: addressPublicKey(creator),
+      expiresAtDaa: 0n,
+      priceSompi: 1_000_000_000n,
+      isMinter: true,
+    };
+    const signatureScript = membershipUpdateSignatureScript(
+      membershipRedeemScript(state),
+      2_000_000_000n,
+      1,
+    );
+
+    expect(signatureScript).toMatch(/^[0-9a-f]+$/);
+    expect(signatureScript.endsWith(membershipRedeemScript(state))).toBe(true);
   });
 
   it("publishes readable metadata alongside the member script", () => {

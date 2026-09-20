@@ -145,9 +145,7 @@ export class MemoryStore implements Repositories {
       [
         ...this.posts.values(),
         ...[...this.pendingPosts.values()].map((x) => x.post),
-      ].some(
-        (post) => post.creator === v.creator && post.mediaDigest === v.mediaDigest,
-      )
+      ].some((post) => post.creator === v.creator && post.mediaDigest === v.mediaDigest)
     )
       return "DUPLICATE" as const;
     this.pendingPosts.set(v.id, { post: structuredClone(v), expiresAt });
@@ -243,6 +241,19 @@ export class MemoryStore implements Repositories {
     const outcome = await this.saveCreatorCovenant(value);
     this.preparedMembershipRecords.delete(id);
     return outcome;
+  }
+  async finalizePriceUpdate(
+    id: string,
+    value: CreatorCovenant,
+  ): Promise<DuplicateOutcome> {
+    const existing = this.creatorCovenants.get(value.creator);
+    if (!existing || existing.covenantId !== value.covenantId) {
+      this.preparedMembershipRecords.delete(id);
+      return "DUPLICATE";
+    }
+    this.creatorCovenants.set(value.creator, structuredClone(value));
+    this.preparedMembershipRecords.delete(id);
+    return "CREATED";
   }
   async finalizeMembershipPurchase(
     id: string,

@@ -93,6 +93,10 @@ export interface CovenantRepository {
     preparedMembershipId: string,
     value: CreatorCovenant,
   ): Promise<DuplicateOutcome>;
+  finalizePriceUpdate(
+    preparedMembershipId: string,
+    value: CreatorCovenant,
+  ): Promise<DuplicateOutcome>;
 }
 
 export interface MembershipPurchaseRepository {
@@ -145,6 +149,12 @@ export interface MembershipGateway {
     buyer: string,
     covenantId: string,
     priceSompi: string,
+  ): Promise<PreparedMembershipTransaction>;
+  preparePriceUpdate(
+    creator: string,
+    covenantId: string,
+    currentPriceSompi: string,
+    newPriceSompi: string,
   ): Promise<PreparedMembershipTransaction>;
   submit(
     prepared: PreparedMembershipTransaction,

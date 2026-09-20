@@ -1117,6 +1117,10 @@ progress {
     500 0.82rem "DM Mono",
     monospace;
 }
+.access-note {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
 .access-status {
   color: var(--paper);
   font:

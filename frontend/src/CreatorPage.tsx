@@ -8,7 +8,13 @@ import {
   type PostResponse,
 } from "@onlykas/shared";
 import { api, signPreparedPayment } from "./kasware.js";
-import { finalizeSubscription, prepareSubscription, unlockPost } from "./purchase.js";
+import {
+  finalizePriceUpdate,
+  finalizeSubscription,
+  preparePriceUpdate,
+  prepareSubscription,
+  unlockPost,
+} from "./purchase.js";
 import { PostTile, PostTileAction, PostTileMedia } from "./PostTile.js";
 import { Spinner } from "./Spinner.js";
 import { Toast, useToast } from "./Toast.js";
@@ -62,7 +68,11 @@ export function CreatorPage({
       const value = await api<CreatorResponse>(
         `/api/creators/${encodeURIComponent(creatorAddress)}`,
       );
-      if (currentRequest === requestId.current) setCreator(value);
+      if (currentRequest === requestId.current) {
+        setCreator(value);
+        if (value.membership.priceSompi)
+          setMembershipPrice(formatKas(value.membership.priceSompi));
+      }
     } catch (error) {
       if (currentRequest !== requestId.current) return;
       const message = errorText(error, "Creator could not be loaded.");
@@ -138,6 +148,37 @@ export function CreatorPage({
       if (result.state === "CONFIRMED") await loadCreator();
     } catch (error) {
       showToast(errorText(error, "Payment failed. Nothing was charged."), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function updateMembershipPrice() {
+    const wallet = address ?? (await signIn());
+    if (!wallet || wallet !== currentCreator.address) return;
+    if (parseMembershipPrice(membershipPrice) === null) {
+      showToast("Enter a monthly price from 1 to 1,000,000 KAS.", "error");
+      return;
+    }
+    setBusy("preparing");
+    dismissToast();
+    try {
+      const prepared = await preparePriceUpdate(membershipPrice);
+      const signedTransaction = await signPreparedPayment(
+        prepared.transaction,
+        prepared.signInputs,
+      );
+      setBusy("confirming");
+      const result = await finalizePriceUpdate(prepared.id, signedTransaction);
+      showToast(
+        result.state === "CONFIRMED"
+          ? "Subscription price updated."
+          : "Your update is confirming. Don't repeat it.",
+        result.state === "CONFIRMED" ? "success" : "info",
+      );
+      if (result.state === "CONFIRMED") await loadCreator();
+    } catch (error) {
+      showToast(errorText(error, "Price update failed. Nothing was charged."), "error");
     } finally {
       setBusy(null);
     }
@@ -259,6 +300,11 @@ export function CreatorPage({
                 ? `${formatKas(currentCreator.membership.priceSompi)} KAS · 30 days`
                 : COPY.membershipAccess}
             </p>
+            {owner && currentCreator.membership.offered && (
+              <span className="access-note">
+                Existing memberships keep their expiry.
+              </span>
+            )}
             <SubscriptionAction
               membership={currentCreator.membership}
               owner={owner}
@@ -266,7 +312,11 @@ export function CreatorPage({
               disabled={busy !== null || signingIn}
               price={membershipPrice}
               onPriceChange={setMembershipPrice}
-              onAction={() => void membershipAction()}
+              onAction={() =>
+                void (owner && currentCreator.membership.offered
+                  ? updateMembershipPrice()
+                  : membershipAction())
+              }
             />
           </div>
         )}
@@ -325,8 +375,8 @@ function SubscriptionAction({
   onAction: () => void;
 }) {
   if (membership.active) return <span className="access-status">Subscribed</span>;
-  const canStart = owner ? !membership.offered : membership.offered;
-  if (!canStart) return <span className="access-status">Subscription live</span>;
+  if (!owner && !membership.offered)
+    return <span className="access-status">Subscription live</span>;
   if (owner)
     return (
       <div className="subscription-form">
@@ -342,7 +392,7 @@ function SubscriptionAction({
         </label>
         <button className="primary" disabled={disabled} onClick={onAction}>
           {stage !== null && <Spinner />}
-          {subscriptionLabel(owner, stage)}
+          {membership.offered ? "Update price" : subscriptionLabel(owner, stage)}
         </button>
       </div>
     );

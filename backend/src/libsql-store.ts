@@ -512,6 +512,35 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
       [value.creator, value.covenantId, value.priceSompi],
     );
   }
+  async finalizePriceUpdate(
+    id: string,
+    value: CreatorCovenant,
+  ): Promise<DuplicateOutcome> {
+    const transaction = await this.client.transaction("write");
+    try {
+      const result = await transaction.execute({
+        sql: `UPDATE creator_covenants SET price_sompi=? WHERE creator=? AND covenant_id=?`,
+        args: [value.priceSompi, value.creator, value.covenantId],
+      });
+      if (result.rowsAffected !== 1) {
+        await transaction.execute({
+          sql: "DELETE FROM prepared_memberships WHERE id=?",
+          args: [id],
+        });
+        await transaction.commit();
+        return "DUPLICATE";
+      }
+      await transaction.execute({
+        sql: "DELETE FROM prepared_memberships WHERE id=?",
+        args: [id],
+      });
+      await transaction.commit();
+      return "CREATED";
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
   async finalizeMembershipPurchase(
     id: string,
     value: MembershipPurchase,
@@ -662,7 +691,7 @@ const signInputs = (value: string): number[] => {
   return parsed as number[];
 };
 const membershipKind = (value: string): PreparedMembershipRecord["kind"] => {
-  if (value !== "offer" && value !== "purchase")
+  if (value !== "offer" && value !== "purchase" && value !== "update")
     throw new Error("INVALID_MEMBERSHIP_KIND");
   return value;
 };

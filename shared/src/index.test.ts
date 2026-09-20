@@ -30,7 +30,7 @@ describe("membership pricing", () => {
 
   it("waives the fee below 100 KAS and charges exactly 1 KAS at the threshold", () => {
     expect(membershipFeeSompi(50n * 100_000_000n)).toBe(0n);
-    expect(membershipFeeSompi(99_999_999_999n)).toBe(0n);
+    expect(membershipFeeSompi(9_999_999_999n)).toBe(0n);
     expect(membershipFeeSompi(100n * 100_000_000n)).toBe(100_000_000n);
   });
 });

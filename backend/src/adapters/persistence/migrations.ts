@@ -194,6 +194,30 @@ export const migrations: Migration[] = [
       "ALTER TABLE membership_purchases ADD COLUMN version INTEGER",
     ],
   },
+  {
+    version: 9,
+    name: "membership_price_updates",
+    statements: [
+      `CREATE TABLE prepared_memberships_v2 (
+        id TEXT PRIMARY KEY NOT NULL,
+        transaction_json TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        covenant_id TEXT NOT NULL,
+        sign_inputs TEXT NOT NULL,
+        member_output_index INTEGER,
+        creator TEXT NOT NULL,
+        buyer TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('offer', 'purchase', 'update')),
+        expires_at INTEGER NOT NULL CHECK (expires_at > 0),
+        price_sompi TEXT,
+        version INTEGER NOT NULL DEFAULT 1
+      )`,
+      `INSERT INTO prepared_memberships_v2 SELECT * FROM prepared_memberships`,
+      "DROP TABLE prepared_memberships",
+      "ALTER TABLE prepared_memberships_v2 RENAME TO prepared_memberships",
+      "CREATE INDEX IF NOT EXISTS prepared_memberships_expiry ON prepared_memberships (expires_at)",
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {

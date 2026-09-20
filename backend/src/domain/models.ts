@@ -106,7 +106,7 @@ export interface PreparedMembershipRecord {
   memberOutputIndex: number | null;
   creator: string;
   buyer: string;
-  kind: "offer" | "purchase";
+  kind: "offer" | "purchase" | "update";
   expiresAt: number;
   priceSompi?: string | undefined;
 }

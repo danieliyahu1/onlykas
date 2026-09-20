@@ -54,6 +54,7 @@ function harness(options: {
         : null,
     saveCreatorCovenant: async () => "CREATED",
     finalizeOffer: async () => "CREATED",
+    finalizePriceUpdate: async () => "CREATED",
   };
   const verifyUtxo = vi.fn(async (transactionId: string) =>
     check(transactionId, options.receiptStatus ?? "VALID"),

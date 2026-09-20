@@ -780,6 +780,97 @@ export function createApp(d: AppDependencies) {
     }),
   );
   app.post(
+    "/api/membership/price/prepare",
+    optional,
+    required,
+    asyncHandler(async (req, res) => {
+      if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const creator = req.walletSession!.address;
+      const priceSompi = parseMembershipPrice(String(req.body?.price ?? ""));
+      if (priceSompi === null)
+        return apiError(
+          res,
+          400,
+          "INVALID_MEMBERSHIP_PRICE",
+          COPY.invalidMembershipPrice,
+        );
+      const mapping = await d.store.getCreatorCovenant(creator);
+      if (!mapping) return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
+      const value = await d.membershipGateway.preparePriceUpdate(
+          creator,
+          mapping.covenantId,
+          mapping.priceSompi,
+          priceSompi.toString(),
+        ),
+        id = randomUUID();
+      await d.store.prunePreparedMemberships(now());
+      await d.store.savePreparedMembership({
+        id,
+        ...value,
+        creator,
+        buyer: creator,
+        kind: "update",
+        expiresAt: now() + PREPARED_TTL_MS,
+      });
+      res
+        .status(201)
+        .json({ id, transaction: value.transaction, signInputs: value.signInputs });
+    }),
+  );
+  app.post(
+    "/api/membership/price/:id/finalize",
+    optional,
+    required,
+    asyncHandler(async (req, res) => {
+      if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const id = param(req, "id"),
+        value = await d.store.getPreparedMembership(id, now());
+      if (
+        !value ||
+        value.kind !== "update" ||
+        value.creator !== req.walletSession!.address
+      )
+        return apiError(res, 404, "MEMBERSHIP_PRICE_UPDATE_NOT_FOUND");
+      const body = z.object({ signedTransaction: z.string().min(1) }).parse(req.body);
+      const submission = await d.membershipGateway.submit(
+        value,
+        body.signedTransaction,
+      );
+      if (submission.isAccepted !== true || !submission.transactionId) {
+        if (submission.isAccepted === null && submission.transactionId) {
+          await d.store.saveMembershipWorkflow({
+            preparedMembershipId: id,
+            state: "SUBMITTED",
+            transactionId: submission.transactionId,
+            rejection: null,
+          });
+        } else {
+          await d.store.deleteMembershipWorkflow(id);
+          await d.store.deletePreparedMembership(id);
+        }
+        return res.status(submission.isAccepted === null ? 202 : 422).json({
+          state: submission.isAccepted === null ? "PENDING" : "REJECTED",
+          transactionId: submission.transactionId,
+          rejection: submission.rejection,
+        });
+      }
+      const outcome = await d.store.finalizePriceUpdate(id, {
+        creator: value.creator,
+        covenantId: value.covenantId,
+        priceSompi: value.priceSompi!,
+      });
+      await d.store.deleteMembershipWorkflow(id);
+      if (outcome === "DUPLICATE")
+        return apiError(res, 409, "MEMBERSHIP_PRICE_UPDATE_STALE");
+      res.status(201).json({
+        state: "CONFIRMED",
+        transactionId: submission.transactionId,
+        covenantId: value.covenantId,
+        priceSompi: value.priceSompi,
+      });
+    }),
+  );
+  app.post(
     "/api/membership/purchases/:id/finalize",
     optional,
     required,
