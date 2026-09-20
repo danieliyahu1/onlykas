@@ -11,6 +11,9 @@ export const MEDIA_COPY = {
 } as const;
 
 export const FEEDBACK_MAX_MESSAGE = 1500;
+export const MIN_MEMBERSHIP_PRICE_SOMPI = 100_000_000n;
+export const MAX_MEMBERSHIP_PRICE_SOMPI = 100_000_000_000_000n;
+export const MEMBERSHIP_DURATION_DAA = 25_920_000n;
 
 export const MEDIA_TYPES = [
   "image/jpeg",
@@ -36,7 +39,13 @@ export interface CreatorResponse {
   displayName: string | null;
   isPublic: boolean;
   isOwner: boolean;
-  membership: { offered: boolean; active: boolean };
+  membership: {
+    offered: boolean;
+    active: boolean;
+    priceSompi?: string | null;
+    durationDays?: number | null;
+    version?: number | null;
+  };
   posts: PostResponse[];
 }
 
@@ -100,6 +109,22 @@ export function parseKasToSompi(value: string): bigint | null {
   const sompi =
     BigInt(match[1]) * 100_000_000n + BigInt((match[2] ?? "").padEnd(8, "0"));
   return sompi > 0n ? sompi : null;
+}
+
+export function parseMembershipPrice(value: string): bigint | null {
+  const sompi = parseKasToSompi(value);
+  if (
+    sompi === null ||
+    sompi < MIN_MEMBERSHIP_PRICE_SOMPI ||
+    sompi > MAX_MEMBERSHIP_PRICE_SOMPI
+  )
+    return null;
+  return sompi;
+}
+
+export function membershipFeeSompi(priceSompi: bigint): bigint {
+  const fee = priceSompi / 100n;
+  return fee >= 100_000_000n ? fee : 0n;
 }
 
 export function parsePostPrice(value: string): bigint | null {

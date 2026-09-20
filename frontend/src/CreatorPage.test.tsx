@@ -59,6 +59,7 @@ describe("CreatorPage subscription actions", () => {
 
     expect(api).toHaveBeenCalledWith("/api/membership/offers/prepare", {
       method: "POST",
+      body: JSON.stringify({ price: "10" }),
     });
     expect(signPreparedPayment).toHaveBeenCalledWith("{}", [0]);
     expect(api).toHaveBeenCalledWith("/api/membership/offers/offer/finalize", {

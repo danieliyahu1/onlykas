@@ -481,7 +481,11 @@ describe("subscription recognition", () => {
   it("recognizes a subscriber found on chain without a stored receipt", async () => {
     const store = new MemoryStore();
     await store.publishPost({ ...post("paid-post"), creator });
-    await store.saveCreatorCovenant({ creator, covenantId: "covenant-1" });
+    await store.saveCreatorCovenant({
+      creator,
+      covenantId: "covenant-1",
+      priceSompi: "1000000000",
+    });
     const cookie = await viewerSession(store);
     const findMembership = vi.fn(async () => membershipCheck("VALID"));
     const verifier: MembershipVerifier = {
@@ -489,12 +493,24 @@ describe("subscription recognition", () => {
       findMembership,
       verifyUtxo: async () => membershipCheck("NOT_MEMBERSHIP"),
     };
-    const { app } = testApp(store, undefined, undefined, undefined, undefined, verifier);
+    const { app } = testApp(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      verifier,
+    );
 
     const creatorResponse = await request(app)
       .get(`/api/creators/${creator}`)
       .set("Cookie", cookie);
-    expect(creatorResponse.body.membership).toEqual({ offered: true, active: true });
+    expect(creatorResponse.body.membership).toEqual({
+      offered: true,
+      active: true,
+      priceSompi: "1000000000",
+      durationDays: 30,
+    });
     expect(creatorResponse.body.posts[0].canView).toBe(true);
     expect(findMembership).toHaveBeenCalledWith(viewer, creator, "covenant-1");
     expect(await store.membershipReceipts(viewer, creator)).toHaveLength(1);
@@ -508,14 +524,25 @@ describe("subscription recognition", () => {
   it("keeps a viewer locked when no membership is found on chain", async () => {
     const store = new MemoryStore();
     await store.publishPost({ ...post("paid-post"), creator });
-    await store.saveCreatorCovenant({ creator, covenantId: "covenant-1" });
+    await store.saveCreatorCovenant({
+      creator,
+      covenantId: "covenant-1",
+      priceSompi: "1000000000",
+    });
     const cookie = await viewerSession(store);
     const verifier: MembershipVerifier = {
       verifyAddress: async () => [],
       findMembership: async () => null,
       verifyUtxo: async () => membershipCheck("NOT_MEMBERSHIP"),
     };
-    const { app } = testApp(store, undefined, undefined, undefined, undefined, verifier);
+    const { app } = testApp(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      verifier,
+    );
 
     const response = await request(app)
       .get(`/api/creators/${creator}`)

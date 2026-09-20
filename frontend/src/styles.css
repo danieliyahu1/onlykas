@@ -1129,6 +1129,33 @@ progress {
   min-height: 2.75rem;
   padding: 0.7rem 1.1rem;
 }
+.subscription-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+.subscription-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+  font:
+    500 0.72rem "DM Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.subscription-form input {
+  width: 9rem;
+  min-height: 2.75rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  background: var(--ink);
+  color: var(--paper);
+  font:
+    500 0.9rem "DM Mono",
+    monospace;
+}
 .post-grid {
   margin-top: 3rem;
   border-top: 1px solid var(--line);

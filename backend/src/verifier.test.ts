@@ -10,9 +10,11 @@ import {
 } from "./membership-contract.js";
 import { KaspaMembershipVerifier } from "./verifier.js";
 
-const creator = "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
+const creator =
+  "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
 const buyer = "kaspatest:qzvp9r3gxg4wvcl44lm5phav2gz5zfx2de7qqqwd3hjlr53rtsn6wefhk0aj8";
-const platformFeeAddress = "kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue";
+const platformFeeAddress =
+  "kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue";
 const transactionId = "11".repeat(32);
 const covenantId = "22".repeat(32);
 
@@ -22,6 +24,7 @@ function memberState(overrides: Partial<MembershipState> = {}): MembershipState 
     platform: addressPublicKey(platformFeeAddress),
     owner: addressPublicKey(buyer),
     expiresAtDaa: 1_000_000n,
+    priceSompi: 1_000_000_000n,
     isMinter: false,
     ...overrides,
   };
@@ -60,14 +63,18 @@ function stubChain(options: StubOptions) {
       const url = String(input);
       if (url.includes("/info/blockdag"))
         return Response.json({ virtualDaaScore: options.daa ?? "500000" });
-      if (url.includes(`/addresses/${encodeURIComponent(membershipAddress(state))}/utxos`))
+      if (
+        url.includes(`/addresses/${encodeURIComponent(membershipAddress(state))}/utxos`)
+      )
         return Response.json(
           options.utxo === false
             ? []
             : [
                 {
                   outpoint: { transactionId, index: 1 },
-                  utxoEntry: { amount: options.utxoAmount ?? MEMBERSHIP_OUTPUT_VALUE.toString() },
+                  utxoEntry: {
+                    amount: options.utxoAmount ?? MEMBERSHIP_OUTPUT_VALUE.toString(),
+                  },
                 },
               ],
         );
@@ -85,13 +92,10 @@ describe("KaspaMembershipVerifier", () => {
     const state = memberState();
     stubChain({ state });
 
-    const result = await new KaspaMembershipVerifier("https://node.test", () => 0).verifyUtxo(
-      transactionId,
-      1,
-      buyer,
-      covenantId,
-      creator,
-    );
+    const result = await new KaspaMembershipVerifier(
+      "https://node.test",
+      () => 0,
+    ).verifyUtxo(transactionId, 1, buyer, covenantId, creator);
 
     expect(result.status).toBe("VALID");
     expect(result.owner).toBe(buyer);
@@ -121,13 +125,10 @@ describe("KaspaMembershipVerifier", () => {
       ],
     });
 
-    const result = await new KaspaMembershipVerifier("https://node.test", () => 0).verifyUtxo(
-      transactionId,
-      1,
-      buyer,
-      covenantId,
-      creator,
-    );
+    const result = await new KaspaMembershipVerifier(
+      "https://node.test",
+      () => 0,
+    ).verifyUtxo(transactionId, 1, buyer, covenantId, creator);
 
     expect(result.status).toBe("VALID");
     expect(result.platformAddress).toBe(platformFeeAddress);
@@ -138,13 +139,10 @@ describe("KaspaMembershipVerifier", () => {
     const state = memberState({ owner: addressPublicKey(creator) });
     stubChain({ state });
 
-    const result = await new KaspaMembershipVerifier("https://node.test", () => 0).verifyUtxo(
-      transactionId,
-      1,
-      buyer,
-      covenantId,
-      creator,
-    );
+    const result = await new KaspaMembershipVerifier(
+      "https://node.test",
+      () => 0,
+    ).verifyUtxo(transactionId, 1, buyer, covenantId, creator);
 
     expect(result.status).toBe("OWNER_MISMATCH");
   });
@@ -153,13 +151,10 @@ describe("KaspaMembershipVerifier", () => {
     const state = memberState({ expiresAtDaa: 400_000n });
     stubChain({ state, daa: "500000" });
 
-    const result = await new KaspaMembershipVerifier("https://node.test", () => 0).verifyUtxo(
-      transactionId,
-      1,
-      buyer,
-      covenantId,
-      creator,
-    );
+    const result = await new KaspaMembershipVerifier(
+      "https://node.test",
+      () => 0,
+    ).verifyUtxo(transactionId, 1, buyer, covenantId, creator);
 
     expect(result.status).toBe("EXPIRED");
   });
@@ -168,13 +163,10 @@ describe("KaspaMembershipVerifier", () => {
     const state = memberState();
     stubChain({ state, utxo: false });
 
-    const result = await new KaspaMembershipVerifier("https://node.test", () => 0).verifyUtxo(
-      transactionId,
-      1,
-      buyer,
-      covenantId,
-      creator,
-    );
+    const result = await new KaspaMembershipVerifier(
+      "https://node.test",
+      () => 0,
+    ).verifyUtxo(transactionId, 1, buyer, covenantId, creator);
 
     expect(result.status).toBe("NOT_MEMBERSHIP");
   });
@@ -200,7 +192,11 @@ describe("KaspaMembershipVerifier", () => {
               utxoEntry: { amount: MEMBERSHIP_INDEX_VALUE.toString() },
             },
           ]);
-        if (url.includes(`/addresses/${encodeURIComponent(membershipAddress(state))}/utxos`))
+        if (
+          url.includes(
+            `/addresses/${encodeURIComponent(membershipAddress(state))}/utxos`,
+          )
+        )
           return Response.json([
             {
               outpoint: { transactionId, index: 1 },

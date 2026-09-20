@@ -14,15 +14,13 @@ import type {
   PaymentSubmission,
   PreparedMembershipTransaction,
 } from "./application/ports.js";
+import { membershipFeeSompi } from "@onlykas/shared";
 import {
   addressPublicKey,
   addressScript,
-  MEMBERSHIP_CREATOR_SHARE,
   MEMBERSHIP_DURATION_DAA,
   MEMBERSHIP_INDEX_VALUE,
   MEMBERSHIP_OUTPUT_VALUE,
-  MEMBERSHIP_PLATFORM_SHARE,
-  MEMBERSHIP_PRICE_SOMPI,
   membershipAddress,
   membershipMintSignatureScript,
   membershipPayload,
@@ -45,7 +43,10 @@ const CONFIRM_MAX_DELAY_MS = 16_000;
 
 type MembershipTransactionRelay = (signedTransaction: string) => Promise<string>;
 type Sleep = (milliseconds: number) => Promise<void>;
-type MembershipRpcClient = Pick<RpcClient, "connect" | "disconnect" | "submitTransaction">;
+type MembershipRpcClient = Pick<
+  RpcClient,
+  "connect" | "disconnect" | "submitTransaction"
+>;
 type MembershipRpcClientFactory = () => MembershipRpcClient;
 
 type Utxo = {
@@ -91,13 +92,17 @@ export class KaspaMembershipGateway implements MembershipGateway {
     private readonly platformFeeAddress: string,
     private readonly api = "https://api-tn10.kaspa.org",
     private readonly relay: MembershipTransactionRelay = submitMembershipTransactionOverWrpc,
-    private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    private readonly sleep: Sleep = (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)),
     private readonly logger: Logger = defaultLogger,
     private readonly metrics: Metrics = defaultMetrics,
   ) {}
 
-  async prepareOffer(creator: string): Promise<PreparedMembershipTransaction> {
-    const state = minterState(creator, this.platformFeeAddress);
+  async prepareOffer(
+    creator: string,
+    priceSompi: string,
+  ): Promise<PreparedMembershipTransaction> {
+    const state = minterState(creator, this.platformFeeAddress, BigInt(priceSompi));
     const [utxos, rate] = await Promise.all([this.utxos(creator), this.feeRate()]);
     const redeemScript = membershipRedeemScript(state);
     const contractOutput = new TransactionOutput(
@@ -120,16 +125,30 @@ export class KaspaMembershipGateway implements MembershipGateway {
     );
     const fee = estimatedFee(selected.map(walletInput), provisionalOutputs, rate);
     const total = sumUtxos(selected);
-    const id = covenantId(selected[0]!.outpoint, [{ index: 0, output: contractOutput }]).toString();
-    const outputs: PreparedOutput[] = [{
-      value: MEMBERSHIP_OUTPUT_VALUE.toString(),
-      scriptPublicKey: membershipScript(state),
-      covenant: { authorizingInput: 0, covenantId: id },
-    }];
+    const id = covenantId(selected[0]!.outpoint, [
+      { index: 0, output: contractOutput },
+    ]).toString();
+    const outputs: PreparedOutput[] = [
+      {
+        value: MEMBERSHIP_OUTPUT_VALUE.toString(),
+        scriptPublicKey: membershipScript(state),
+        covenant: { authorizingInput: 0, covenantId: id },
+      },
+    ];
     const change = total - MEMBERSHIP_OUTPUT_VALUE - fee;
     if (change > 0n)
-      outputs.push({ value: change.toString(), scriptPublicKey: addressScript(creator), covenant: null });
-    const result = prepared(transaction(selected.map(walletInput), outputs, ""), id, selected.map((_, index) => index), null);
+      outputs.push({
+        value: change.toString(),
+        scriptPublicKey: addressScript(creator),
+        covenant: null,
+      });
+    const result = prepared(
+      transaction(selected.map(walletInput), outputs, ""),
+      id,
+      selected.map((_, index) => index),
+      null,
+    );
+    result.priceSompi = priceSompi;
     this.logger.debug("membership_transaction_prepared", {
       kind: "offer",
       inputCount: selected.length,
@@ -141,31 +160,69 @@ export class KaspaMembershipGateway implements MembershipGateway {
     return result;
   }
 
-async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promise<PreparedMembershipTransaction> {
-    const minter = minterState(creator, this.platformFeeAddress);
+  async prepareMint(
+    creator: string,
+    buyer: string,
+    covenantIdHex: string,
+    priceSompi: string,
+  ): Promise<PreparedMembershipTransaction> {
+    const minter = minterState(creator, this.platformFeeAddress, BigInt(priceSompi));
     const minterUtxos = await this.utxos(membershipAddress(minter));
     const minterUtxo = await this.findMinterUtxo(minterUtxos, minter, covenantIdHex);
     if (!minterUtxo) throw new Error("MEMBERSHIP_OFFER_UNAVAILABLE");
     const [{ virtualDaaScore }, buyerUtxos, rate] = await Promise.all([
-      this.request<{ virtualDaaScore: string }>("blockdag", `/info/blockdag?x=${Date.now()}`),
+      this.request<{ virtualDaaScore: string }>(
+        "blockdag",
+        `/info/blockdag?x=${Date.now()}`,
+      ),
       this.utxos(buyer),
       this.feeRate(),
     ]);
+    const effectivePrice = BigInt(priceSompi);
+    const platformFee = membershipFeeSompi(effectivePrice);
+    const creatorPayment = effectivePrice - platformFee;
     const member: MembershipState = {
       creator: minter.creator,
       platform: minter.platform,
       owner: addressPublicKey(buyer),
       expiresAtDaa: BigInt(virtualDaaScore) + MEMBERSHIP_DURATION_DAA,
+      priceSompi: effectivePrice,
       isMinter: false,
     };
     const covenant = { authorizingInput: 0, covenantId: covenantIdHex };
     const outputs: PreparedOutput[] = [
-      { value: MEMBERSHIP_OUTPUT_VALUE.toString(), scriptPublicKey: membershipScript(minter), covenant },
-      { value: MEMBERSHIP_OUTPUT_VALUE.toString(), scriptPublicKey: membershipScript(member), covenant },
-      { value: MEMBERSHIP_CREATOR_SHARE.toString(), scriptPublicKey: addressScript(creator), covenant: null },
-      { value: MEMBERSHIP_PLATFORM_SHARE.toString(), scriptPublicKey: addressScript(this.platformFeeAddress), covenant: null },
-      { value: MEMBERSHIP_INDEX_VALUE.toString(), scriptPublicKey: addressScript(buyer), covenant: null },
+      {
+        value: MEMBERSHIP_OUTPUT_VALUE.toString(),
+        scriptPublicKey: membershipScript(minter),
+        covenant,
+      },
+      {
+        value: MEMBERSHIP_OUTPUT_VALUE.toString(),
+        scriptPublicKey: membershipScript(member),
+        covenant,
+      },
+      {
+        value: creatorPayment.toString(),
+        scriptPublicKey: addressScript(creator),
+        covenant: null,
+      },
+      ...(platformFee > 0n
+        ? [
+            {
+              value: platformFee.toString(),
+              scriptPublicKey: addressScript(this.platformFeeAddress),
+              covenant: null,
+            },
+          ]
+        : []),
+      {
+        value: MEMBERSHIP_INDEX_VALUE.toString(),
+        scriptPublicKey: addressScript(buyer),
+        covenant: null,
+      },
     ];
+    const platformOutputIndex = platformFee > 0n ? 3 : 2;
+    const ownerIndexOutputIndex = platformFee > 0n ? 4 : 3;
     const minterInput = {
       transactionId: minterUtxo.outpoint.transactionId,
       index: minterUtxo.outpoint.index,
@@ -178,8 +235,8 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
         member,
         1,
         2,
-        3,
-        4,
+        platformOutputIndex,
+        ownerIndexOutputIndex,
       ),
       utxo: serializableUtxo(minterUtxo, covenantIdHex),
     };
@@ -195,25 +252,46 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
     const selected = selectWalletUtxos(
       buyerUtxos,
       buyer,
-      MEMBERSHIP_PRICE_SOMPI + MEMBERSHIP_OUTPUT_VALUE + MEMBERSHIP_INDEX_VALUE,
-      (values) => estimatedFee([minterInput, ...values.map(walletInput)], provisionalOutputs, rate, payload),
+      effectivePrice + MEMBERSHIP_OUTPUT_VALUE + MEMBERSHIP_INDEX_VALUE,
+      (values) =>
+        estimatedFee(
+          [minterInput, ...values.map(walletInput)],
+          provisionalOutputs,
+          rate,
+          payload,
+        ),
     );
     const inputs = [minterInput, ...selected.map(walletInput)];
     const fee = estimatedFee(inputs, provisionalOutputs, rate, payload);
     const total = sumUtxos(selected);
-    const change = total - MEMBERSHIP_PRICE_SOMPI - MEMBERSHIP_OUTPUT_VALUE - MEMBERSHIP_INDEX_VALUE - fee;
+    const change =
+      total - effectivePrice - MEMBERSHIP_OUTPUT_VALUE - MEMBERSHIP_INDEX_VALUE - fee;
     if (change > 0n)
-      outputs.push({ value: change.toString(), scriptPublicKey: addressScript(buyer), covenant: null });
+      outputs.push({
+        value: change.toString(),
+        scriptPublicKey: addressScript(buyer),
+        covenant: null,
+      });
     const result = prepared(
       transaction(inputs, outputs, payload, virtualDaaScore),
       covenantIdHex,
       selected.map((_, index) => index + 1),
       1,
     );
+    result.priceSompi = priceSompi;
     try {
       this.logger.debug("membership_preflight", {
         kind: "purchase",
-        checks: membershipPreflight(creator, buyer, this.platformFeeAddress, minter, member, inputs, outputs, virtualDaaScore),
+        checks: membershipPreflight(
+          creator,
+          buyer,
+          this.platformFeeAddress,
+          minter,
+          member,
+          inputs,
+          outputs,
+          virtualDaaScore,
+        ),
       });
     } catch {
       // Diagnostics must never affect transaction preparation or submission.
@@ -229,7 +307,10 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
     return result;
   }
 
-  async submit(preparedValue: PreparedMembershipTransaction, signedTransaction: string): Promise<PaymentSubmission> {
+  async submit(
+    preparedValue: PreparedMembershipTransaction,
+    signedTransaction: string,
+  ): Promise<PaymentSubmission> {
     let original: TransactionShape;
     let signed: TransactionShape;
     try {
@@ -242,12 +323,20 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
       return rejected("INVALID_PREPARED_TEMPLATE");
     if (!sameTransaction(original, signed, preparedValue.signInputs))
       return rejected("PREPARED_TRANSACTION_CHANGED");
-    if (!preparedValue.signInputs.every((index) => validSignature(signed.inputs[index]?.signatureScript)))
+    if (
+      !preparedValue.signInputs.every((index) =>
+        validSignature(signed.inputs[index]?.signatureScript),
+      )
+    )
       return rejected("INVALID_SIGNATURES");
     this.logger.debug("membership_transaction_signed");
     let transactionId: string;
     try {
-      transactionId = await this.metrics.observeDependency("kaspa_wrpc", "submit_transaction", () => this.relay(signedTransaction));
+      transactionId = await this.metrics.observeDependency(
+        "kaspa_wrpc",
+        "submit_transaction",
+        () => this.relay(signedTransaction),
+      );
     } catch (error) {
       this.logger.error("membership_transaction_relay_failed", {
         error: safeError(error),
@@ -268,10 +357,16 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
       txIdPrefix: transactionId.slice(0, 12),
       accepted: chain.is_accepted === true,
     });
-    return { isAccepted: chain.is_accepted ? true : null, transactionId, rejection: null };
+    return {
+      isAccepted: chain.is_accepted ? true : null,
+      transactionId,
+      rejection: null,
+    };
   }
 
-  private async waitForTransaction(transactionId: string): Promise<{ is_accepted?: boolean } | null> {
+  private async waitForTransaction(
+    transactionId: string,
+  ): Promise<{ is_accepted?: boolean } | null> {
     let delay = CONFIRM_BASE_DELAY_MS;
     for (let attempt = 0; attempt <= CONFIRM_MAX_ATTEMPTS; attempt++) {
       const transaction = await this.transaction(transactionId);
@@ -284,22 +379,37 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
     return null;
   }
 
-  private async transaction(transactionId: string): Promise<{ is_accepted?: boolean } | null> {
-    return this.metrics.observeDependency("kaspa_rest", "transaction_status", async () => {
-      const response = await fetch(`${this.api}/transactions/${transactionId.toLowerCase()}`, {
-        headers: { "Content-Type": "application/json" },
-      });
-      if (response.status === 404) return null;
-      if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
-      const body: unknown = await response.json();
-      if (!body || typeof body !== "object")
-        throw new Error("INVALID_KASPA_RESPONSE");
-      return body as { is_accepted?: boolean };
-    });
+  private async transaction(
+    transactionId: string,
+  ): Promise<{ is_accepted?: boolean } | null> {
+    return this.metrics.observeDependency(
+      "kaspa_rest",
+      "transaction_status",
+      async () => {
+        const response = await fetch(
+          `${this.api}/transactions/${transactionId.toLowerCase()}`,
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+        if (response.status === 404) return null;
+        if (!response.ok)
+          throw new Error(
+            `Kaspa request failed: ${response.status} ${await response.text()}`,
+          );
+        const body: unknown = await response.json();
+        if (!body || typeof body !== "object")
+          throw new Error("INVALID_KASPA_RESPONSE");
+        return body as { is_accepted?: boolean };
+      },
+    );
   }
 
   private utxos(address: string) {
-    return this.request<Utxo[]>("utxos", `/addresses/${encodeURIComponent(address)}/utxos`);
+    return this.request<Utxo[]>(
+      "utxos",
+      `/addresses/${encodeURIComponent(address)}/utxos`,
+    );
   }
 
   private async findMinterUtxo(
@@ -308,40 +418,55 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
     covenantIdHex: string,
   ): Promise<Utxo | undefined> {
     const expectedScript = membershipScript(minter).slice(4);
-    const candidates = utxos.filter((utxo) =>
-      BigInt(utxo.utxoEntry.amount) === MEMBERSHIP_OUTPUT_VALUE
-      && utxo.utxoEntry.scriptPublicKey.scriptPublicKey === expectedScript,
+    const candidates = utxos.filter(
+      (utxo) =>
+        BigInt(utxo.utxoEntry.amount) === MEMBERSHIP_OUTPUT_VALUE &&
+        utxo.utxoEntry.scriptPublicKey.scriptPublicKey === expectedScript,
     );
-    const matches = await Promise.all(candidates.map(async (utxo) => {
-      const transaction = await this.request<ChainTransaction>("parent_transaction", `/transactions/${utxo.outpoint.transactionId}`);
-      const output = transaction.outputs?.[utxo.outpoint.index];
-      return transaction.version === 1
-        && transaction.is_accepted === true
-        && outputAmount(output) === MEMBERSHIP_OUTPUT_VALUE
-        && output?.script_public_key === expectedScript
-        && outputCovenantId(output) === covenantIdHex
-        && outputAuthorizingInput(output) === 0
-        ? utxo
-        : undefined;
-    }));
+    const matches = await Promise.all(
+      candidates.map(async (utxo) => {
+        const transaction = await this.request<ChainTransaction>(
+          "parent_transaction",
+          `/transactions/${utxo.outpoint.transactionId}`,
+        );
+        const output = transaction.outputs?.[utxo.outpoint.index];
+        return transaction.version === 1 &&
+          transaction.is_accepted === true &&
+          outputAmount(output) === MEMBERSHIP_OUTPUT_VALUE &&
+          output?.script_public_key === expectedScript &&
+          outputCovenantId(output) === covenantIdHex &&
+          outputAuthorizingInput(output) === 0
+          ? utxo
+          : undefined;
+      }),
+    );
     return matches.find((utxo) => utxo !== undefined);
   }
 
   private async feeRate() {
-    const estimate = await this.request<{ normalBuckets: { feerate: number }[]; priorityBucket: { feerate: number } }>("fee_estimate", "/info/fee-estimate");
+    const estimate = await this.request<{
+      normalBuckets: { feerate: number }[];
+      priorityBucket: { feerate: number };
+    }>("fee_estimate", "/info/fee-estimate");
     return estimate.normalBuckets[0]?.feerate ?? estimate.priorityBucket.feerate;
   }
 
-  private async request<T>(operation: string, path: string, init?: RequestInit): Promise<T> {
+  private async request<T>(
+    operation: string,
+    path: string,
+    init?: RequestInit,
+  ): Promise<T> {
     return this.metrics.observeDependency("kaspa_rest", operation, async () => {
       const response = await fetch(`${this.api}${path}`, {
         headers: { "Content-Type": "application/json" },
         ...init,
       });
-      if (!response.ok) throw new Error(`Kaspa request failed: ${response.status} ${await response.text()}`);
+      if (!response.ok)
+        throw new Error(
+          `Kaspa request failed: ${response.status} ${await response.text()}`,
+        );
       const body: unknown = await response.json();
-      if (!body || typeof body !== "object")
-        throw new Error("INVALID_KASPA_RESPONSE");
+      if (!body || typeof body !== "object") throw new Error("INVALID_KASPA_RESPONSE");
       return body as T;
     });
   }
@@ -349,11 +474,12 @@ async prepareMint(creator: string, buyer: string, covenantIdHex: string): Promis
 
 export async function submitMembershipTransactionOverWrpc(
   signedTransaction: string,
-  createClient: MembershipRpcClientFactory = () => new RpcClient({
-    resolver: new Resolver(),
-    networkId: NETWORK_ID,
-    encoding: Encoding.Borsh,
-  }),
+  createClient: MembershipRpcClientFactory = () =>
+    new RpcClient({
+      resolver: new Resolver(),
+      networkId: NETWORK_ID,
+      encoding: Encoding.Borsh,
+    }),
 ): Promise<string> {
   const transaction = Transaction.deserializeFromSafeJSON(signedTransaction);
   const rpc = createClient();
@@ -382,13 +508,18 @@ type TransactionShape = {
   payload: string;
 };
 
-function minterState(creator: string, platformFeeAddress: string): MembershipState {
+function minterState(
+  creator: string,
+  platformFeeAddress: string,
+  priceSompi: bigint,
+): MembershipState {
   const publicKey = addressPublicKey(creator);
   return {
     creator: publicKey,
     platform: addressPublicKey(platformFeeAddress),
     owner: publicKey,
     expiresAtDaa: 0n,
+    priceSompi,
     isMinter: true,
   };
 }
@@ -401,8 +532,14 @@ function selectWalletUtxos(
 ): Utxo[] {
   const selected: Utxo[] = [];
   let total = 0n;
-  for (const utxo of [...utxos].sort((a, b) => Number(BigInt(b.utxoEntry.amount) - BigInt(a.utxoEntry.amount)))) {
-    if (utxoCovenantId(utxo) || `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey.replace(/^0000/, "")}` !== addressScript(address))
+  for (const utxo of [...utxos].sort((a, b) =>
+    Number(BigInt(b.utxoEntry.amount) - BigInt(a.utxoEntry.amount)),
+  )) {
+    if (
+      utxoCovenantId(utxo) ||
+      `0000${utxo.utxoEntry.scriptPublicKey.scriptPublicKey.replace(/^0000/, "")}` !==
+        addressScript(address)
+    )
       continue;
     selected.push(utxo);
     total += BigInt(utxo.utxoEntry.amount);
@@ -434,24 +571,36 @@ function serializableUtxo(utxo: Utxo, covenantIdHex: string | null) {
   };
 }
 
-function transaction(inputs: TransactionInputShape[], outputs: PreparedOutput[], payload: string, lockTime = "0"): string {
-  const value = Transaction.deserializeFromSafeJSON(JSON.stringify({
-    id: "0".repeat(64),
-    version: 1,
-    inputs,
-    outputs,
-    subnetworkId: ZERO_SUBNETWORK,
-    lockTime,
-    gas: "0",
-    storageMass: "0",
-    payload,
-  }));
+function transaction(
+  inputs: TransactionInputShape[],
+  outputs: PreparedOutput[],
+  payload: string,
+  lockTime = "0",
+): string {
+  const value = Transaction.deserializeFromSafeJSON(
+    JSON.stringify({
+      id: "0".repeat(64),
+      version: 1,
+      inputs,
+      outputs,
+      subnetworkId: ZERO_SUBNETWORK,
+      lockTime,
+      gas: "0",
+      storageMass: "0",
+      payload,
+    }),
+  );
   if (!updateTransactionMass(NETWORK_ID, value, 1, true))
     throw new Error("TRANSACTION_MASS_TOO_HIGH");
   return value.serializeToSafeJSON();
 }
 
-function prepared(transactionJson: string, covenantIdHex: string, signInputs: number[], memberOutputIndex: number | null): PreparedMembershipTransaction {
+function prepared(
+  transactionJson: string,
+  covenantIdHex: string,
+  signInputs: number[],
+  memberOutputIndex: number | null,
+): PreparedMembershipTransaction {
   return {
     transaction: transactionJson,
     fingerprint: digest(transactionJson),
@@ -461,7 +610,11 @@ function prepared(transactionJson: string, covenantIdHex: string, signInputs: nu
   };
 }
 
-function sameTransaction(original: TransactionShape, signed: TransactionShape, signInputs: number[]): boolean {
+function sameTransaction(
+  original: TransactionShape,
+  signed: TransactionShape,
+  signInputs: number[],
+): boolean {
   const normalize = (value: TransactionShape) => ({
     ...value,
     id: "",
@@ -492,36 +645,56 @@ function outputAmount(output: ChainOutput | undefined): bigint | null {
 }
 
 function outputCovenantId(output: ChainOutput | undefined): string | null {
-  return output?.covenant_id
-    ?? output?.covenantId
-    ?? output?.covenant?.covenant_id
-    ?? output?.covenant?.covenantId
-    ?? null;
+  return (
+    output?.covenant_id ??
+    output?.covenantId ??
+    output?.covenant?.covenant_id ??
+    output?.covenant?.covenantId ??
+    null
+  );
 }
 
 function outputAuthorizingInput(output: ChainOutput | undefined): number | null {
-  return output?.covenant_authorizing_input
-    ?? output?.covenant?.authorizing_input
-    ?? output?.covenant?.authorizingInput
-    ?? null;
+  return (
+    output?.covenant_authorizing_input ??
+    output?.covenant?.authorizing_input ??
+    output?.covenant?.authorizingInput ??
+    null
+  );
 }
 
-function estimatedFee(inputs: TransactionInputShape[], outputs: PreparedOutput[], rate: number, payload = ""): bigint {
+function estimatedFee(
+  inputs: TransactionInputShape[],
+  outputs: PreparedOutput[],
+  rate: number,
+  payload = "",
+): bigint {
   if (!Number.isFinite(rate) || rate <= 0) throw new Error("INVALID_FEE_RATE");
   const inputSize = inputs.reduce((sum, input) => {
-    const signatureBytes = input.signatureScript.length > 0 ? input.signatureScript.length / 2 : 66;
+    const signatureBytes =
+      input.signatureScript.length > 0 ? input.signatureScript.length / 2 : 66;
     return sum + 32 + 4 + 8 + signatureBytes + 8 + 2;
   }, 0);
   const outputSize = outputs.reduce(
-    (sum, output) => sum + 8 + 2 + 8 + (output.scriptPublicKey.length - 4) / 2 + (output.covenant ? 34 : 0),
+    (sum, output) =>
+      sum +
+      8 +
+      2 +
+      8 +
+      (output.scriptPublicKey.length - 4) / 2 +
+      (output.covenant ? 34 : 0),
     0,
   );
-  const transactionSize = 2 + 8 + inputSize + 8 + outputSize + 8 + 20 + 8 + 32 + 8 + payload.length / 2;
-  const scriptPublicKeyMass = 10 * outputs.reduce(
-    (sum, output) => sum + 2 + (output.scriptPublicKey.length - 4) / 2,
-    0,
-  );
-  const computeBudgetMass = 100 * inputs.reduce((sum, input) => sum + input.computeBudget, 0);
+  const transactionSize =
+    2 + 8 + inputSize + 8 + outputSize + 8 + 20 + 8 + 32 + 8 + payload.length / 2;
+  const scriptPublicKeyMass =
+    10 *
+    outputs.reduce(
+      (sum, output) => sum + 2 + (output.scriptPublicKey.length - 4) / 2,
+      0,
+    );
+  const computeBudgetMass =
+    100 * inputs.reduce((sum, input) => sum + input.computeBudget, 0);
   const computeMass = transactionSize + scriptPublicKeyMass + computeBudgetMass;
   const estimated = BigInt(Math.ceil(computeMass * rate));
   const relayFloor = 100n * BigInt(computeMass);
@@ -529,7 +702,12 @@ function estimatedFee(inputs: TransactionInputShape[], outputs: PreparedOutput[]
 }
 
 function validSignature(value: string | undefined): boolean {
-  return typeof value === "string" && /^[0-9a-f]+$/i.test(value) && value.length % 2 === 0 && value.endsWith("01");
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]+$/i.test(value) &&
+    value.length % 2 === 0 &&
+    value.endsWith("01")
+  );
 }
 
 function digest(value: string): string {
@@ -540,7 +718,10 @@ function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`).join(",")}}`;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
+      .join(",")}}`;
   }
   return JSON.stringify(value) ?? "null";
 }
@@ -591,8 +772,9 @@ function membershipPreflight(
   const minterOutput = outputs[0];
   const memberOutput = outputs[1];
   const paymentOutput = outputs[2];
-  const platformOutput = outputs[3];
-  const ownerOutput = outputs[4];
+  const platformFee = membershipFeeSompi(member.priceSompi);
+  const platformOutput = platformFee > 0n ? outputs[3] : undefined;
+  const ownerOutput = outputs[platformFee > 0n ? 4 : 3];
   const fundingInput = inputs[1];
   const memberExpiry = member.expiresAtDaa;
   const currentDaa = BigInt(daa);
@@ -630,19 +812,25 @@ function membershipPreflight(
       expectedScriptLength: creatorLock.length,
     },
     paymentOutputValue: {
-      pass: paymentOutput?.value === MEMBERSHIP_CREATOR_SHARE.toString(),
+      pass:
+        paymentOutput?.value ===
+        (member.priceSompi - membershipFeeSompi(member.priceSompi)).toString(),
       actual: paymentOutput?.value,
-      expected: MEMBERSHIP_CREATOR_SHARE.toString(),
+      expected: (member.priceSompi - membershipFeeSompi(member.priceSompi)).toString(),
     },
     platformOutputUsesPlatformLock: {
-      pass: platformOutput?.scriptPublicKey === platformLock,
+      pass:
+        membershipFeeSompi(member.priceSompi) === 0n ||
+        platformOutput?.scriptPublicKey === platformLock,
       actualScriptLength: platformOutput?.scriptPublicKey.length,
       expectedScriptLength: platformLock.length,
     },
     platformOutputValue: {
-      pass: platformOutput?.value === MEMBERSHIP_PLATFORM_SHARE.toString(),
+      pass:
+        membershipFeeSompi(member.priceSompi) === 0n ||
+        platformOutput?.value === membershipFeeSompi(member.priceSompi).toString(),
       actual: platformOutput?.value,
-      expected: MEMBERSHIP_PLATFORM_SHARE.toString(),
+      expected: membershipFeeSompi(member.priceSompi).toString(),
     },
     minterOutputPresent: { pass: Boolean(minterOutput?.covenant) },
     memberOutputPresent: { pass: Boolean(memberOutput?.covenant) },
@@ -653,14 +841,18 @@ function membershipPreflight(
       pass: memberOutput?.scriptPublicKey === membershipScript(member),
     },
     covenantAuthorizingInput: {
-      pass: minterOutput?.covenant?.authorizingInput === 0
-        && memberOutput?.covenant?.authorizingInput === 0,
+      pass:
+        minterOutput?.covenant?.authorizingInput === 0 &&
+        memberOutput?.covenant?.authorizingInput === 0,
       minter: minterOutput?.covenant?.authorizingInput,
       member: memberOutput?.covenant?.authorizingInput,
     },
   };
 }
 
-function rejected(rejection: string, transactionId: string | null = null): PaymentSubmission {
+function rejected(
+  rejection: string,
+  transactionId: string | null = null,
+): PaymentSubmission {
   return { isAccepted: false, transactionId, rejection };
 }

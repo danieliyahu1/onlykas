@@ -16,3 +16,8 @@ Run the consensus tests with:
 ```powershell
 cargo test --manifest-path backend/contracts/consensus-tests/Cargo.toml
 ```
+
+`membership.sil` is the authoritative source for creator-priced, 30-day
+memberships. The checked-in artifact is generated with the pinned SilverScript
+compiler and replaces the pre-production fixed-price covenant. Testnet data
+must be reset before rollout; legacy one-day memberships are not supported.

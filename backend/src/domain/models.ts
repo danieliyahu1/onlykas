@@ -58,12 +58,14 @@ export interface PaymentSubmission {
 export interface CreatorCovenant {
   creator: string;
   covenantId: string;
+  priceSompi: string;
 }
 
 export interface MembershipPurchase {
   transactionId: string;
   buyer: string;
   creator: string;
+  covenantId?: string | undefined;
 }
 
 export interface PreparedMembershipTransaction {
@@ -72,6 +74,7 @@ export interface PreparedMembershipTransaction {
   covenantId: string;
   signInputs: number[];
   memberOutputIndex: number | null;
+  priceSompi?: string | undefined;
 }
 
 export interface PreparedPaymentRecord {
@@ -105,6 +108,7 @@ export interface PreparedMembershipRecord {
   buyer: string;
   kind: "offer" | "purchase";
   expiresAt: number;
+  priceSompi?: string | undefined;
 }
 
 export type MembershipWorkflowState = "SUBMITTED" | "CONFIRMED" | "REJECTED";

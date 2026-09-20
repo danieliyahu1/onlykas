@@ -181,6 +181,19 @@ export const migrations: Migration[] = [
       "CREATE INDEX IF NOT EXISTS membership_purchases_buyer_creator ON membership_purchases (buyer, creator)",
     ],
   },
+  {
+    version: 8,
+    name: "versioned_membership_offers",
+    statements: [
+      "ALTER TABLE creator_covenants ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE creator_covenants ADD COLUMN price_sompi TEXT",
+      "ALTER TABLE creator_covenants ADD COLUMN status TEXT NOT NULL DEFAULT 'LEGACY'",
+      "ALTER TABLE prepared_memberships ADD COLUMN price_sompi TEXT",
+      "ALTER TABLE prepared_memberships ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE membership_purchases ADD COLUMN covenant_id TEXT",
+      "ALTER TABLE membership_purchases ADD COLUMN version INTEGER",
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {

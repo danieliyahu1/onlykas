@@ -33,6 +33,7 @@ function membership(id: string, expiresAt: number): PreparedMembershipRecord {
     buyer: "kaspatest:buyer",
     kind: "purchase",
     expiresAt,
+    priceSompi: "1000000000",
   };
 }
 

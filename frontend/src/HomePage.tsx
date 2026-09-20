@@ -65,7 +65,7 @@ export function HomePage() {
       <section className="home-section">
         <h2 className="home-section-title">Here to support a creator?</h2>
         <p className="home-lede">
-          Unlock their work or subscribe for a day. Your KAS goes straight to them.
+          Unlock their work or subscribe for 30 days. Your KAS goes straight to them.
         </p>
         <FanCreators />
         <Link className="secondary" to="/creators">
@@ -81,7 +81,7 @@ function CreatorPreview() {
     <div
       className="preview-card"
       role="img"
-      aria-label="A subscribed fan's view of a creator's profile on OnlyKas: Yonatan Sompolinsky, one day of access for 10 KAS, marked Subscribed, with the unlocked post BlockDAG explanation with AI."
+      aria-label="A subscribed fan's view of a creator's profile on OnlyKas: Yonatan Sompolinsky, creator-priced access for 30 days, marked Subscribed, with the unlocked post BlockDAG explanation with AI."
     >
       <div className="creator-identity">
         <h2 className="preview-name">Yonatan Sompolinsky</h2>

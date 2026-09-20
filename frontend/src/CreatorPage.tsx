@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   isFreePost,
   isVideoMedia,
+  parseMembershipPrice,
   type CreatorResponse,
   type PostResponse,
 } from "@onlykas/shared";
@@ -39,6 +40,7 @@ export function CreatorPage({
   const creatorAddress = creatorAddressFromRoute(routeAddress);
   const [creator, setCreator] = useState<CreatorResponse | null>(null);
   const [busy, setBusy] = useState<SubscriptionStage>(null);
+  const [membershipPrice, setMembershipPrice] = useState("10");
   const [busyPostId, setBusyPostId] = useState<string | null>(null);
   const [approvedPostId, setApprovedPostId] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
@@ -103,10 +105,18 @@ export function CreatorPage({
     const wallet = address ?? (await signIn());
     if (!wallet) return;
     const actingAsOwner = wallet === currentCreator.address;
+    if (actingAsOwner && parseMembershipPrice(membershipPrice) === null) {
+      showToast("Enter a monthly price from 1 to 1,000,000 KAS.", "error");
+      return;
+    }
     setBusy("preparing");
     dismissToast();
     try {
-      const prepared = await prepareSubscription(actingAsOwner, currentCreator.address);
+      const prepared = await prepareSubscription(
+        actingAsOwner,
+        currentCreator.address,
+        actingAsOwner ? membershipPrice : undefined,
+      );
       const signedTransaction = await signPreparedPayment(
         prepared.transaction,
         prepared.signInputs,
@@ -121,7 +131,7 @@ export function CreatorPage({
         result.state === "CONFIRMED"
           ? actingAsOwner
             ? "Subscription is ready."
-            : "Subscribed for 24 hours."
+            : "Subscribed for 30 days."
           : "Your payment is confirming. Don't pay again.",
         result.state === "CONFIRMED" ? "success" : "info",
       );
@@ -165,9 +175,7 @@ export function CreatorPage({
   }
 
   async function deletePost(target: PostResponse) {
-    if (
-      !window.confirm("Delete this post and its media? This can't be undone.")
-    )
+    if (!window.confirm("Delete this post and its media? This can't be undone."))
       return;
     setDeletingPostId(target.id);
     dismissToast();
@@ -246,12 +254,18 @@ export function CreatorPage({
         </div>
         {showSubscription && (
           <div className="access-strip">
-            <p className="access-facts">{COPY.membershipAccess}</p>
+            <p className="access-facts">
+              {currentCreator.membership.priceSompi
+                ? `${formatKas(currentCreator.membership.priceSompi)} KAS · 30 days`
+                : COPY.membershipAccess}
+            </p>
             <SubscriptionAction
               membership={currentCreator.membership}
               owner={owner}
               stage={busy}
               disabled={busy !== null || signingIn}
+              price={membershipPrice}
+              onPriceChange={setMembershipPrice}
               onAction={() => void membershipAction()}
             />
           </div>
@@ -298,17 +312,40 @@ function SubscriptionAction({
   owner,
   stage,
   disabled,
+  price,
+  onPriceChange,
   onAction,
 }: {
   membership: CreatorResponse["membership"];
   owner: boolean;
   stage: SubscriptionStage;
   disabled: boolean;
+  price: string;
+  onPriceChange: (value: string) => void;
   onAction: () => void;
 }) {
   if (membership.active) return <span className="access-status">Subscribed</span>;
   const canStart = owner ? !membership.offered : membership.offered;
   if (!canStart) return <span className="access-status">Subscription live</span>;
+  if (owner)
+    return (
+      <div className="subscription-form">
+        <label>
+          Monthly price (KAS)
+          <input
+            inputMode="decimal"
+            value={price}
+            onChange={(event) => onPriceChange(event.target.value)}
+            disabled={disabled}
+            aria-label="Monthly subscription price in KAS"
+          />
+        </label>
+        <button className="primary" disabled={disabled} onClick={onAction}>
+          {stage !== null && <Spinner />}
+          {subscriptionLabel(owner, stage)}
+        </button>
+      </div>
+    );
   return (
     <button className="primary" disabled={disabled} onClick={onAction}>
       {stage !== null && <Spinner />}

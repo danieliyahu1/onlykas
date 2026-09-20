@@ -9,7 +9,10 @@ import type { MembershipCheck, MembershipPurchase } from "../domain/models.js";
 const buyer = "kaspatest:buyer";
 const creator = "kaspatest:creator";
 
-function check(transactionId: string, status: MembershipCheck["status"]): MembershipCheck {
+function check(
+  transactionId: string,
+  status: MembershipCheck["status"],
+): MembershipCheck {
   return {
     transactionId,
     outputIndex: 1,
@@ -46,7 +49,9 @@ function harness(options: {
   };
   const covenants: CovenantRepository = {
     getCreatorCovenant: async () =>
-      options.covenantId ? { creator, covenantId: options.covenantId } : null,
+      options.covenantId
+        ? { creator, covenantId: options.covenantId, priceSompi: "1000000000" }
+        : null,
     saveCreatorCovenant: async () => "CREATED",
     finalizeOffer: async () => "CREATED",
   };
@@ -80,7 +85,9 @@ describe("MembershipAccess", () => {
   });
 
   it("discovers a membership by scanning the address and caches it", async () => {
-    const { access, saved, findMembership } = harness({ found: check("tx-scan", "VALID") });
+    const { access, saved, findMembership } = harness({
+      found: check("tx-scan", "VALID"),
+    });
 
     await expect(access.isActive(buyer, creator)).resolves.toBe(true);
     expect(findMembership).toHaveBeenCalledWith(buyer, creator, undefined);
@@ -105,7 +112,10 @@ describe("MembershipAccess", () => {
   });
 
   it("denies access when no verifier is configured", async () => {
-    const { access, findMembership } = harness({ found: check("tx-scan", "VALID"), verifier: false });
+    const { access, findMembership } = harness({
+      found: check("tx-scan", "VALID"),
+      verifier: false,
+    });
 
     await expect(access.isActive(buyer, creator)).resolves.toBe(false);
     expect(findMembership).not.toHaveBeenCalled();

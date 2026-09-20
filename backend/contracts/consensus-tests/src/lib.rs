@@ -19,10 +19,9 @@ mod tests {
     use silverscript_lang::compiler::{CompileOptions, CompiledContract, compile_contract};
 
 const DEPOSIT: u64 = 50_000_000;
-    const CREATOR_SHARE: u64 = 990_000_000;
-    const PLATFORM_SHARE: u64 = 10_000_000;
+    const PRICE: u64 = 1_000_000_000;
     const DAA: u64 = 500_000;
-    const EXPIRY: i64 = 1_364_000;
+    const EXPIRY: i64 = 26_420_000;
     const COMPUTE_BUDGET: u16 = 50;
     const COVENANT_ID: Hash = Hash::from_bytes(*b"onlykas-membership-test-family-1");
 
@@ -49,6 +48,7 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
                 Expr::bytes(platform.to_vec()),
                 Expr::bytes(creator.to_vec()),
                 Expr::int(0),
+                Expr::int(PRICE as i64),
                 Expr::bool(true),
             ],
             CompileOptions::default(),
@@ -62,6 +62,7 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
         platform: &[u8],
         owner: &[u8],
         expiry: i64,
+        price: i64,
         minter: bool,
     ) -> Vec<u8> {
         let mut encoded = Vec::with_capacity(compiled.state_layout.len);
@@ -71,6 +72,8 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
         }
         encoded.push(8);
         encoded.extend_from_slice(&expiry.to_le_bytes());
+        encoded.push(8);
+        encoded.extend_from_slice(&price.to_le_bytes());
         encoded.extend_from_slice(&[1, u8::from(minter)]);
         assert_eq!(encoded.len(), compiled.state_layout.len);
         let mut script = compiled.bytecode.clone();
@@ -90,11 +93,12 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
         builder.add_data(&[platform, platform].concat()).unwrap();
         builder.add_data(&[creator, member].concat()).unwrap();
         builder.add_data(&[0i64.to_le_bytes(), EXPIRY.to_le_bytes()].concat()).unwrap();
+        builder.add_data(&[PRICE.to_le_bytes(), PRICE.to_le_bytes()].concat()).unwrap();
         builder.add_data(&[1, 0]).unwrap();
         builder.add_data(&[1]).unwrap();
         builder.add_data(&[2]).unwrap();
         builder.add_data(&[3]).unwrap();
-        builder.add_data(&[4]).unwrap();
+        builder.add_data(&[3]).unwrap();
         builder.add_data(compiled.dispatch_tags.values().next().expect("mint dispatch tag")).unwrap();
         builder.add_data(current).unwrap();
         builder.drain()
@@ -134,8 +138,8 @@ fn membership_mint_passes_consensus_vm_and_mass_limit() {
         let platform_key = platform.x_only_public_key().0.serialize();
         let buyer_key = buyer.x_only_public_key().0.serialize();
         let compiled = compile(&creator_key, &platform_key);
-        let minter = state(&compiled, &creator_key, &platform_key, &creator_key, 0, true);
-        let member = state(&compiled, &creator_key, &platform_key, &buyer_key, EXPIRY, false);
+        let minter = state(&compiled, &creator_key, &platform_key, &creator_key, 0, PRICE as i64, true);
+        let member = state(&compiled, &creator_key, &platform_key, &buyer_key, EXPIRY, PRICE as i64, false);
         let buyer_spk = p2pk(&buyer_key);
         let entries = vec![
             UtxoEntry::new(DEPOSIT, pay_to_script_hash_script(&minter), 1, false, Some(COVENANT_ID)),
@@ -160,8 +164,7 @@ fn membership_mint_passes_consensus_vm_and_mass_limit() {
             vec![
                 TransactionOutput { value: DEPOSIT, script_public_key: pay_to_script_hash_script(&minter), covenant: Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID }) },
                 TransactionOutput { value: DEPOSIT, script_public_key: pay_to_script_hash_script(&member), covenant: Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID }) },
-                TransactionOutput { value: CREATOR_SHARE, script_public_key: p2pk(&creator_key), covenant: None },
-                TransactionOutput { value: PLATFORM_SHARE, script_public_key: p2pk(&platform_key), covenant: None },
+                TransactionOutput { value: PRICE, script_public_key: p2pk(&creator_key), covenant: None },
                 TransactionOutput { value: DEPOSIT, script_public_key: buyer_spk.clone(), covenant: None },
                 TransactionOutput { value: 100_000_000, script_public_key: buyer_spk, covenant: None },
             ],

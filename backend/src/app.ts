@@ -16,6 +16,7 @@ import {
   NETWORK,
   normalizeDisplayName,
   normalizePostText,
+  parseMembershipPrice,
   parsePostPrice,
   validateDisplayName,
   type MembershipAddressVerificationResponse,
@@ -420,12 +421,15 @@ export function createApp(d: AppDependencies) {
       const viewer = req.walletSession?.address,
         isOwner = viewer === address,
         posts = await d.store.creatorPosts(address),
-        offered = Boolean(await d.store.getCreatorCovenant(address)),
+        covenant = await d.store.getCreatorCovenant(address),
+        offered = Boolean(covenant),
         active = Boolean(
           viewer && !isOwner && (await membershipAccess.isActive(viewer, address)),
         ),
         profile = await profiles.get(address);
-      const unlocked = new Set(posts.filter((p) => isFreePost(p.priceSompi)).map((p) => p.id));
+      const unlocked = new Set(
+        posts.filter((p) => isFreePost(p.priceSompi)).map((p) => p.id),
+      );
       if (isOwner || active) {
         for (const p of posts) unlocked.add(p.id);
       } else if (viewer) {
@@ -437,7 +441,12 @@ export function createApp(d: AppDependencies) {
         displayName: profile?.displayName ?? null,
         isPublic: profile?.isPublic ?? false,
         isOwner,
-        membership: { offered, active },
+        membership: {
+          offered,
+          active,
+          priceSompi: covenant?.priceSompi ?? null,
+          durationDays: 30,
+        },
         posts: posts.map((p) => postResponse(p, unlocked.has(p.id))),
       });
     }),
@@ -454,10 +463,10 @@ export function createApp(d: AppDependencies) {
           p,
           Boolean(
             isFreePost(p.priceSompi) ||
-              (viewer &&
-                (viewer === p.creator ||
-                  (await purchaseAccess(d, p, viewer)) ||
-                  (await membershipAccess.isActive(viewer, p.creator)))),
+            (viewer &&
+              (viewer === p.creator ||
+                (await purchaseAccess(d, p, viewer)) ||
+                (await membershipAccess.isActive(viewer, p.creator)))),
           ),
         ),
       );
@@ -611,15 +620,29 @@ export function createApp(d: AppDependencies) {
     asyncHandler(async (req, res) => {
       if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
       const creator = req.walletSession!.address;
-      if (await d.store.getCreatorCovenant(creator)) {
+      const priceSompi = parseMembershipPrice(String(req.body?.price ?? ""));
+      if (priceSompi === null) {
+        return apiError(
+          res,
+          400,
+          "INVALID_MEMBERSHIP_PRICE",
+          COPY.invalidMembershipPrice,
+        );
+      }
+      const existing = await d.store.getCreatorCovenant(creator);
+      if (existing) {
         metrics.membershipPrepareAttempt("offer", "offer_exists");
         return apiError(res, 409, "MEMBERSHIP_OFFER_EXISTS");
       }
-      const value = await d.membershipGateway.prepareOffer(creator),
+      const value = await d.membershipGateway.prepareOffer(
+          creator,
+          priceSompi.toString(),
+        ),
         id = randomUUID();
       logger.info("membership_prepare", {
         requestId: req.requestId,
         kind: "offer",
+        priceSompi: priceSompi.toString(),
       });
       await d.store.prunePreparedMemberships(now());
       await d.store.savePreparedMembership({
@@ -686,6 +709,7 @@ export function createApp(d: AppDependencies) {
       const mapping: CreatorCovenant = {
         creator: value.creator,
         covenantId: value.covenantId,
+        priceSompi: value.priceSompi!,
       };
       const outcome = await d.store.finalizeOffer(id, mapping);
       await d.store.saveMembershipWorkflow({
@@ -732,11 +756,13 @@ export function createApp(d: AppDependencies) {
           creator,
           buyer,
           mapping.covenantId,
+          mapping.priceSompi,
         ),
         id = randomUUID();
       logger.info("membership_prepare", {
         requestId: req.requestId,
         kind: "purchase",
+        priceSompi: value.priceSompi,
       });
       await d.store.prunePreparedMemberships(now());
       await d.store.savePreparedMembership({

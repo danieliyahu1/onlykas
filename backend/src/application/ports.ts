@@ -97,10 +97,7 @@ export interface CovenantRepository {
 
 export interface MembershipPurchaseRepository {
   createMembershipPurchase(value: MembershipPurchase): Promise<DuplicateOutcome>;
-  membershipReceipts(
-    buyer: string,
-    creator: string,
-  ): Promise<MembershipPurchase[]>;
+  membershipReceipts(buyer: string, creator: string): Promise<MembershipPurchase[]>;
   finalizeMembershipPurchase(
     preparedMembershipId: string,
     value: MembershipPurchase,
@@ -139,11 +136,15 @@ export interface PaymentGateway {
 }
 
 export interface MembershipGateway {
-  prepareOffer(creator: string): Promise<PreparedMembershipTransaction>;
+  prepareOffer(
+    creator: string,
+    priceSompi: string,
+  ): Promise<PreparedMembershipTransaction>;
   prepareMint(
     creator: string,
     buyer: string,
     covenantId: string,
+    priceSompi: string,
   ): Promise<PreparedMembershipTransaction>;
   submit(
     prepared: PreparedMembershipTransaction,

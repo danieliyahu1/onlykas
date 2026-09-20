@@ -71,7 +71,11 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     });
     return Number(result.rows[0]?.count ?? 0);
   }
-  async claimFeedback(limit: number, leaseMs: number, now = Date.now()): Promise<FeedbackEntry[]> {
+  async claimFeedback(
+    limit: number,
+    leaseMs: number,
+    now = Date.now(),
+  ): Promise<FeedbackEntry[]> {
     const result = await this.execute({
       sql: `UPDATE feedback_outbox SET lease_until=?, attempts=attempts+1
         WHERE id IN (SELECT id FROM feedback_outbox
@@ -175,7 +179,7 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
   }
   async savePreparedMembership(v: PreparedMembershipRecord) {
     await this.execute({
-      sql: `INSERT INTO prepared_memberships (id,transaction_json,fingerprint,covenant_id,sign_inputs,member_output_index,creator,buyer,kind,expires_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      sql: `INSERT INTO prepared_memberships (id,transaction_json,fingerprint,covenant_id,sign_inputs,member_output_index,creator,buyer,kind,expires_at,price_sompi,version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [
         v.id,
         v.transaction,
@@ -187,6 +191,8 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
         v.buyer,
         v.kind,
         v.expiresAt,
+        v.priceSompi ?? null,
+        1,
       ],
     });
   }
@@ -462,8 +468,8 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
   async saveCreatorCovenant(v: CreatorCovenant): Promise<DuplicateOutcome> {
     try {
       await this.execute({
-        sql: `INSERT INTO creator_covenants (creator,covenant_id) VALUES (?,?)`,
-        args: [v.creator, v.covenantId],
+        sql: `INSERT INTO creator_covenants (creator,covenant_id,price_sompi) VALUES (?,?,?)`,
+        args: [v.creator, v.covenantId, v.priceSompi],
       });
       return "CREATED";
     } catch (error) {
@@ -502,8 +508,8 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     return this.transactionalFinalize(
       id,
       "prepared_memberships",
-      `INSERT INTO creator_covenants (creator,covenant_id) VALUES (?,?)`,
-      [value.creator, value.covenantId],
+      `INSERT INTO creator_covenants (creator,covenant_id,price_sompi) VALUES (?,?,?)`,
+      [value.creator, value.covenantId, value.priceSompi],
     );
   }
   async finalizeMembershipPurchase(
@@ -521,7 +527,7 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     id: string,
     preparedTable: string,
     insertSql: string,
-    insertArgs: (string | number)[],
+    insertArgs: (string | number | null)[],
   ): Promise<DuplicateOutcome> {
     const transaction = await this.client.transaction("write");
     try {
@@ -600,6 +606,7 @@ const membershipWorkflowFromRow = (r: Record<string, unknown>): MembershipWorkfl
 const creatorCovenantFromRow = (r: Record<string, unknown>): CreatorCovenant => ({
   creator: text(r.creator),
   covenantId: text(r.covenant_id),
+  priceSompi: text(r.price_sompi),
 });
 const membershipPurchaseFromRow = (r: Record<string, unknown>): MembershipPurchase => ({
   transactionId: text(r.transaction_id),
@@ -630,6 +637,7 @@ const preparedMembershipFromRow = (
   buyer: text(r.buyer),
   kind: membershipKind(text(r.kind)),
   expiresAt: number(r.expires_at),
+  priceSompi: text(r.price_sompi),
 });
 const validatedJson = (value: string) => {
   try {

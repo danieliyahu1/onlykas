@@ -33,11 +33,17 @@ export async function unlockPost(
 export async function prepareSubscription(
   actingAsOwner: boolean,
   creatorAddress: string,
+  priceSompi?: string,
 ): Promise<PreparedSubscription> {
   const path = actingAsOwner
     ? "/api/membership/offers/prepare"
     : `/api/membership/${encodeURIComponent(creatorAddress)}/prepare`;
-  return api<PreparedSubscription>(path, { method: "POST" });
+  return api<PreparedSubscription>(path, {
+    method: "POST",
+    ...(actingAsOwner && priceSompi
+      ? { body: JSON.stringify({ price: priceSompi }) }
+      : {}),
+  });
 }
 
 export async function finalizeSubscription(

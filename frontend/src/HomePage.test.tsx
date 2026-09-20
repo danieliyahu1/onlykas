@@ -74,7 +74,7 @@ describe("HomePage", () => {
     ).toBeVisible();
     expect(screen.getByText("What your fans see")).toBeVisible();
     expect(screen.getByText("Yonatan Sompolinsky")).toBeVisible();
-    expect(screen.getByText("One day of access · 10 KAS")).toBeVisible();
+    expect(screen.getByText("Creator-priced access · 30 days")).toBeVisible();
     expect(screen.getByText("Subscribed")).toBeVisible();
     expect(screen.getByText("BlockDAG explanation with AI")).toBeVisible();
     expect(screen.getByText("5 KAS")).toBeVisible();

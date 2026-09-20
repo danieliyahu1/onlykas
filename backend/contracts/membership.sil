@@ -5,18 +5,22 @@ contract Membership(
     byte[32] initialPlatform,
     byte[32] initialOwner,
     int initialExpiresAtDaa,
+    int initialPriceSompi,
     bool initialIsMinter
 ) {
-    int constant MEMBERSHIP_LIFETIME_DAA = 864000;
-    int constant MEMBERSHIP_CREATOR_SHARE = 990000000;
-    int constant MEMBERSHIP_PLATFORM_SHARE = 10000000;
+    int constant MEMBERSHIP_LIFETIME_DAA = 25920000;
+    int constant MIN_PRICE_SOMPI = 100000000;
+    int constant MAX_PRICE_SOMPI = 100000000000000;
     int constant INDEX_OUTPUT_VALUE = 50000000;
     int constant MEMBERSHIP_OUTPUT_VALUE = 50000000;
+    int constant FEE_DENOMINATOR = 100;
+    int constant MIN_FEE_SOMPI = 100000000;
 
     byte[32] creator = initialCreator;
     byte[32] platform = initialPlatform;
     byte[32] owner = initialOwner;
     int expiresAtDaa = initialExpiresAtDaa;
+    int priceSompi = initialPriceSompi;
     bool isMinter = initialIsMinter;
 
     #[covenant(binding = auth, from = 1, to = 2, name = mint)]
@@ -29,16 +33,20 @@ contract Membership(
         byte ownerIndexOutputIndex
     ) {
         require(prevState.isMinter);
+        require(prevState.priceSompi >= MIN_PRICE_SOMPI);
+        require(prevState.priceSompi <= MAX_PRICE_SOMPI);
 
         require(newStates[0].creator == prevState.creator);
         require(newStates[0].platform == prevState.platform);
         require(newStates[0].owner == prevState.owner);
         require(newStates[0].expiresAtDaa == prevState.expiresAtDaa);
+        require(newStates[0].priceSompi == prevState.priceSompi);
         require(newStates[0].isMinter);
 
         require(!newStates[1].isMinter);
         require(newStates[1].creator == prevState.creator);
         require(newStates[1].platform == prevState.platform);
+        require(newStates[1].priceSompi == prevState.priceSompi);
         require(tx.daa >= newStates[1].expiresAtDaa - MEMBERSHIP_LIFETIME_DAA);
 
         int memberOutputIndex = OpAuthOutputIdx(this.activeInputIndex, 1);
@@ -50,11 +58,17 @@ contract Membership(
         require(tx.outputs[unsigned(ownerIndexOutputIndex)].value == INDEX_OUTPUT_VALUE);
 
         byte[] creatorLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.creator)));
+        int platformPayment = prevState.priceSompi / FEE_DENOMINATOR;
+        if (platformPayment < MIN_FEE_SOMPI) {
+            platformPayment = 0;
+        }
         require(tx.outputs[unsigned(paymentOutputIndex)].scriptPubKey == creatorLock);
-        require(tx.outputs[unsigned(paymentOutputIndex)].value == MEMBERSHIP_CREATOR_SHARE);
+        require(tx.outputs[unsigned(paymentOutputIndex)].value == prevState.priceSompi - platformPayment);
 
-        byte[] platformLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.platform)));
-        require(tx.outputs[unsigned(platformOutputIndex)].scriptPubKey == platformLock);
-        require(tx.outputs[unsigned(platformOutputIndex)].value == MEMBERSHIP_PLATFORM_SHARE);
+        if (platformPayment > 0) {
+            byte[] platformLock = byte[](new ScriptPubKeyP2PK(pubkey(prevState.platform)));
+            require(tx.outputs[unsigned(platformOutputIndex)].scriptPubKey == platformLock);
+            require(tx.outputs[unsigned(platformOutputIndex)].value == platformPayment);
+        }
     }
 }

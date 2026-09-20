@@ -5,10 +5,7 @@ import {
 } from "@kluster/kaspa-wasm";
 import artifact from "./contracts/membership.json" with { type: "json" };
 
-export const MEMBERSHIP_PRICE_SOMPI = 1_000_000_000n;
-export const MEMBERSHIP_CREATOR_SHARE = 990_000_000n;
-export const MEMBERSHIP_PLATFORM_SHARE = 10_000_000n;
-export const MEMBERSHIP_DURATION_DAA = 864_000n;
+export const MEMBERSHIP_DURATION_DAA = 25_920_000n;
 export const MEMBERSHIP_INDEX_VALUE = 50_000_000n;
 export const MEMBERSHIP_OUTPUT_VALUE = 50_000_000n;
 export const MEMBERSHIP_PROTOCOL = "onlykas";
@@ -34,6 +31,7 @@ export interface MembershipState {
   platform: string;
   owner: string;
   expiresAtDaa: bigint;
+  priceSompi: bigint;
   isMinter: boolean;
 }
 
@@ -92,16 +90,28 @@ export function membershipAddress(state: MembershipState): string {
   return address.toString();
 }
 
-export function decodeMembershipRedeemScript(scriptHex: string): MembershipState | null {
+export function decodeMembershipRedeemScript(
+  scriptHex: string,
+): MembershipState | null {
   if (!/^[0-9a-f]+$/i.test(scriptHex) || scriptHex.length % 2 !== 0) return null;
   const script = Uint8Array.from(Buffer.from(scriptHex, "hex"));
   if (script.length !== bytecode.length) return null;
-  if (!equal(script.slice(0, offset), prefix) || !equal(script.slice(offset + len), suffix))
+  if (
+    !equal(script.slice(0, offset), prefix) ||
+    !equal(script.slice(offset + len), suffix)
+  )
     return null;
-const pushes = parsePushes(script.slice(offset, offset + len));
-  if (!pushes || pushes.length !== 5) return null;
-  const [creator, platform, owner, expiry, minter] = pushes;
-  if (creator?.length !== 32 || platform?.length !== 32 || owner?.length !== 32 || expiry?.length !== 8 || minter?.length !== 1)
+  const pushes = parsePushes(script.slice(offset, offset + len));
+  if (!pushes || pushes.length !== 6) return null;
+  const [creator, platform, owner, expiry, price, minter] = pushes;
+  if (
+    creator?.length !== 32 ||
+    platform?.length !== 32 ||
+    owner?.length !== 32 ||
+    expiry?.length !== 8 ||
+    price?.length !== 8 ||
+    minter?.length !== 1
+  )
     return null;
   if (minter[0] !== 0 && minter[0] !== 1) return null;
   return {
@@ -109,6 +119,7 @@ const pushes = parsePushes(script.slice(offset, offset + len));
     platform: hex(platform),
     owner: hex(owner),
     expiresAtDaa: decodePositiveI64(expiry),
+    priceSompi: decodePositiveI64(price),
     isMinter: minter[0] === 1,
   };
 }
@@ -126,14 +137,31 @@ export function membershipMintSignatureScript(
   builder.addData(`${minter.creator}${member.creator}`);
   builder.addData(`${minter.platform}${member.platform}`);
   builder.addData(`${minter.owner}${member.owner}`);
-  builder.addData(hex(concat(encodePositiveI64(minter.expiresAtDaa), encodePositiveI64(member.expiresAtDaa))));
+  builder.addData(
+    hex(
+      concat(
+        encodePositiveI64(minter.expiresAtDaa),
+        encodePositiveI64(member.expiresAtDaa),
+      ),
+    ),
+  );
+  builder.addData(
+    hex(
+      concat(
+        encodePositiveI64(minter.priceSompi),
+        encodePositiveI64(member.priceSompi),
+      ),
+    ),
+  );
   builder.addData(minter.isMinter ? "0100" : "0000");
   builder.addData(byteHex(fundingInputIndex));
   builder.addData(byteHex(paymentOutputIndex));
   builder.addData(byteHex(platformOutputIndex));
   builder.addData(byteHex(ownerIndexOutputIndex));
   builder.addData(contract.entries.mint.dispatch_tag);
-  return ScriptBuilder.fromScript(builder.toString(), { flags: { covenantsEnabled: true } })
+  return ScriptBuilder.fromScript(builder.toString(), {
+    flags: { covenantsEnabled: true },
+  })
     .addData(currentRedeemScript)
     .toString();
 }
@@ -142,28 +170,36 @@ export function membershipPayload(
   memberRedeemScript: string,
   metadata: Omit<MembershipMetadata, "membershipOutputIndex">,
 ): string {
-  return Buffer.from(JSON.stringify({
-    protocol: MEMBERSHIP_PROTOCOL,
-    version: MEMBERSHIP_METADATA_VERSION,
-    tokenType: "membership",
-    memberRedeemScript,
-    metadata: {
-      ...metadata,
-      membershipOutputIndex: 1,
-      createdAtDaa: metadata.createdAtDaa.toString(),
-      expiresAtDaa: metadata.expiresAtDaa.toString(),
-    },
-  })).toString("hex");
+  return Buffer.from(
+    JSON.stringify({
+      protocol: MEMBERSHIP_PROTOCOL,
+      version: MEMBERSHIP_METADATA_VERSION,
+      tokenType: "membership",
+      memberRedeemScript,
+      metadata: {
+        ...metadata,
+        membershipOutputIndex: 1,
+        createdAtDaa: metadata.createdAtDaa.toString(),
+        expiresAtDaa: metadata.expiresAtDaa.toString(),
+      },
+    }),
+  ).toString("hex");
 }
 
 export function parseMembershipPayload(payload: string | undefined): string | null {
   return parseMembershipPayloadDetails(payload)?.memberRedeemScript ?? null;
 }
 
-export function parseMembershipPayloadDetails(payload: string | undefined): MembershipPayload | null {
-  if (!payload || !/^[0-9a-f]+$/i.test(payload) || payload.length % 2 !== 0) return null;
+export function parseMembershipPayloadDetails(
+  payload: string | undefined,
+): MembershipPayload | null {
+  if (!payload || !/^[0-9a-f]+$/i.test(payload) || payload.length % 2 !== 0)
+    return null;
   try {
-    const value = JSON.parse(Buffer.from(payload, "hex").toString("utf8")) as Record<string, unknown>;
+    const value = JSON.parse(Buffer.from(payload, "hex").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
     const metadata = value.metadata as Record<string, unknown> | undefined;
     if (
       value.protocol !== MEMBERSHIP_PROTOCOL ||
@@ -175,7 +211,8 @@ export function parseMembershipPayloadDetails(payload: string | undefined): Memb
       metadata.membershipOutputIndex !== 1 ||
       typeof metadata.createdAtDaa !== "string" ||
       typeof metadata.expiresAtDaa !== "string"
-    ) return null;
+    )
+      return null;
     return {
       protocol: MEMBERSHIP_PROTOCOL,
       version: MEMBERSHIP_METADATA_VERSION,
@@ -199,6 +236,7 @@ function encodeState(state: MembershipState): Uint8Array {
     fixedPush(Buffer.from(state.platform, "hex")),
     fixedPush(Buffer.from(state.owner, "hex")),
     fixedPush(encodePositiveI64(state.expiresAtDaa)),
+    fixedPush(encodePositiveI64(state.priceSompi)),
     fixedPush(Uint8Array.of(state.isMinter ? 1 : 0)),
   );
 }
@@ -244,7 +282,8 @@ function parsePushes(script: Uint8Array): Uint8Array[] | null {
 }
 
 function byteHex(value: number): string {
-  if (!Number.isInteger(value) || value < 0 || value > 255) throw new Error("INVALID_INDEX");
+  if (!Number.isInteger(value) || value < 0 || value > 255)
+    throw new Error("INVALID_INDEX");
   return value.toString(16).padStart(2, "0");
 }
 
@@ -259,7 +298,9 @@ function concat(...values: Uint8Array[]): Uint8Array {
 }
 
 function equal(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+  return (
+    left.length === right.length && left.every((value, index) => value === right[index])
+  );
 }
 
 function hex(bytes: Uint8Array): string {

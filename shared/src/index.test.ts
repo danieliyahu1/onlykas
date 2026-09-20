@@ -1,4 +1,8 @@
 import {
+  MAX_MEMBERSHIP_PRICE_SOMPI,
+  MIN_MEMBERSHIP_PRICE_SOMPI,
+  membershipFeeSompi,
+  parseMembershipPrice,
   MEDIA_COPY,
   MAX_IMAGE_BYTES,
   isFreePost,
@@ -9,6 +13,27 @@ import {
   parsePostPrice,
   validatePost,
 } from "./index.js";
+
+describe("membership pricing", () => {
+  it.each([
+    ["1", MIN_MEMBERSHIP_PRICE_SOMPI],
+    ["1000000", MAX_MEMBERSHIP_PRICE_SOMPI],
+    ["99.9999995", 9_999_999_950n],
+  ])("accepts %s KAS", (value, expected) => {
+    expect(parseMembershipPrice(value)).toBe(expected);
+  });
+
+  it.each(["0.99999999", "1000000.00000001", "1.000000001", "invalid"])(
+    "rejects %s",
+    (value) => expect(parseMembershipPrice(value)).toBeNull(),
+  );
+
+  it("waives the fee below 100 KAS and charges exactly 1 KAS at the threshold", () => {
+    expect(membershipFeeSompi(50n * 100_000_000n)).toBe(0n);
+    expect(membershipFeeSompi(99_999_999_999n)).toBe(0n);
+    expect(membershipFeeSompi(100n * 100_000_000n)).toBe(100_000_000n);
+  });
+});
 
 describe("post validation", () => {
   it("converts exact KAS decimals to whole sompi", () => {
