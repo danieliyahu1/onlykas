@@ -297,7 +297,10 @@ describe("CreatorPage profile visibility", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("lets the owner make their profile public", async () => {
-    vi.mocked(api).mockResolvedValueOnce(creator(true, false));
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(true, false),
+      posts: [post("own-post", "My moment", true)],
+    });
     const onVisibilityChange = vi.fn(async () => undefined);
     const user = userEvent.setup();
     renderCreator(
@@ -320,8 +323,24 @@ describe("CreatorPage profile visibility", () => {
     expect(screen.queryByRole("button", { name: "Change" })).not.toBeInTheDocument();
   });
 
+  it("hides the visibility toggle from an owner without posts", async () => {
+    vi.mocked(api).mockResolvedValueOnce(creator(true, false));
+    renderCreator(
+      creatorAddress,
+      vi.fn(async () => creatorAddress),
+      vi.fn(async () => undefined),
+    );
+
+    expect(await screen.findByRole("heading", { name: "Creator" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Change" })).not.toBeInTheDocument();
+  });
+
   it("shows the current public state on the owner profile", async () => {
-    vi.mocked(api).mockResolvedValueOnce({ ...creator(true, false), isPublic: true });
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(true, false),
+      isPublic: true,
+      posts: [post("own-post", "My moment", true)],
+    });
     renderCreator(
       creatorAddress,
       vi.fn(async () => creatorAddress),
@@ -333,7 +352,11 @@ describe("CreatorPage profile visibility", () => {
   });
 
   it("lets the owner make their public profile private again", async () => {
-    vi.mocked(api).mockResolvedValueOnce({ ...creator(true, false), isPublic: true });
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(true, false),
+      isPublic: true,
+      posts: [post("own-post", "My moment", true)],
+    });
     const onVisibilityChange = vi.fn(async () => undefined);
     const user = userEvent.setup();
     renderCreator(
@@ -349,7 +372,10 @@ describe("CreatorPage profile visibility", () => {
   });
 
   it("keeps the previous state when saving visibility fails", async () => {
-    vi.mocked(api).mockResolvedValueOnce(creator(true, false));
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(true, false),
+      posts: [post("own-post", "My moment", true)],
+    });
     const onVisibilityChange = vi.fn(async () => {
       throw new Error("Save failed");
     });

@@ -312,7 +312,7 @@ export function CreatorPage({
           >
             {shortenAddress(currentCreator.address)}
           </button>
-          {owner && onVisibilityChange && (
+          {owner && onVisibilityChange && currentCreator.posts.length > 0 && (
             <div className="profile-visibility">
               <span>Visibility: {currentCreator.isPublic ? "Public" : "Private"}</span>
               <button
