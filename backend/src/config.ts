@@ -29,7 +29,11 @@ const environmentSchema = z
       .enum(["mainnet", "testnet-10"])
       .default(DEFAULT_NETWORK),
     KASPA_NODE_URL: z.string().url().optional(),
-    PLATFORM_FEE_ADDRESS: z.string().min(1),
+    // Each network has its own fee recipient. Only the address matching
+    // KASPA_NETWORK is read, so the same development and production
+    // environments can carry both without a network-specific deployment.
+    PLATFORM_FEE_ADDRESS_MAINNET: z.string().min(1).optional(),
+    PLATFORM_FEE_ADDRESS_TESTNET_10: z.string().min(1).optional(),
     FEEDBACK_SPILL_PATH: z.string().min(1).default("/tmp/feedback-spill.json"),
     TELEGRAM_FEEDBACK_BOT_TOKEN: z.string().min(1).optional(),
     TELEGRAM_FEEDBACK_CHAT_ID: z.string().min(1).optional(),
@@ -37,33 +41,66 @@ const environmentSchema = z
   })
   .superRefine((value, ctx) => {
     const definition = NETWORK_DEFINITIONS[value.KASPA_NETWORK];
+    const key = platformFeeAddressKey(value.KASPA_NETWORK);
+    const address = value[key];
     const invalid = (message: string) =>
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["PLATFORM_FEE_ADDRESS"],
+        path: [key],
         message,
       });
-    if (!definition.addressPattern.test(value.PLATFORM_FEE_ADDRESS)) {
+    // The unused network's address is never validated: a stale or malformed
+    // value must not stop the selected network from booting.
+    if (address === undefined) {
+      invalid(`${key} is required when KASPA_NETWORK is ${value.KASPA_NETWORK}`);
+      return;
+    }
+    if (!definition.addressPattern.test(address)) {
       invalid(
-        `PLATFORM_FEE_ADDRESS must be a valid ${value.KASPA_NETWORK} Kaspa P2PK address`,
+        `${key} must be a valid ${value.KASPA_NETWORK} Kaspa P2PK address`,
       );
       return;
     }
     try {
-      if (!/^000020[0-9a-f]{64}ac$/i.test(addressScript(value.PLATFORM_FEE_ADDRESS)))
-        invalid("PLATFORM_FEE_ADDRESS must be a single-key P2PK address");
+      if (!/^000020[0-9a-f]{64}ac$/i.test(addressScript(address)))
+        invalid(`${key} must be a single-key P2PK address`);
     } catch {
-      invalid("PLATFORM_FEE_ADDRESS could not be decoded");
+      invalid(`${key} could not be decoded`);
     }
   });
 
+function platformFeeAddressKey(
+  network: NetworkId,
+): "PLATFORM_FEE_ADDRESS_MAINNET" | "PLATFORM_FEE_ADDRESS_TESTNET_10" {
+  return network === "mainnet"
+    ? "PLATFORM_FEE_ADDRESS_MAINNET"
+    : "PLATFORM_FEE_ADDRESS_TESTNET_10";
+}
+
+function resolvePlatformFeeAddress(
+  parsed: z.infer<typeof environmentSchema>,
+): string {
+  const address =
+    parsed.KASPA_NETWORK === "mainnet"
+      ? parsed.PLATFORM_FEE_ADDRESS_MAINNET
+      : parsed.PLATFORM_FEE_ADDRESS_TESTNET_10;
+  if (address === undefined)
+    throw new Error(
+      `${platformFeeAddressKey(parsed.KASPA_NETWORK)} is required when KASPA_NETWORK is ${parsed.KASPA_NETWORK}`,
+    );
+  return address;
+}
+
 export type Environment = Omit<
   z.infer<typeof environmentSchema>,
-  "KASPA_NODE_URL"
+  | "KASPA_NODE_URL"
+  | "PLATFORM_FEE_ADDRESS_MAINNET"
+  | "PLATFORM_FEE_ADDRESS_TESTNET_10"
 > & {
   LOG_LEVEL: LogLevel;
   KASPA_NODE_URL: string;
   KASPA_NETWORK: NetworkId;
+  PLATFORM_FEE_ADDRESS: string;
 };
 
 export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
@@ -75,6 +112,9 @@ export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
     KASPA_NODE_URL:
       parsed.KASPA_NODE_URL ??
       networkDefinition(parsed.KASPA_NETWORK).defaultNodeUrl,
+    // The selected network picks its own fee wallet, so KASPA_NETWORK alone
+    // decides where the platform fee is sent.
+    PLATFORM_FEE_ADDRESS: resolvePlatformFeeAddress(parsed),
     LOG_LEVEL:
       parsed.LOG_LEVEL ??
       (parsed.NODE_ENV === "production" ? "info" : "debug"),

@@ -10,7 +10,8 @@ data:
   PUBLIC_ORIGIN: https://onlykas.danieliyahu.com
   R2_REGION: auto
   R2_BUCKET: onlykas-production
-  KASPA_NETWORK: testnet-10
-  KASPA_NODE_URL: https://api-tn10.kaspa.org
-  PLATFORM_FEE_ADDRESS: kaspatest:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue
+  # Production runs on mainnet. KASPA_NETWORK selects the address prefix, the
+  # wallet network, and the default node URL; the matching platform fee wallet
+  # is injected from the onlykas-platform-fee-address Secret.
+  KASPA_NETWORK: mainnet
   FEEDBACK_SPILL_PATH: /tmp/feedback-spill.json

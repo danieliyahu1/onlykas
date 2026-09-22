@@ -15,13 +15,13 @@ pnpm dev
 
 Copy the values described in `.env.example` into the process environment before starting the backend. The Vite server runs the browser application and proxies `/api` to Express.
 
-`PLATFORM_FEE_ADDRESS` is required and must be a valid P2PK address for the selected `KASPA_NETWORK`. New individual post payments send the rounded-nearest 1% fee to this wallet and reduce the creator output by the same amount.
+Each network has its own fee recipient, supplied as `PLATFORM_FEE_ADDRESS_MAINNET` and `PLATFORM_FEE_ADDRESS_TESTNET_10` (`PLATFORM_FEE_ADDRESS_MAINNET` is ignored while `KASPA_NETWORK=testnet-10`, and the reverse). The address matching `KASPA_NETWORK` is required and must be a single-key P2PK address on that network. New individual post payments send the rounded-nearest 1% fee to this wallet and reduce the creator output by the same amount.
 
 ## Networks
 
-The server owns the network identity. `KASPA_NETWORK` is the single source of truth: it selects the address prefix used for validation, the default `KASPA_NODE_URL`, contract address derivation, transaction mass, and the wRPC relay network. The browser learns the network from `GET /api/config` and switches the wallet to it; it never selects a chain itself.
+The server owns the network identity. `KASPA_NETWORK` is the single source of truth: it selects the address prefix used for validation, the platform fee wallet, the default `KASPA_NODE_URL`, contract address derivation, transaction mass, and the wRPC relay network. The browser learns the network from `GET /api/config` and switches the wallet to it; it never selects a chain itself.
 
-To run on mainnet, set `KASPA_NETWORK=mainnet`, a `mainnet` `PLATFORM_FEE_ADDRESS`, and a mainnet node URL. Development and production, and mainnet and testnet, must use separate stateful resources; never point one network's configuration at another network's database, bucket, or fee wallet.
+Environments are the state boundary, not the chain. Development runs on `testnet-10` and production runs on `mainnet`, and each environment keeps its own database, bucket, and credentials. Because both fee wallets are configured in every environment, `KASPA_NETWORK` alone decides the network: set it to `mainnet` in production and `testnet-10` in development, and never point one environment's database or bucket at another environment.
 
 ## R2
 
@@ -78,7 +78,7 @@ kubectl -n onlykas create secret docker-registry ghcr-pull \
 
 Populate the vault keys referenced by `deploy/externalsecret.yaml`: `onlykas-DATABASE_URL`, `onlykas-DATABASE_AUTH_TOKEN`, `onlykas-R2_ENDPOINT`, `onlykas-R2_ACCESS_KEY_ID`, and `onlykas-R2_SECRET_ACCESS_KEY`. These values must reference only the production Turso database and production R2 bucket. The External Secrets Operator creates `onlykas-secrets` from those values.
 
-Set `PLATFORM_FEE_ADDRESS` in `deploy/configmap.yaml` when changing the fee recipient.
+Populate the two platform fee wallets as `onlykas-platform-fee-address-mainnet` and `onlykas-platform-fee-address-testnet-10`. The External Secrets Operator creates `onlykas-platform-fee-address`, which the Deployment maps to `PLATFORM_FEE_ADDRESS_MAINNET` and `PLATFORM_FEE_ADDRESS_TESTNET_10`; the process reads only the one matching `KASPA_NETWORK`. Set `KASPA_NETWORK` in `deploy/configmap.yaml` to `mainnet` for production.
 
 The GitHub Actions workflow verifies the repository, publishes a `linux/arm64` image tagged with the commit SHA to GHCR, and updates `deploy/deployment.yaml` automatically. Argo CD then detects the manifest commit and syncs the new image.
 
