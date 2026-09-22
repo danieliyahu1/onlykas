@@ -738,63 +738,6 @@ export function createApp(d: AppDependencies) {
     }),
   );
   app.post(
-    "/api/membership/:creator/prepare",
-    optional,
-    required,
-    asyncHandler(async (req, res) => {
-      if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
-      const creator = param(req, "creator");
-      if (!addressPattern.test(creator)) {
-        metrics.membershipPrepareAttempt("purchase", "invalid_address");
-        return apiError(res, 400, "INVALID_ADDRESS");
-      }
-      const buyer = req.walletSession!.address;
-      if (buyer === creator) {
-        metrics.membershipPrepareAttempt("purchase", "creator_cannot_subscribe");
-        return apiError(res, 409, "CREATOR_CANNOT_SUBSCRIBE");
-      }
-      const mapping = await d.store.getCreatorCovenant(creator);
-      if (!mapping) {
-        metrics.membershipPrepareAttempt("purchase", "offer_not_found");
-        return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
-      }
-      let value: Awaited<ReturnType<MembershipGateway["prepareMint"]>>;
-      try {
-        value = await d.membershipGateway.prepareMint(
-          creator,
-          buyer,
-          mapping.covenantId,
-          mapping.priceSompi,
-        );
-      } catch (error) {
-        if (error instanceof Error && error.message === "MEMBERSHIP_OFFER_UNAVAILABLE")
-          return apiError(res, 409, "MEMBERSHIP_OFFER_STALE", "This offer changed. Refresh and try again.");
-        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
-          return apiError(res, 422, "INSUFFICIENT_FUNDS", COPY.insufficientFunds);
-        throw error;
-      }
-      const id = randomUUID();
-      logger.info("membership_prepare", {
-        requestId: req.requestId,
-        kind: "purchase",
-        priceSompi: value.priceSompi,
-      });
-      await d.store.prunePreparedMemberships(now());
-      await d.store.savePreparedMembership({
-        id,
-        ...value,
-        creator,
-        buyer,
-        kind: "purchase",
-        expiresAt: now() + PREPARED_TTL_MS,
-      });
-      metrics.membershipPrepareAttempt("purchase", "prepared");
-      res
-        .status(201)
-        .json({ id, transaction: value.transaction, signInputs: value.signInputs });
-    }),
-  );
-  app.post(
     "/api/membership/cancel/prepare",
     optional,
     required,
@@ -898,6 +841,63 @@ export function createApp(d: AppDependencies) {
         kind: "update",
         expiresAt: now() + PREPARED_TTL_MS,
       });
+      res
+        .status(201)
+        .json({ id, transaction: value.transaction, signInputs: value.signInputs });
+    }),
+  );
+  app.post(
+    "/api/membership/:creator/prepare",
+    optional,
+    required,
+    asyncHandler(async (req, res) => {
+      if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
+      const creator = param(req, "creator");
+      if (!addressPattern.test(creator)) {
+        metrics.membershipPrepareAttempt("purchase", "invalid_address");
+        return apiError(res, 400, "INVALID_ADDRESS");
+      }
+      const buyer = req.walletSession!.address;
+      if (buyer === creator) {
+        metrics.membershipPrepareAttempt("purchase", "creator_cannot_subscribe");
+        return apiError(res, 409, "CREATOR_CANNOT_SUBSCRIBE");
+      }
+      const mapping = await d.store.getCreatorCovenant(creator);
+      if (!mapping) {
+        metrics.membershipPrepareAttempt("purchase", "offer_not_found");
+        return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
+      }
+      let value: Awaited<ReturnType<MembershipGateway["prepareMint"]>>;
+      try {
+        value = await d.membershipGateway.prepareMint(
+          creator,
+          buyer,
+          mapping.covenantId,
+          mapping.priceSompi,
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message === "MEMBERSHIP_OFFER_UNAVAILABLE")
+          return apiError(res, 409, "MEMBERSHIP_OFFER_STALE", "This offer changed. Refresh and try again.");
+        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+          return apiError(res, 422, "INSUFFICIENT_FUNDS", COPY.insufficientFunds);
+        throw error;
+      }
+      const id = randomUUID();
+      logger.info("membership_prepare", {
+        requestId: req.requestId,
+        kind: "purchase",
+        priceSompi: value.priceSompi,
+      });
+      await d.store.prunePreparedMemberships(now());
+      await d.store.savePreparedMembership({
+        id,
+        ...value,
+        creator,
+        buyer,
+        kind: "purchase",
+        expiresAt: now() + PREPARED_TTL_MS,
+      });
+      metrics.membershipPrepareAttempt("purchase", "prepared");
       res
         .status(201)
         .json({ id, transaction: value.transaction, signInputs: value.signInputs });
