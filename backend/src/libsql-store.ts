@@ -354,7 +354,7 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
   }
   async publicCreators(limit: number) {
     const r = await this.execute({
-      sql: `SELECT * FROM profiles WHERE is_public=1 ORDER BY COALESCE(display_name,address) LIMIT ?`,
+      sql: `SELECT * FROM profiles WHERE is_public=1 AND EXISTS (SELECT 1 FROM posts WHERE creator=profiles.address) ORDER BY COALESCE(display_name,address) LIMIT ?`,
       args: [limit],
     });
     return r.rows.map(profileFromRow);

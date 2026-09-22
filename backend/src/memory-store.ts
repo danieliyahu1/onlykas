@@ -179,6 +179,7 @@ export class MemoryStore implements Repositories {
   async publicCreators(limit: number) {
     return [...this.profiles.values()]
       .filter((v) => v.isPublic)
+      .filter((v) => [...this.posts.values()].some((p) => p.creator === v.address))
       .sort((a, b) =>
         (a.displayName ?? a.address).localeCompare(b.displayName ?? b.address),
       )

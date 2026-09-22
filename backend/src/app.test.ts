@@ -195,12 +195,27 @@ describe("profile visibility", () => {
       isPublic: false,
       updatedAt: Date.now(),
     });
+    await store.publishPost({ ...post("visible-post"), creator: address });
 
     const response = await request(app).get("/api/creators/public");
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
       expect.objectContaining({ address, displayName: "Visible" }),
     ]);
+  });
+
+  it("excludes public profiles that have no posts", async () => {
+    const { app, store } = await profileApp();
+    await store.saveProfile({
+      address,
+      displayName: "Empty Creator",
+      isPublic: true,
+      updatedAt: Date.now(),
+    });
+
+    const response = await request(app).get("/api/creators/public");
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
   });
 
   it("keeps the display name when only visibility is toggled", async () => {
