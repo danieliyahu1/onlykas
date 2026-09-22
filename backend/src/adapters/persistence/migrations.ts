@@ -255,6 +255,21 @@ export const migrations: Migration[] = [
       "CREATE INDEX IF NOT EXISTS prepared_memberships_expiry ON prepared_memberships (expires_at)",
     ],
   },
+  {
+    version: 11,
+    name: "backfill_covenant_prices",
+    statements: [
+      `UPDATE creator_covenants
+       SET price_sompi = COALESCE(
+         (SELECT h.price_sompi
+          FROM creator_covenant_history h
+          WHERE h.creator = creator_covenants.creator
+            AND h.covenant_id = creator_covenants.covenant_id),
+         '0'
+       )
+       WHERE price_sompi IS NULL`,
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {
