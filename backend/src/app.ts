@@ -1148,54 +1148,6 @@ export function createApp(d: AppDependencies) {
       });
     }),
   );
-  app.post(
-    "/api/membership/purchases/confirm",
-    optional,
-    required,
-    asyncHandler(async (req, res) => {
-      if (!d.membershipVerifier) throw new HttpError(503, "VERIFY_UNAVAILABLE");
-      const b = z
-          .object({
-            creator: z.string().regex(addressPattern),
-            transactionId: z.string().regex(/^[0-9a-f]{64}$/i),
-            outputIndex: z.literal(1),
-            covenantId: z.string().regex(/^[0-9a-f]{64}$/i).optional(),
-          })
-          .parse(req.body),
-        mapping = await d.store.getCreatorCovenant(b.creator),
-        covenantId = b.covenantId ?? mapping?.covenantId;
-      if (!covenantId) {
-        metrics.membershipFinalizeAttempt("purchase", "covenant_not_found");
-        return apiError(res, 404, "COVENANT_NOT_FOUND");
-      }
-      const buyer = req.walletSession!.address,
-        check = await d.membershipVerifier.verifyUtxo(
-          b.transactionId,
-          b.outputIndex,
-          buyer,
-          covenantId,
-          b.creator,
-        );
-      if (check.status !== "VALID") {
-        metrics.membershipFinalizeAttempt("purchase", "not_confirmed");
-        return res
-          .status(422)
-          .json({ error: "MEMBERSHIP_NOT_CONFIRMED", membership: check });
-      }
-      const outcome = await d.store.createMembershipPurchase({
-        transactionId: b.transactionId,
-        buyer,
-        creator: b.creator,
-        covenantId,
-      });
-      if (outcome === "DUPLICATE")
-        return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS", COPY.membershipPurchaseExists, {
-          retry: RETRY_AFTER_REFRESH,
-        });
-      metrics.membershipFinalizeAttempt("purchase", "confirmed");
-      res.status(201).json(check);
-    }),
-  );
   app.get(
     "/api/verify/membership/address/:address",
     asyncHandler(async (req, res) => {
