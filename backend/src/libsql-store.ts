@@ -761,7 +761,12 @@ const signInputs = (value: string): number[] => {
   return parsed as number[];
 };
 const membershipKind = (value: string): PreparedMembershipRecord["kind"] => {
-  if (value !== "offer" && value !== "purchase" && value !== "update")
+  if (
+    value !== "offer" &&
+    value !== "purchase" &&
+    value !== "update" &&
+    value !== "cancel"
+  )
     throw new Error("INVALID_MEMBERSHIP_KIND");
   return value;
 };

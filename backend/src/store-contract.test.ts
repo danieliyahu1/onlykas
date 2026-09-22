@@ -220,6 +220,38 @@ describe.each([
     ).toBe("DUPLICATE");
     expect(await store.getPreparedMembership("prepared-membership", now)).toBeNull();
   });
+
+  it("round-trips a prepared membership cancellation through persistence", async () => {
+    await store.saveCreatorCovenant({
+      creator,
+      covenantId: "covenant-1",
+      priceSompi: "1000000000",
+    });
+    await store.savePreparedMembership({
+      id: "prepared-cancel",
+      transaction: "{}",
+      fingerprint: "fingerprint",
+      covenantId: "covenant-1",
+      signInputs: [0],
+      memberOutputIndex: null,
+      creator,
+      buyer: creator,
+      kind: "cancel",
+      expiresAt: now + 1_000,
+      priceSompi: "1000000000",
+    });
+
+    const loaded = await store.getPreparedMembership("prepared-cancel", now);
+    expect(loaded?.kind).toBe("cancel");
+
+    const finalize = store.finalizeCancellation?.bind(store);
+    if (!finalize) throw new Error("finalizeCancellation is unavailable");
+    expect(
+      await finalize("prepared-cancel", { creator, covenantId: "covenant-1" }),
+    ).toBe("CREATED");
+    expect(await store.getCreatorCovenant(creator)).toBeNull();
+    expect(await store.getPreparedMembership("prepared-cancel", now)).toBeNull();
+  });
 });
 
 function post(id: string, postCreator: string, publishedAt: number): Post {
