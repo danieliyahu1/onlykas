@@ -1,7 +1,10 @@
 import { PublicKey, verifyMessage } from "kaspa-wasm";
+import { DEFAULT_NETWORK, type NetworkId } from "@onlykas/shared";
 import type { WalletVerifier } from "./application/ports.js";
 
 export class KaspaWalletVerifier implements WalletVerifier {
+  constructor(private readonly network: NetworkId = DEFAULT_NETWORK) {}
+
   async verify(
     message: string,
     signature: string,
@@ -10,10 +13,10 @@ export class KaspaWalletVerifier implements WalletVerifier {
   ): Promise<boolean> {
     try {
       const publicKey = new PublicKey(publicKeyValue);
-      const derivedAddresses = [publicKey.toAddress("testnet-10").toString()];
+      const derivedAddresses = [publicKey.toAddress(this.network).toString()];
       try {
         derivedAddresses.push(
-          publicKey.toAddressECDSA("testnet-10").toString(),
+          publicKey.toAddressECDSA(this.network).toString(),
         );
       } catch {
         // Some Kasware public keys do not support ECDSA address derivation.

@@ -18,7 +18,30 @@ describe("environment", () => {
       METRICS_PORT: 9090,
       GIT_REVISION: "unknown",
       R2_REGION: "auto",
+      KASPA_NETWORK: "testnet-10",
+      KASPA_NODE_URL: "https://api-tn10.kaspa.org",
     });
+  });
+
+  it("derives the node URL and accepts a matching fee address for mainnet", () => {
+    expect(
+      parseEnvironment({
+        ...valid,
+        KASPA_NETWORK: "mainnet",
+        KASPA_NODE_URL: undefined,
+        PLATFORM_FEE_ADDRESS:
+          "kaspa:qpd82aj5unvrcj59ygscnmv9g0lryl3j5lp0dqquufqae382lh7lyxkh30lue",
+      }),
+    ).toMatchObject({
+      KASPA_NETWORK: "mainnet",
+      KASPA_NODE_URL: "https://api.kaspa.org",
+    });
+  });
+
+  it("rejects a fee address that does not belong to the selected network", () => {
+    expect(() =>
+      parseEnvironment({ ...valid, KASPA_NETWORK: "mainnet" }),
+    ).toThrow();
   });
 
   it("rejects an invalid metrics port", () => {

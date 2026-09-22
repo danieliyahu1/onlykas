@@ -1,19 +1,19 @@
-const TESTNET_PREFIX = "kaspatest:";
+import { addressPrefix } from "./app-config.js";
 
 export function creatorPath(address: string): string {
-  return `/creator/${encodeURIComponent(stripTestnetPrefix(address))}`;
+  return `/creator/${encodeURIComponent(stripAddressPrefix(address))}`;
 }
 
 export function creatorAddressFromRoute(value: string): string {
-  return value.startsWith(TESTNET_PREFIX) ? value : `${TESTNET_PREFIX}${value}`;
+  const prefix = `${addressPrefix()}:`;
+  return value.startsWith(prefix) ? value : `${prefix}${value}`;
 }
 
-export function hasTestnetPrefix(value: string): boolean {
-  return value.startsWith(TESTNET_PREFIX);
+export function hasAddressPrefix(value: string): boolean {
+  return value.startsWith(`${addressPrefix()}:`);
 }
 
-function stripTestnetPrefix(address: string): string {
-  return address.startsWith(TESTNET_PREFIX)
-    ? address.slice(TESTNET_PREFIX.length)
-    : address;
+function stripAddressPrefix(address: string): string {
+  const prefix = `${addressPrefix()}:`;
+  return address.startsWith(prefix) ? address.slice(prefix.length) : address;
 }

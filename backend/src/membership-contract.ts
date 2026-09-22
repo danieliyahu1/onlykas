@@ -3,6 +3,7 @@ import {
   payToScriptHashScript,
   ScriptBuilder,
 } from "@kluster/kaspa-wasm";
+import { DEFAULT_NETWORK, type NetworkId } from "@onlykas/shared";
 import artifact from "./contracts/membership.json" with { type: "json" };
 
 export const MEMBERSHIP_DURATION_DAA = 25_920_000n;
@@ -83,9 +84,12 @@ export function membershipScript(state: MembershipState): string {
   return `${value.version.toString(16).padStart(4, "0")}${value.script}`;
 }
 
-export function membershipAddress(state: MembershipState): string {
+export function membershipAddress(
+  state: MembershipState,
+  network: NetworkId = DEFAULT_NETWORK,
+): string {
   const script = payToScriptHashScript(membershipRedeemScript(state));
-  const address = addressFromScriptPublicKey(script, "testnet-10");
+  const address = addressFromScriptPublicKey(script, network);
   if (!address) throw new Error("MEMBERSHIP_SCRIPT_ADDRESS_FAILED");
   return address.toString();
 }

@@ -1,10 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { NETWORK } from "@onlykas/shared";
+import { DEFAULT_NETWORK, networkDefinition } from "@onlykas/shared";
 import { App } from "./App.js";
 import { COPY } from "./copy.js";
 import { api, authenticate, type Kasware } from "./kasware.js";
 import { reloadPage } from "./navigation.js";
+
+const walletNetwork = networkDefinition(DEFAULT_NETWORK).walletNetwork;
 
 vi.mock("./kasware.js", async () => ({
   ...(await vi.importActual("./kasware.js")),
@@ -32,7 +34,7 @@ function installWallet(overrides: Record<string, unknown> = {}) {
   const wallet = {
     getAccounts: vi.fn(async () => [] as string[]),
     requestAccounts: vi.fn(async () => [] as string[]),
-    getNetwork: vi.fn(async (): Promise<string> => NETWORK),
+    getNetwork: vi.fn(async (): Promise<string> => walletNetwork),
     switchNetwork: vi.fn(async () => undefined),
     getPublicKey: vi.fn(async () => "public-key"),
     signMessage: vi.fn(async () => "signature"),

@@ -1,4 +1,4 @@
-import { NETWORK } from "@onlykas/shared";
+import { DEFAULT_NETWORK, networkDefinition } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import {
   SESSION_EXPIRED_EVENT,
@@ -7,6 +7,7 @@ import {
   signPreparedPayment,
 } from "./kasware.js";
 
+const walletNetwork = networkDefinition(DEFAULT_NETWORK).walletNetwork;
 const address = `kaspatest:${"q".repeat(60)}`;
 
 describe("Kasware authentication", () => {
@@ -14,7 +15,7 @@ describe("Kasware authentication", () => {
     const wallet = {
       getAccounts: vi.fn(async () => [address]),
       requestAccounts: vi.fn(),
-      getNetwork: vi.fn(async () => NETWORK),
+      getNetwork: vi.fn(async () => walletNetwork),
       switchNetwork: vi.fn(),
       getPublicKey: vi.fn(async () => "public-key"),
       signMessage: vi.fn(async () => "signature"),

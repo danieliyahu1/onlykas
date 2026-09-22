@@ -15,7 +15,7 @@ import {
   type PaymentSubmission,
   type PreparedMembershipTransaction,
 } from "./application/ports.js";
-import { membershipFeeSompi } from "@onlykas/shared";
+import { membershipFeeSompi, DEFAULT_NETWORK, networkDefinition, type NetworkId } from "@onlykas/shared";
 import {
   addressPublicKey,
   addressScript,
@@ -37,7 +37,6 @@ import { defaultMetrics, type Metrics } from "./metrics.js";
 const ZERO_SUBNETWORK = "0".repeat(40);
 const WALLET_COMPUTE_BUDGET = 50;
 const COVENANT_COMPUTE_BUDGET = 50;
-const NETWORK_ID = "testnet-10";
 const CONNECT_TIMEOUT_MS = 10_000;
 const CONNECT_RETRY_INTERVAL_MS = 1_000;
 const CONFIRM_MAX_ATTEMPTS = 9;
@@ -91,15 +90,26 @@ type ChainTransaction = {
 };
 
 export class KaspaMembershipGateway implements MembershipGateway {
+  private readonly relay: MembershipTransactionRelay;
   constructor(
     private readonly platformFeeAddress: string,
-    private readonly api = "https://api-tn10.kaspa.org",
-    private readonly relay: MembershipTransactionRelay = submitMembershipTransactionOverWrpc,
+    private readonly api = networkDefinition(DEFAULT_NETWORK).defaultNodeUrl,
+    relay?: MembershipTransactionRelay,
     private readonly sleep: Sleep = (milliseconds) =>
       new Promise((resolve) => setTimeout(resolve, milliseconds)),
     private readonly logger: Logger = defaultLogger,
     private readonly metrics: Metrics = defaultMetrics,
-  ) {}
+    private readonly network: NetworkId = DEFAULT_NETWORK,
+  ) {
+    this.relay =
+      relay ??
+      ((signedTransaction) =>
+        submitMembershipTransactionOverWrpc(
+          signedTransaction,
+          undefined,
+          this.network,
+        ));
+  }
 
   async prepareOffer(
     creator: string,
@@ -146,7 +156,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
         covenant: null,
       });
     const result = prepared(
-      transaction(selected.map(walletInput), outputs, ""),
+      transaction(this.network, selected.map(walletInput), outputs, ""),
       id,
       selected.map((_, index) => index),
       null,
@@ -170,7 +180,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     priceSompi: string,
   ): Promise<PreparedMembershipTransaction> {
     const minter = minterState(creator, this.platformFeeAddress, BigInt(priceSompi));
-    const minterUtxos = await this.utxos(membershipAddress(minter));
+    const minterUtxos = await this.utxos(membershipAddress(minter, this.network));
     const minterUtxo = await this.findMinterUtxo(minterUtxos, minter, covenantIdHex);
     if (!minterUtxo) throw new MembershipStateChangedError();
     const [{ virtualDaaScore }, buyerUtxos, rate] = await Promise.all([
@@ -276,7 +286,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
         covenant: null,
       });
     const result = prepared(
-      transaction(inputs, outputs, payload, virtualDaaScore),
+      transaction(this.network, inputs, outputs, payload, virtualDaaScore),
       covenantIdHex,
       selected.map((_, index) => index + 1),
       1,
@@ -327,7 +337,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
       BigInt(newPriceSompi),
     );
     const [minterUtxos, creatorUtxos, rate] = await Promise.all([
-      this.utxos(membershipAddress(current)),
+      this.utxos(membershipAddress(current, this.network)),
       this.utxos(creator),
       this.feeRate(),
     ]);
@@ -376,7 +386,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
         covenant: null,
       });
     const result = prepared(
-      transaction(inputs, outputs, ""),
+      transaction(this.network, inputs, outputs, ""),
       covenantIdHex,
       selected.map((_, index) => index + 1),
       null,
@@ -393,7 +403,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     const current = minterState(creator, this.platformFeeAddress, BigInt(priceSompi));
     const canceled = { ...current, isMinter: false };
     const [minterUtxos, creatorUtxos, rate] = await Promise.all([
-      this.utxos(membershipAddress(current)),
+      this.utxos(membershipAddress(current, this.network)),
       this.utxos(creator),
       this.feeRate(),
     ]);
@@ -432,7 +442,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     if (change > 0n)
       outputs.push({ value: change.toString(), scriptPublicKey: addressScript(creator), covenant: null });
     const result = prepared(
-      transaction(inputs, outputs, ""),
+      transaction(this.network, inputs, outputs, ""),
       covenantIdHex,
       selected.map((_, index) => index + 1),
       null,
@@ -608,15 +618,19 @@ export class KaspaMembershipGateway implements MembershipGateway {
 
 export async function submitMembershipTransactionOverWrpc(
   signedTransaction: string,
-  createClient: MembershipRpcClientFactory = () =>
-    new RpcClient({
-      resolver: new Resolver(),
-      networkId: NETWORK_ID,
-      encoding: Encoding.Borsh,
-    }),
+  createClient?: MembershipRpcClientFactory,
+  network: NetworkId = DEFAULT_NETWORK,
 ): Promise<string> {
+  const client =
+    createClient ??
+    (() =>
+      new RpcClient({
+        resolver: new Resolver(),
+        networkId: network,
+        encoding: Encoding.Borsh,
+      }));
   const transaction = Transaction.deserializeFromSafeJSON(signedTransaction);
-  const rpc = createClient();
+  const rpc = client();
   try {
     await rpc.connect({
       timeoutDuration: CONNECT_TIMEOUT_MS,
@@ -706,6 +720,7 @@ function serializableUtxo(utxo: Utxo, covenantIdHex: string | null) {
 }
 
 function transaction(
+  network: NetworkId,
   inputs: TransactionInputShape[],
   outputs: PreparedOutput[],
   payload: string,
@@ -724,7 +739,7 @@ function transaction(
       payload,
     }),
   );
-  if (!updateTransactionMass(NETWORK_ID, value, 1, true))
+  if (!updateTransactionMass(network, value, 1, true))
     throw new Error("TRANSACTION_MASS_TOO_HIGH");
   return value.serializeToSafeJSON();
 }

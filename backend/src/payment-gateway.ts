@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { DEFAULT_NETWORK, networkDefinition, type NetworkId } from "@onlykas/shared";
 import type { Post, PreparedPayment, PaymentSubmission } from "./domain/models.js";
 import type { PaymentGateway } from "./application/ports.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";
@@ -19,14 +20,26 @@ type Utxo = { outpoint: { transactionId: string; index: number }; utxoEntry: { a
 type ChainTransaction = { is_accepted?: boolean; payload?: string; inputs?: { previous_outpoint_resolved?: { script_public_key_address?: string } }[]; outputs?: { amount?: string | number; script_public_key_address?: string }[] };
 
 export class KaspaPaymentGateway implements PaymentGateway {
-constructor(
+  private readonly relay: PaymentTransactionRelay;
+  constructor(
     private readonly platformFeeAddress: string,
-    private readonly api = "https://api-tn10.kaspa.org",
-    private readonly sleep: Sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+    private readonly api = networkDefinition(DEFAULT_NETWORK).defaultNodeUrl,
+    private readonly sleep: Sleep = (milliseconds) =>
+      new Promise((resolve) => setTimeout(resolve, milliseconds)),
     private readonly logger: Logger = defaultLogger,
     private readonly metrics: Metrics = defaultMetrics,
-    private readonly relay: PaymentTransactionRelay = submitMembershipTransactionOverWrpc,
-  ) {}
+    relay?: PaymentTransactionRelay,
+    private readonly network: NetworkId = DEFAULT_NETWORK,
+  ) {
+    this.relay =
+      relay ??
+      ((signedTransaction) =>
+        submitMembershipTransactionOverWrpc(
+          signedTransaction,
+          undefined,
+          this.network,
+        ));
+  }
 
   async prepare(post: Post, buyer: string): Promise<PreparedPayment> {
     const [utxos, estimate] = await Promise.all([

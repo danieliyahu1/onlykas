@@ -10,11 +10,11 @@ import express, { type NextFunction, type Request, type Response } from "express
 import helmet from "helmet";
 import { z } from "zod";
 import {
-  KASPA_TESTNET_ADDRESS_PATTERN,
+  DEFAULT_NETWORK,
   isFreePost,
   mediaHintError,
   membershipPriceProblem,
-  NETWORK,
+  networkDefinition,
   normalizeDisplayName,
   normalizePostText,
   parseMembershipPrice,
@@ -22,6 +22,8 @@ import {
   RETRY_AFTER_REFRESH,
   validateDisplayName,
   type MembershipAddressVerificationResponse,
+  type NetworkConfigResponse,
+  type NetworkId,
   type PostResponse,
   MAX_VIDEO_BYTES,
 } from "@onlykas/shared";
@@ -71,7 +73,6 @@ import { StorageError } from "./r2-storage.js";
 import { discardTempDir } from "./temp-files.js";
 
 const sessionCookie = "onlykas_session";
-const addressPattern = KASPA_TESTNET_ADDRESS_PATTERN;
 export interface AppDependencies {
   store: Repositories;
   storage: ObjectStorage;
@@ -81,6 +82,7 @@ export interface AppDependencies {
   membershipGateway?: MembershipGateway;
   membershipVerifier?: MembershipVerifier;
   publicOrigin: string;
+  network?: NetworkId;
   production?: boolean;
   now?: () => number;
   readinessCheck?: () => boolean | Promise<boolean>;
@@ -105,6 +107,12 @@ export function createApp(d: AppDependencies) {
   const now = d.now ?? Date.now;
   const logger = d.logger ?? defaultLogger;
   const metrics = d.metrics ?? defaultMetrics;
+  // The selected network is the single source of truth for address validation
+  // and the wallet-network name the browser must switch to.
+  const network = d.network ?? DEFAULT_NETWORK;
+  const networkConfig = networkDefinition(network);
+  const addressPattern = networkConfig.addressPattern;
+  const challengeNetwork = networkConfig.walletNetwork;
   // Long-window per-client cap for anonymous feedback.
   const feedbackLimiter =
     d.feedbackRateLimiter ?? new RateLimiter({ limit: 5, windowMs: 10 * 60_000 });
@@ -191,6 +199,14 @@ export function createApp(d: AppDependencies) {
       res.status(ready ? 200 : 503).json({ status: ready ? "ok" : "unready" });
     }),
   );
+  app.get("/api/config", (_, res) => {
+    const body: NetworkConfigResponse = {
+      network: networkConfig.id,
+      walletNetwork: networkConfig.walletNetwork,
+      addressPrefix: networkConfig.addressPrefix,
+    };
+    res.json(body);
+  });
   async function optional(req: Request, res: Response, next: NextFunction) {
     try {
       const id = req.cookies[sessionCookie] as string | undefined;
@@ -224,7 +240,7 @@ export function createApp(d: AppDependencies) {
       const result = await sessions.issueChallenge({
         address: b.address,
         origin: d.publicOrigin,
-        network: NETWORK,
+        network: challengeNetwork,
         prompt: COPY.authPrompt,
       });
       metrics.authChallengeAttempt("created");
@@ -251,7 +267,7 @@ export function createApp(d: AppDependencies) {
       const result = await sessions.authenticate({
         ...b,
         origin: d.publicOrigin,
-        network: NETWORK,
+        network: challengeNetwork,
       });
       if (result.kind === "VERIFICATION_FAILED") {
         metrics.authSessionAttempt("verification_failed");
@@ -1186,7 +1202,7 @@ export function createApp(d: AppDependencies) {
       if (!d.membershipVerifier) throw new HttpError(503, "VERIFY_UNAVAILABLE");
       const address = param(req, "address");
       if (!addressPattern.test(address)) return apiError(res, 400, "INVALID_ADDRESS");
-      const owner = ownerFrom(req);
+      const owner = ownerFrom(req, addressPattern);
       if (owner === "invalid") return apiError(res, 400, "INVALID_ADDRESS");
       const memberships = await d.membershipVerifier.verifyAddress(address, owner),
         body: MembershipAddressVerificationResponse = {
@@ -1210,7 +1226,7 @@ export function createApp(d: AppDependencies) {
         index = Number(param(req, "outputIndex"));
       if (!/^[0-9a-f]{64}$/i.test(tx) || !Number.isInteger(index) || index < 0)
         return apiError(res, 400, "INVALID_REQUEST");
-      const owner = ownerFrom(req);
+      const owner = ownerFrom(req, addressPattern);
       if (owner === "invalid") return apiError(res, 400, "INVALID_ADDRESS");
       const check = await d.membershipVerifier.verifyUtxo(tx, index, owner);
       metrics.membershipVerificationAttempt("utxo", check.status);
@@ -1398,11 +1414,11 @@ function param(req: Request, n: string) {
   if (typeof v !== "string") throw new HttpError(400, "INVALID_REQUEST");
   return v;
 }
-function ownerFrom(req: Request) {
+function ownerFrom(req: Request, pattern: RegExp) {
   const v = req.query.owner;
   if (v === undefined) return undefined;
   if (typeof v !== "string" || !v) return "invalid";
-  return addressPattern.test(v) ? v : "invalid";
+  return pattern.test(v) ? v : "invalid";
 }
 function setCookie(res: Response, id: string, production: boolean) {
   res.cookie(sessionCookie, id, cookieOptions(production));

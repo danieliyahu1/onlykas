@@ -1,6 +1,6 @@
 # OnlyKas
 
-OnlyKas is a testnet-10 paid-media application. Creators authenticate with Kasware, upload private media directly to R2, and publish immutable Turso-backed posts.
+OnlyKas is a paid-media application for Kaspa. Creators authenticate with Kasware, upload private media directly to R2, and publish immutable Turso-backed posts. The chain it runs on is selected by `KASPA_NETWORK` (`mainnet` or `testnet-10`).
 
 Live app: https://onlykas.danieliyahu.com/
 
@@ -15,7 +15,13 @@ pnpm dev
 
 Copy the values described in `.env.example` into the process environment before starting the backend. The Vite server runs the browser application and proxies `/api` to Express.
 
-`PLATFORM_FEE_ADDRESS` is required and must be a valid Kaspa testnet P2PK address. New individual post payments send the rounded-nearest 1% fee to this wallet and reduce the creator output by the same amount.
+`PLATFORM_FEE_ADDRESS` is required and must be a valid P2PK address for the selected `KASPA_NETWORK`. New individual post payments send the rounded-nearest 1% fee to this wallet and reduce the creator output by the same amount.
+
+## Networks
+
+The server owns the network identity. `KASPA_NETWORK` is the single source of truth: it selects the address prefix used for validation, the default `KASPA_NODE_URL`, contract address derivation, transaction mass, and the wRPC relay network. The browser learns the network from `GET /api/config` and switches the wallet to it; it never selects a chain itself.
+
+To run on mainnet, set `KASPA_NETWORK=mainnet`, a `mainnet` `PLATFORM_FEE_ADDRESS`, and a mainnet node URL. Development and production, and mainnet and testnet, must use separate stateful resources; never point one network's configuration at another network's database, bucket, or fee wallet.
 
 ## R2
 

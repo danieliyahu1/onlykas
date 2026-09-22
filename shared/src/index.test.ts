@@ -6,10 +6,12 @@ import {
   parseMembershipPrice,
   MEDIA_COPY,
   MAX_IMAGE_BYTES,
+  isAddressForNetwork,
   isFreePost,
   isKaspaTestnetAddress,
   isVideoMedia,
   mediaHintError,
+  networkDefinition,
   parseKasToSompi,
   parsePostPrice,
   validatePost,
@@ -115,6 +117,30 @@ describe("Kaspa testnet address validation", () => {
     expect(isKaspaTestnetAddress(`kaspatest:${"Q".repeat(60)}`)).toBe(false);
     expect(isKaspaTestnetAddress(`kaspatest:${"q".repeat(39)}`)).toBe(false);
     expect(isKaspaTestnetAddress(`kaspatest:${"q".repeat(81)}`)).toBe(false);
+  });
+});
+
+describe("network definitions", () => {
+  it("validates addresses against the selected network only", () => {
+    expect(isAddressForNetwork("testnet-10", `kaspatest:${"q".repeat(60)}`)).toBe(
+      true,
+    );
+    expect(isAddressForNetwork("testnet-10", `kaspa:${"q".repeat(60)}`)).toBe(
+      false,
+    );
+    expect(isAddressForNetwork("mainnet", `kaspa:${"q".repeat(60)}`)).toBe(true);
+    expect(isAddressForNetwork("mainnet", `kaspatest:${"q".repeat(60)}`)).toBe(
+      false,
+    );
+  });
+
+  it("exposes one default node per network", () => {
+    expect(networkDefinition("mainnet").defaultNodeUrl).toBe(
+      "https://api.kaspa.org",
+    );
+    expect(networkDefinition("testnet-10").defaultNodeUrl).toBe(
+      "https://api-tn10.kaspa.org",
+    );
   });
 });
 

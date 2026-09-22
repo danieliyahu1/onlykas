@@ -31,7 +31,7 @@ import type { WalletProps } from "./wallet.js";
 import {
   creatorAddressFromRoute,
   creatorPath,
-  hasTestnetPrefix,
+  hasAddressPrefix,
 } from "./creator-url.js";
 
 type CreatorPageProps = WalletProps & {
@@ -91,7 +91,7 @@ export function CreatorPage({
   }
 
   useEffect(() => {
-    if (hasTestnetPrefix(routeAddress)) {
+    if (hasAddressPrefix(routeAddress)) {
       navigate(creatorPath(creatorAddress), { replace: true });
       return;
     }

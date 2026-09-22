@@ -1,6 +1,7 @@
 import type { MembershipCheck } from "./domain/models.js";
 import type { MembershipVerifier } from "./application/ports.js";
 import { XOnlyPublicKey } from "@kluster/kaspa-wasm";
+import { DEFAULT_NETWORK, networkDefinition, type NetworkId } from "@onlykas/shared";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 import {
@@ -51,10 +52,11 @@ type ChainTransaction = {
 
 export class KaspaMembershipVerifier implements MembershipVerifier {
   constructor(
-    private readonly api = "https://api-tn10.kaspa.org",
+    private readonly api = networkDefinition(DEFAULT_NETWORK).defaultNodeUrl,
     private readonly now: () => number = Date.now,
     private readonly logger: Logger = defaultLogger,
     private readonly metrics: Metrics = defaultMetrics,
+    private readonly network: NetworkId = DEFAULT_NETWORK,
   ) {}
 
   async verifyAddress(
@@ -151,15 +153,15 @@ export class KaspaMembershipVerifier implements MembershipVerifier {
       (expectedCovenantId !== undefined && covenantId !== expectedCovenantId)
     ) return notMembership(transactionId, outputIndex, covenantId);
 
-    const owner = expectedOwner ?? keyAddress(state.owner);
-    const creator = expectedCreator ?? keyAddress(state.creator);
-    const platformAddress = keyAddress(state.platform);
+    const owner = expectedOwner ?? keyAddress(state.owner, this.network);
+    const creator = expectedCreator ?? keyAddress(state.creator, this.network);
+    const platformAddress = keyAddress(state.platform, this.network);
     if (!owner || !creator || !platformAddress) return notMembership(transactionId, outputIndex, covenantId);
     if (state.owner !== addressPublicKey(owner))
       return membership(transactionId, outputIndex, covenantId, owner, creator, platformAddress, payload.metadata.createdAtDaa, state.expiresAtDaa, currentDaa, "OWNER_MISMATCH", this.now);
     if (state.creator !== addressPublicKey(creator))
       return notMembership(transactionId, outputIndex, covenantId);
-    if (!(await this.isUnspent(membershipAddress(state), transactionId, outputIndex)))
+    if (!(await this.isUnspent(membershipAddress(state, this.network), transactionId, outputIndex)))
       return notMembership(transactionId, outputIndex, covenantId);
 
     const status = state.expiresAtDaa > currentDaa ? "VALID" : "EXPIRED";
@@ -260,8 +262,8 @@ function bigintOrNull(value: unknown): bigint | null {
   try { return BigInt(value); } catch { return null; }
 }
 
-function keyAddress(publicKey: string): string | null {
-  try { return new XOnlyPublicKey(publicKey).toAddress("testnet-10").toString(); }
+function keyAddress(publicKey: string, network: NetworkId): string | null {
+  try { return new XOnlyPublicKey(publicKey).toAddress(network).toString(); }
   catch { return null; }
 }
 

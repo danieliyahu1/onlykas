@@ -1,4 +1,4 @@
-import { NETWORK } from "@onlykas/shared";
+import { walletNetworkName } from "./app-config.js";
 import { ApiError, toApiError, type ApiErrorBody } from "./api-error.js";
 import { COPY } from "./copy.js";
 import { logger } from "./logger.js";
@@ -88,18 +88,19 @@ export async function authenticate(): Promise<string> {
   logger.info("auth_wallet_address_received", {
     address: shortenAddress(address),
   });
-  if ((await wallet.getNetwork()) !== NETWORK) {
+  const network = walletNetworkName();
+  if ((await wallet.getNetwork()) !== network) {
     try {
-      logger.info("auth_switching_network", { network: NETWORK });
-      await wallet.switchNetwork(NETWORK);
+      logger.info("auth_switching_network", { network });
+      await wallet.switchNetwork(network);
     } catch {
-      logger.error("auth_network_switch_failed", { network: NETWORK });
+      logger.error("auth_network_switch_failed", { network });
       throw new WalletError(COPY.wrongNetwork);
     }
-    if ((await wallet.getNetwork()) !== NETWORK)
+    if ((await wallet.getNetwork()) !== network)
       throw new WalletError(COPY.wrongNetwork);
   }
-  logger.info("auth_network_ready", { network: NETWORK });
+  logger.info("auth_network_ready", { network });
   const challenge = await api<{ challengeId: string; message: string }>(
     "/api/auth/challenge",
     { method: "POST", body: JSON.stringify({ address }) },

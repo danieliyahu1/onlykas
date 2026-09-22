@@ -1020,6 +1020,48 @@ describe("membership state changes", () => {
   });
 });
 
+describe("network configuration", () => {
+  it("serves the default testnet network to the browser", async () => {
+    const { app } = testApp();
+    const response = await request(app).get("/api/config");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      network: "testnet-10",
+      walletNetwork: "kaspa_testnet_10",
+      addressPrefix: "kaspatest",
+    });
+  });
+
+  it("serves the selected network without trusting the client", async () => {
+    const store = new MemoryStore();
+    const app = createApp({
+      store,
+      storage: {
+        putFile: async () => undefined,
+        readRange: async () => ({
+          bytes: new Uint8Array(),
+          size: 0,
+          contentType: "image/jpeg",
+        }),
+        delete: async () => undefined,
+      },
+      walletVerifier: { verify: async () => false },
+      publicOrigin: "http://localhost:5173",
+      network: "mainnet",
+    });
+
+    const response = await request(app).get("/api/config");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      network: "mainnet",
+      walletNetwork: "kaspa_mainnet",
+      addressPrefix: "kaspa",
+    });
+  });
+});
+
 function testApp(
   store: Repositories = new MemoryStore(),
   paymentGateway?: PaymentGateway,

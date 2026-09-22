@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { isKaspaTestnetAddress, type CreatorSearchResult } from "@onlykas/shared";
+import type { CreatorSearchResult } from "@onlykas/shared";
+import { isAppAddress } from "./app-config.js";
 import { api, ApiError } from "./kasware.js";
 import { Icon } from "./Icons.js";
 import { Spinner } from "./Spinner.js";
 import { useAutoDismiss } from "./useAutoDismiss.js";
-import { creatorPath } from "./creator-url.js";
+import { creatorPath, hasAddressPrefix } from "./creator-url.js";
 
 export function FindCreatorPage() {
   const navigate = useNavigate();
@@ -33,12 +34,12 @@ export function FindCreatorPage() {
       setSearching(false);
       return;
     }
-    if (isKaspaTestnetAddress(value)) {
+    if (isAppAddress(value)) {
       navigate(creatorPath(value), { replace: true });
       setSearching(false);
       return;
     }
-    if (value.startsWith("kaspatest:")) {
+    if (hasAddressPrefix(value)) {
       setError("Enter the full address.");
       setSearching(false);
       return;

@@ -1,7 +1,60 @@
-export const NETWORK = "kaspa_testnet_10" as const;
+export type NetworkId = "mainnet" | "testnet-10";
+
+export interface NetworkDefinition {
+  id: NetworkId;
+  /** The value Kasware expects from `getNetwork`/`switchNetwork`. */
+  walletNetwork: string;
+  /** The human-readable address prefix, without the trailing colon. */
+  addressPrefix: string;
+  addressPattern: RegExp;
+  defaultNodeUrl: string;
+}
+
+export const NETWORK_DEFINITIONS: Record<NetworkId, NetworkDefinition> = {
+  mainnet: {
+    id: "mainnet",
+    walletNetwork: "kaspa_mainnet",
+    addressPrefix: "kaspa",
+    addressPattern: /^kaspa:[a-z0-9]{40,80}$/,
+    defaultNodeUrl: "https://api.kaspa.org",
+  },
+  "testnet-10": {
+    id: "testnet-10",
+    walletNetwork: "kaspa_testnet_10",
+    addressPrefix: "kaspatest",
+    addressPattern: /^kaspatest:[a-z0-9]{40,80}$/,
+    defaultNodeUrl: "https://api-tn10.kaspa.org",
+  },
+};
+
+export const DEFAULT_NETWORK: NetworkId = "testnet-10";
+
+export function isNetworkId(value: string): value is NetworkId {
+  return value === "mainnet" || value === "testnet-10";
+}
+
+export function networkDefinition(network: NetworkId): NetworkDefinition {
+  return NETWORK_DEFINITIONS[network];
+}
+
+export function isAddressForNetwork(network: NetworkId, value: string): boolean {
+  return networkDefinition(network).addressPattern.test(value);
+}
+
+export const KASPA_TESTNET_ADDRESS_PATTERN =
+  NETWORK_DEFINITIONS["testnet-10"].addressPattern;
+export const KASPA_MAINNET_ADDRESS_PATTERN =
+  NETWORK_DEFINITIONS.mainnet.addressPattern;
+
+/** The server's authoritative network identity, served to the browser. */
+export interface NetworkConfigResponse {
+  network: NetworkId;
+  walletNetwork: string;
+  addressPrefix: string;
+}
+
 export const MAX_IMAGE_BYTES = 25_000_000;
 export const MAX_VIDEO_BYTES = 100_000_000;
-export const KASPA_TESTNET_ADDRESS_PATTERN = /^kaspatest:[a-z0-9]{40,80}$/;
 
 export const MEDIA_COPY = {
   unsupportedMedia: "Choose a JPEG, PNG, WebP, MP4, or WebM file.",

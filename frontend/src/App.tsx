@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
-import { NETWORK, type ProfileResponse } from "@onlykas/shared";
+import type { ProfileResponse } from "@onlykas/shared";
+import { walletNetworkName } from "./app-config.js";
 import { COPY } from "./copy.js";
 import { authenticate, walletOrNull, api, SESSION_EXPIRED_EVENT } from "./kasware.js";
 import { HomePage } from "./HomePage.js";
@@ -93,8 +94,9 @@ export function App() {
           await signOut();
           return;
         }
-        const network = await wallet.getNetwork().catch(() => NETWORK);
-        if (network !== NETWORK) showToast(COPY.wrongNetwork, "notice");
+        const network = walletNetworkName();
+        const activeNetwork = await wallet.getNetwork().catch(() => network);
+        if (activeNetwork !== network) showToast(COPY.wrongNetwork, "notice");
       } finally {
         reconciling = false;
       }

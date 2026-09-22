@@ -1,15 +1,19 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { KASPA_TESTNET_ADDRESS_PATTERN } from "@onlykas/shared";
+import {
+  DEFAULT_NETWORK,
+  isAddressForNetwork,
+  isNetworkId,
+  networkDefinition,
+  type NetworkId,
+} from "@onlykas/shared";
 import { KaspaMembershipVerifier } from "./verifier.js";
-
-const DEFAULT_NODE = "https://api-tn10.kaspa.org";
 
 function usage(): string {
   return [
     "Usage:",
-    "  verify-membership address <kaspatest:address> [--owner <address>] [--node <url>]",
-    "  verify-membership utxo <transactionId> <outputIndex> [--owner <address>] [--node <url>]",
+    "  verify-membership address <address> [--owner <address>] [--node <url>] [--network mainnet|testnet-10]",
+    "  verify-membership utxo <transactionId> <outputIndex> [--owner <address>] [--node <url>] [--network mainnet|testnet-10]",
     "",
     "Verifies membership status directly from the Kaspa chain by reading covenant",
     "UTXOs. The source of truth is on-chain data, not OnlyKas records.",
@@ -21,37 +25,53 @@ export async function runVerifierCli(
   stdout: { write(text: string): void },
   stderr: { write(text: string): void },
 ): Promise<number> {
-  const options: { node: string; owner: string | undefined } = {
-    node: DEFAULT_NODE,
+  const options: {
+    node: string;
+    owner: string | undefined;
+    network: NetworkId;
+  } = {
+    node: networkDefinition(DEFAULT_NETWORK).defaultNodeUrl,
     owner: undefined,
+    network: DEFAULT_NETWORK,
   };
   const positional: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === undefined) break;
-    if (arg === "--node") options.node = argv[++index] ?? DEFAULT_NODE;
+    if (arg === "--node") options.node = argv[++index] ?? options.node;
     else if (arg === "--owner") options.owner = argv[++index];
-    else if (arg === "--help" || arg === "-h") {
+    else if (arg === "--network") {
+      const value = argv[++index] ?? "";
+      if (!isNetworkId(value)) throw new Error(usage());
+      options.network = value;
+    } else if (arg === "--help" || arg === "-h") {
       stdout.write(`${usage()}\n`);
       return 0;
     } else positional.push(arg);
   }
   const [command, ...rest] = positional;
-  const verifier = new KaspaMembershipVerifier(options.node);
+  const { addressPrefix } = networkDefinition(options.network);
+  const verifier = new KaspaMembershipVerifier(
+    options.node,
+    undefined,
+    undefined,
+    undefined,
+    options.network,
+  );
   try {
     if (command === "address") {
       const address = rest[0];
       if (
         !address ||
         rest.length > 1 ||
-        !KASPA_TESTNET_ADDRESS_PATTERN.test(address)
+        !isAddressForNetwork(options.network, address)
       )
         throw new Error(usage());
       if (
         options.owner !== undefined &&
-        !KASPA_TESTNET_ADDRESS_PATTERN.test(options.owner)
+        !isAddressForNetwork(options.network, options.owner)
       )
-        throw new Error("--owner must be a valid kaspatest: address.");
+        throw new Error(`--owner must be a valid ${addressPrefix}: address.`);
       const memberships = await verifier.verifyAddress(address, options.owner);
       stdout.write(
         `${JSON.stringify(
@@ -82,9 +102,9 @@ export async function runVerifierCli(
       if (rest.length > 2) throw new Error(usage());
       if (
         options.owner !== undefined &&
-        !KASPA_TESTNET_ADDRESS_PATTERN.test(options.owner)
+        !isAddressForNetwork(options.network, options.owner)
       )
-        throw new Error("--owner must be a valid kaspatest: address.");
+        throw new Error(`--owner must be a valid ${addressPrefix}: address.`);
       const membership = await verifier.verifyUtxo(
         transactionId,
         outputIndex,
