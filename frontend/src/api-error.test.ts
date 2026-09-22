@@ -24,4 +24,14 @@ describe("toApiError", () => {
     expect(error.status).toBe(500);
     expect(error.requestId).toBeUndefined();
   });
+
+  it("carries the generic retry hint through", () => {
+    const error = toApiError(409, {
+      error: "MEMBERSHIP_OFFER_STALE",
+      message: "This subscription changed.",
+      retry: "AFTER_REFRESH",
+    });
+
+    expect(error.retry).toBe("AFTER_REFRESH");
+  });
 });

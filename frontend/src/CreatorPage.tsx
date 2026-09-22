@@ -4,7 +4,7 @@ import {
   isFreePost,
   isVideoMedia,
   membershipFeeSompi,
-  parseMembershipPrice,
+  RETRY_AFTER_REFRESH,
   type CreatorResponse,
   type PostResponse,
 } from "@onlykas/shared";
@@ -117,14 +117,21 @@ export function CreatorPage({
     owner || currentCreator.membership.offered || currentCreator.membership.active ||
     currentCreator.membership.canceled;
 
+  /**
+   * One place the membership actions react to a failed request. The server
+   * states the semantics with the generic `retry` hint, so this page never has
+   * to know a domain code.
+   */
+  async function handleActionFailure(error: unknown, fallback: string) {
+    const refresh = error instanceof ApiError && error.retry === RETRY_AFTER_REFRESH;
+    if (refresh) await loadCreator();
+    showToast(errorText(error, fallback), refresh ? "info" : "error");
+  }
+
   async function membershipAction() {
     const wallet = address ?? (await signIn());
     if (!wallet) return;
     const actingAsOwner = wallet === currentCreator.address;
-    if (actingAsOwner && parseMembershipPrice(membershipPrice) === null) {
-      showToast("Enter a monthly price from 1 to 1,000,000 KAS.", "error");
-      return;
-    }
     setBusy("preparing");
     dismissToast();
     try {
@@ -153,14 +160,7 @@ export function CreatorPage({
       );
       if (result.state === "CONFIRMED") await loadCreator();
     } catch (error) {
-      if (
-        error instanceof ApiError &&
-        (error.code === "MEMBERSHIP_OFFER_STALE" ||
-          error.code === "MEMBERSHIP_OFFER_NOT_FOUND")
-      ) {
-        await loadCreator();
-      }
-      showToast(errorText(error, "Payment failed. Nothing was charged."), "error");
+      await handleActionFailure(error, "Payment failed. Nothing was charged.");
     } finally {
       setBusy(null);
     }
@@ -169,10 +169,6 @@ export function CreatorPage({
   async function updateMembershipPrice() {
     const wallet = address ?? (await signIn());
     if (!wallet || wallet !== currentCreator.address) return;
-    if (parseMembershipPrice(membershipPrice) === null) {
-      showToast("Enter a monthly price from 1 to 1,000,000 KAS.", "error");
-      return;
-    }
     setBusy("preparing");
     dismissToast();
     try {
@@ -191,7 +187,7 @@ export function CreatorPage({
       );
       if (result.state === "CONFIRMED") await loadCreator();
     } catch (error) {
-      showToast(errorText(error, "Price update failed. Nothing was charged."), "error");
+      await handleActionFailure(error, "Price update failed. Nothing was charged.");
     } finally {
       setBusy(null);
     }
@@ -216,7 +212,7 @@ export function CreatorPage({
       );
       if (result.state === "CONFIRMED") await loadCreator();
     } catch (error) {
-      showToast(errorText(error, "Cancellation failed. Nothing was charged."), "error");
+      await handleActionFailure(error, "Cancellation failed. Nothing was charged.");
     } finally {
       setBusy(null);
     }
@@ -246,7 +242,7 @@ export function CreatorPage({
         showToast(result.message ?? COPY.purchasePending, "info");
       }
     } catch (error) {
-      showToast(errorText(error, "Payment failed. Nothing was charged."), "error");
+      await handleActionFailure(error, "Payment failed. Nothing was charged.");
     } finally {
       setBusyPostId(null);
       setApprovedPostId(null);

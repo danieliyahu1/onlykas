@@ -1,9 +1,12 @@
+import type { ApiRetry } from "@onlykas/shared";
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly status: number,
     readonly requestId?: string,
+    readonly retry?: ApiRetry,
   ) {
     super(message);
     this.name = "ApiError";
@@ -14,6 +17,7 @@ export interface ApiErrorBody {
   error?: string | undefined;
   message?: string | undefined;
   requestId?: string | undefined;
+  retry?: ApiRetry | undefined;
 }
 
 /**
@@ -30,5 +34,6 @@ export function toApiError(
     body?.message ?? "The request could not be completed.",
     status,
     body?.requestId ?? undefined,
+    body?.retry,
   );
 }

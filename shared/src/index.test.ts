@@ -2,6 +2,7 @@ import {
   MAX_MEMBERSHIP_PRICE_SOMPI,
   MIN_MEMBERSHIP_PRICE_SOMPI,
   membershipFeeSompi,
+  membershipPriceProblem,
   parseMembershipPrice,
   MEDIA_COPY,
   MAX_IMAGE_BYTES,
@@ -26,6 +27,21 @@ describe("membership pricing", () => {
   it.each(["0.99999999", "1000000.00000001", "1.000000001", "invalid"])(
     "rejects %s",
     (value) => expect(parseMembershipPrice(value)).toBeNull(),
+  );
+
+  it.each([
+    ["", "EMPTY"],
+    ["1,000", "FORMAT"],
+    ["12.", "FORMAT"],
+    ["1.000000001", "FORMAT"],
+    ["0.5", "BELOW_MIN"],
+    ["1000001", "ABOVE_MAX"],
+  ])("explains why %s is rejected", (value, problem) => {
+    expect(membershipPriceProblem(value)).toBe(problem);
+  });
+
+  it.each(["1", "1000000", "99.9999995"])("finds no problem with %s", (value) =>
+    expect(membershipPriceProblem(value)).toBeNull(),
   );
 
   it("waives the fee below 100 KAS and charges exactly 1 KAS at the threshold", () => {

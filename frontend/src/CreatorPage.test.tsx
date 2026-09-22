@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CreatorPage } from "./CreatorPage.js";
 import { shortenAddress } from "./format.js";
-import { api, signPreparedPayment } from "./kasware.js";
+import { ApiError, api, signPreparedPayment } from "./kasware.js";
 import {
   creator,
   creatorAddress,
@@ -115,10 +115,65 @@ describe("CreatorPage subscription actions", () => {
     expect(await screen.findByRole("button", { name: "Confirming..." })).toBeDisabled();
 
     resolveFinalize({ state: "CONFIRMED" });
-    await waitFor(() => expect(screen.getByText("Subscribed")).toBeVisible());
-  });
-
-  it("uses the wallet address as identity when the creator has no name", async () => {
+     await waitFor(() => expect(screen.getByText("Subscribed")).toBeVisible());
+   });
+ 
+   it("sends the price to the server and surfaces its rejection", async () => {
+     vi.mocked(api)
+       .mockResolvedValueOnce(creator(true, true))
+       .mockRejectedValueOnce(
+         new ApiError(
+           "INVALID_MEMBERSHIP_PRICE",
+           "Enter a monthly subscription price from 1 to 1,000,000 KAS.",
+           400,
+         ),
+       );
+     const user = userEvent.setup();
+     renderCreator(creatorAddress);
+ 
+     await user.click(await screen.findByRole("button", { name: "Update price" }));
+     const field = screen.getByLabelText("Monthly subscription price in KAS");
+     await user.clear(field);
+     await user.type(field, "1,000");
+     await user.click(screen.getByRole("button", { name: "Save price" }));
+ 
+     expect(api).toHaveBeenCalledWith("/api/membership/price/prepare", {
+       method: "POST",
+       body: JSON.stringify({ price: "1,000" }),
+     });
+     expect(
+       await screen.findByText(
+         "Enter a monthly subscription price from 1 to 1,000,000 KAS.",
+       ),
+     ).toBeVisible();
+   });
+ 
+   it("refreshes and explains when the subscription moved", async () => {
+     vi.mocked(api)
+       .mockResolvedValueOnce(creator(true, true))
+       .mockRejectedValueOnce(
+         new ApiError(
+           "MEMBERSHIP_OFFER_STALE",
+           "This subscription changed. Submit again.",
+           409,
+           undefined,
+           "AFTER_REFRESH",
+         ),
+       )
+       .mockResolvedValueOnce(creator(true, true));
+     const user = userEvent.setup();
+     renderCreator(creatorAddress);
+ 
+     await user.click(await screen.findByRole("button", { name: "Update price" }));
+     await user.click(screen.getByRole("button", { name: "Save price" }));
+ 
+     expect(
+       await screen.findByText("This subscription changed. Submit again."),
+     ).toBeVisible();
+     await waitFor(() => expect(api).toHaveBeenCalledTimes(3));
+   });
+ 
+   it("uses the wallet address as identity when the creator has no name", async () => {
     vi.mocked(api).mockResolvedValueOnce(unnamedCreator());
     renderCreator(null);
 

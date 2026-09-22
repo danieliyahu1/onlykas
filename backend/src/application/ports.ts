@@ -144,6 +144,18 @@ export interface PaymentGateway {
   ): Promise<boolean>;
 }
 
+/**
+ * The covenant moved on chain while the caller was working (a competing spend
+ * or a retry of the same action landed first). It is not a fault: another
+ * submission against the refreshed state can succeed.
+ */
+export class MembershipStateChangedError extends Error {
+  constructor() {
+    super("MEMBERSHIP_STATE_CHANGED");
+    this.name = "MembershipStateChangedError";
+  }
+}
+
 export interface MembershipGateway {
   prepareOffer(
     creator: string,

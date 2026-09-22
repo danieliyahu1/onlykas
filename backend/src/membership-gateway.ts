@@ -9,10 +9,11 @@ import {
   TransactionOutput,
   updateTransactionMass,
 } from "@kluster/kaspa-wasm";
-import type {
-  MembershipGateway,
-  PaymentSubmission,
-  PreparedMembershipTransaction,
+import {
+  MembershipStateChangedError,
+  type MembershipGateway,
+  type PaymentSubmission,
+  type PreparedMembershipTransaction,
 } from "./application/ports.js";
 import { membershipFeeSompi } from "@onlykas/shared";
 import {
@@ -171,7 +172,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
     const minter = minterState(creator, this.platformFeeAddress, BigInt(priceSompi));
     const minterUtxos = await this.utxos(membershipAddress(minter));
     const minterUtxo = await this.findMinterUtxo(minterUtxos, minter, covenantIdHex);
-    if (!minterUtxo) throw new Error("MEMBERSHIP_OFFER_UNAVAILABLE");
+    if (!minterUtxo) throw new MembershipStateChangedError();
     const [{ virtualDaaScore }, buyerUtxos, rate] = await Promise.all([
       this.request<{ virtualDaaScore: string }>(
         "blockdag",
@@ -331,7 +332,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
       this.feeRate(),
     ]);
     const minterUtxo = await this.findMinterUtxo(minterUtxos, current, covenantIdHex);
-    if (!minterUtxo) throw new Error("MEMBERSHIP_OFFER_UNAVAILABLE");
+    if (!minterUtxo) throw new MembershipStateChangedError();
     const provisionalOutputs: PreparedOutput[] = [
       {
         value: MEMBERSHIP_OUTPUT_VALUE.toString(),
@@ -397,7 +398,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
       this.feeRate(),
     ]);
     const minterUtxo = await this.findMinterUtxo(minterUtxos, current, covenantIdHex);
-    if (!minterUtxo) throw new Error("MEMBERSHIP_OFFER_UNAVAILABLE");
+    if (!minterUtxo) throw new MembershipStateChangedError();
     const provisionalOutputs: PreparedOutput[] = [
       {
         value: MEMBERSHIP_OUTPUT_VALUE.toString(),
@@ -474,7 +475,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
       this.logger.error("membership_transaction_relay_failed", {
         error: safeError(error),
       });
-      throw error;
+      throw new MembershipStateChangedError();
     }
     this.logger.info("membership_transaction_relayed", {
       txIdPrefix: transactionId.slice(0, 12),
@@ -484,7 +485,7 @@ export class KaspaMembershipGateway implements MembershipGateway {
       this.logger.warn("membership_transaction_confirmation_timeout", {
         txIdPrefix: transactionId.slice(0, 12),
       });
-      throw new Error(`Transaction ${transactionId} was not confirmed on chain`);
+      throw new MembershipStateChangedError();
     }
     this.logger.info("membership_transaction_confirmed", {
       txIdPrefix: transactionId.slice(0, 12),

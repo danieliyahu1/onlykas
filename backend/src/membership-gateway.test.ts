@@ -1,4 +1,5 @@
 import { Transaction } from "@kluster/kaspa-wasm";
+import { MembershipStateChangedError } from "./application/ports.js";
 import {
   KaspaMembershipGateway,
   submitMembershipTransactionOverWrpc,
@@ -244,6 +245,78 @@ describe("KaspaMembershipGateway", () => {
     expect(relay).toHaveBeenCalledWith(signedJson);
     expect(confirmationAttempts).toBe(3);
     expect(sleep.mock.calls).toEqual([[1_000], [2_000]]);
+  });
+
+  function stubOfferSources() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.endsWith("/info/fee-estimate"))
+          return Response.json({
+            normalBuckets: [{ feerate: 1 }],
+            priorityBucket: { feerate: 1 },
+          });
+        if (url.includes(encodeURIComponent(creator)))
+          return Response.json([
+            {
+              outpoint: { transactionId: "11".repeat(32), index: 0 },
+              utxoEntry: {
+                amount: "100000000",
+                scriptPublicKey: { scriptPublicKey: addressScript(creator).slice(4) },
+                blockDaaScore: "100",
+                isCoinbase: false,
+              },
+            },
+          ]);
+        return new Response("not found", { status: 404 });
+      }),
+    );
+  }
+
+  async function signedOffer(gateway: KaspaMembershipGateway) {
+    const offer = await gateway.prepareOffer(creator, "1000000000");
+    const signed = JSON.parse(offer.transaction) as {
+      inputs: { signatureScript: string }[];
+    };
+    signed.inputs[0]!.signatureScript = "aa01";
+    return { offer, signedJson: JSON.stringify(signed) };
+  }
+
+  it("treats a rejected relay as a state change to retry", async () => {
+    stubOfferSources();
+    const relay = vi.fn(async () => {
+      throw new Error("already spent");
+    });
+    const gateway = new KaspaMembershipGateway(
+      platformFeeAddress,
+      "https://node.test",
+      relay,
+      vi.fn(async () => undefined),
+    );
+    const { offer, signedJson } = await signedOffer(gateway);
+
+    await expect(gateway.submit(offer, signedJson)).rejects.toBeInstanceOf(
+      MembershipStateChangedError,
+    );
+  });
+
+  it("treats a confirmation timeout as a state change to retry", async () => {
+    const transactionId = "44".repeat(32);
+    stubOfferSources();
+    const relay = vi.fn(async () => transactionId);
+    const sleep = vi.fn(async () => undefined);
+    const gateway = new KaspaMembershipGateway(
+      platformFeeAddress,
+      "https://node.test",
+      relay,
+      sleep,
+    );
+    const { offer, signedJson } = await signedOffer(gateway);
+
+    await expect(gateway.submit(offer, signedJson)).rejects.toBeInstanceOf(
+      MembershipStateChangedError,
+    );
   });
 
   it("relays signed covenant transactions over wRPC", async () => {

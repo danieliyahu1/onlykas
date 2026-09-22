@@ -13,11 +13,13 @@ import {
   KASPA_TESTNET_ADDRESS_PATTERN,
   isFreePost,
   mediaHintError,
+  membershipPriceProblem,
   NETWORK,
   normalizeDisplayName,
   normalizePostText,
   parseMembershipPrice,
   parsePostPrice,
+  RETRY_AFTER_REFRESH,
   validateDisplayName,
   type MembershipAddressVerificationResponse,
   type PostResponse,
@@ -33,15 +35,20 @@ import {
   createProfileUseCases,
   createSessionUseCases,
 } from "./application/auth-use-cases.js";
-import { API_COPY as COPY } from "./adapters/http/api-copy.js";
+import {
+  API_COPY as COPY,
+  membershipPriceMessage,
+} from "./adapters/http/api-copy.js";
 import type { CreatorCovenant, Post, Profile, Session } from "./domain/models.js";
-import type {
-  MembershipGateway,
-  MembershipVerifier,
-  ObjectStorage,
-  PaymentGateway,
-  Repositories,
-  WalletVerifier,
+import {
+  MembershipStateChangedError,
+  type MembershipGateway,
+  type MembershipVerifier,
+  type ObjectStorage,
+  type PaymentGateway,
+  type PaymentSubmission,
+  type Repositories,
+  type WalletVerifier,
 } from "./application/ports.js";
 import {
   safeError,
@@ -626,25 +633,36 @@ export function createApp(d: AppDependencies) {
     asyncHandler(async (req, res) => {
       if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
       const creator = req.walletSession!.address;
-      const priceSompi = parseMembershipPrice(String(req.body?.price ?? ""));
-      if (priceSompi === null) {
+      const price = String(req.body?.price ?? "");
+      const priceProblem = membershipPriceProblem(price);
+      if (priceProblem) {
         return apiError(
           res,
           400,
           "INVALID_MEMBERSHIP_PRICE",
-          COPY.invalidMembershipPrice,
+          membershipPriceMessage(priceProblem),
         );
       }
+      const priceSompi = parseMembershipPrice(price)!;
       const existing = await d.store.getCreatorCovenant(creator);
       if (existing) {
         metrics.membershipPrepareAttempt("offer", "offer_exists");
-        return apiError(res, 409, "MEMBERSHIP_OFFER_EXISTS");
+        return apiError(res, 409, "MEMBERSHIP_OFFER_EXISTS", COPY.membershipOfferExists, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       }
-      const value = await d.membershipGateway.prepareOffer(
+      let value: Awaited<ReturnType<MembershipGateway["prepareOffer"]>>;
+      try {
+        value = await d.membershipGateway.prepareOffer(
           creator,
           priceSompi.toString(),
-        ),
-        id = randomUUID();
+        );
+      } catch (error) {
+        const mapped = membershipGatewayError(res, error);
+        if (mapped) return mapped;
+        throw error;
+      }
+      const id = randomUUID();
       logger.info("membership_prepare", {
         requestId: req.requestId,
         kind: "offer",
@@ -679,17 +697,26 @@ export function createApp(d: AppDependencies) {
         value.creator !== req.walletSession!.address
       ) {
         metrics.membershipFinalizeAttempt("offer", "not_found");
-        return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
+        return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND", undefined, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       }
       const body = z.object({ signedTransaction: z.string().min(1) }).parse(req.body);
       logger.info("membership_finalize", {
         requestId: req.requestId,
         kind: "offer",
       });
-      const submission = await d.membershipGateway.submit(
-        value,
-        body.signedTransaction,
-      );
+      let submission: PaymentSubmission;
+      try {
+        submission = await d.membershipGateway.submit(value, body.signedTransaction);
+      } catch (error) {
+        if (error instanceof MembershipStateChangedError) {
+          await d.store.deleteMembershipWorkflow(id);
+          await d.store.deletePreparedMembership(id);
+          return membershipStale(res);
+        }
+        throw error;
+      }
       if (submission.isAccepted !== true || !submission.transactionId) {
         if (submission.isAccepted === null && submission.transactionId) {
           await d.store.saveMembershipWorkflow({
@@ -726,7 +753,9 @@ export function createApp(d: AppDependencies) {
       });
       if (outcome === "DUPLICATE") {
         await d.store.deleteMembershipWorkflow(id);
-        return apiError(res, 409, "MEMBERSHIP_OFFER_EXISTS");
+        return apiError(res, 409, "MEMBERSHIP_OFFER_EXISTS", COPY.membershipOfferExists, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       }
       await d.store.deleteMembershipWorkflow(id);
       metrics.membershipFinalizeAttempt("offer", "confirmed");
@@ -745,12 +774,22 @@ export function createApp(d: AppDependencies) {
       if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
       const creator = req.walletSession!.address;
       const mapping = await d.store.getCreatorCovenant(creator);
-      if (!mapping) return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
-      const value = await d.membershipGateway.prepareCancellation(
-        creator,
-        mapping.covenantId,
-        mapping.priceSompi,
-      );
+      if (!mapping)
+        return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND", undefined, {
+          retry: RETRY_AFTER_REFRESH,
+        });
+      let value: Awaited<ReturnType<MembershipGateway["prepareCancellation"]>>;
+      try {
+        value = await d.membershipGateway.prepareCancellation(
+          creator,
+          mapping.covenantId,
+          mapping.priceSompi,
+        );
+      } catch (error) {
+        const mapped = membershipGatewayError(res, error);
+        if (mapped) return mapped;
+        throw error;
+      }
       const id = randomUUID();
       await d.store.prunePreparedMemberships(now());
       await d.store.savePreparedMembership({
@@ -774,9 +813,21 @@ export function createApp(d: AppDependencies) {
       const id = param(req, "id");
       const value = await d.store.getPreparedMembership(id, now());
       if (!value || value.kind !== "cancel" || value.creator !== req.walletSession!.address)
-        return apiError(res, 404, "MEMBERSHIP_CANCELLATION_NOT_FOUND");
+        return apiError(res, 404, "MEMBERSHIP_CANCELLATION_NOT_FOUND", undefined, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       const body = z.object({ signedTransaction: z.string().min(1) }).parse(req.body);
-      const submission = await d.membershipGateway.submit(value, body.signedTransaction);
+      let submission: PaymentSubmission;
+      try {
+        submission = await d.membershipGateway.submit(value, body.signedTransaction);
+      } catch (error) {
+        if (error instanceof MembershipStateChangedError) {
+          await d.store.deleteMembershipWorkflow(id);
+          await d.store.deletePreparedMembership(id);
+          return membershipStale(res);
+        }
+        throw error;
+      }
       if (submission.isAccepted !== true || !submission.transactionId) {
         if (submission.isAccepted === null && submission.transactionId) {
           await d.store.saveMembershipWorkflow({
@@ -800,7 +851,10 @@ export function createApp(d: AppDependencies) {
         covenantId: value.covenantId,
       });
       await d.store.deleteMembershipWorkflow(id);
-      if (outcome === "DUPLICATE") return apiError(res, 409, "MEMBERSHIP_CANCELLATION_STALE");
+      if (outcome === "DUPLICATE")
+        return apiError(res, 409, "MEMBERSHIP_CANCELLATION_STALE", COPY.membershipCancellationStale, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       res.status(201).json({
         state: "CONFIRMED",
         transactionId: submission.transactionId,
@@ -815,23 +869,35 @@ export function createApp(d: AppDependencies) {
     asyncHandler(async (req, res) => {
       if (!d.membershipGateway) throw new HttpError(503, "MEMBERSHIP_UNAVAILABLE");
       const creator = req.walletSession!.address;
-      const priceSompi = parseMembershipPrice(String(req.body?.price ?? ""));
-      if (priceSompi === null)
+      const price = String(req.body?.price ?? "");
+      const priceProblem = membershipPriceProblem(price);
+      if (priceProblem)
         return apiError(
           res,
           400,
           "INVALID_MEMBERSHIP_PRICE",
-          COPY.invalidMembershipPrice,
+          membershipPriceMessage(priceProblem),
         );
+      const priceSompi = parseMembershipPrice(price)!;
       const mapping = await d.store.getCreatorCovenant(creator);
-      if (!mapping) return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
-      const value = await d.membershipGateway.preparePriceUpdate(
+      if (!mapping)
+        return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND", undefined, {
+          retry: RETRY_AFTER_REFRESH,
+        });
+      let value: Awaited<ReturnType<MembershipGateway["preparePriceUpdate"]>>;
+      try {
+        value = await d.membershipGateway.preparePriceUpdate(
           creator,
           mapping.covenantId,
           mapping.priceSompi,
           priceSompi.toString(),
-        ),
-        id = randomUUID();
+        );
+      } catch (error) {
+        const mapped = membershipGatewayError(res, error);
+        if (mapped) return mapped;
+        throw error;
+      }
+      const id = randomUUID();
       await d.store.prunePreparedMemberships(now());
       await d.store.savePreparedMembership({
         id,
@@ -865,7 +931,9 @@ export function createApp(d: AppDependencies) {
       const mapping = await d.store.getCreatorCovenant(creator);
       if (!mapping) {
         metrics.membershipPrepareAttempt("purchase", "offer_not_found");
-        return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND");
+        return apiError(res, 404, "MEMBERSHIP_OFFER_NOT_FOUND", undefined, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       }
       let value: Awaited<ReturnType<MembershipGateway["prepareMint"]>>;
       try {
@@ -876,10 +944,8 @@ export function createApp(d: AppDependencies) {
           mapping.priceSompi,
         );
       } catch (error) {
-        if (error instanceof Error && error.message === "MEMBERSHIP_OFFER_UNAVAILABLE")
-          return apiError(res, 409, "MEMBERSHIP_OFFER_STALE", "This offer changed. Refresh and try again.");
-        if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
-          return apiError(res, 422, "INSUFFICIENT_FUNDS", COPY.insufficientFunds);
+        const mapped = membershipGatewayError(res, error);
+        if (mapped) return mapped;
         throw error;
       }
       const id = randomUUID();
@@ -916,12 +982,21 @@ export function createApp(d: AppDependencies) {
         value.kind !== "update" ||
         value.creator !== req.walletSession!.address
       )
-        return apiError(res, 404, "MEMBERSHIP_PRICE_UPDATE_NOT_FOUND");
+        return apiError(res, 404, "MEMBERSHIP_PRICE_UPDATE_NOT_FOUND", undefined, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       const body = z.object({ signedTransaction: z.string().min(1) }).parse(req.body);
-      const submission = await d.membershipGateway.submit(
-        value,
-        body.signedTransaction,
-      );
+      let submission: PaymentSubmission;
+      try {
+        submission = await d.membershipGateway.submit(value, body.signedTransaction);
+      } catch (error) {
+        if (error instanceof MembershipStateChangedError) {
+          await d.store.deleteMembershipWorkflow(id);
+          await d.store.deletePreparedMembership(id);
+          return membershipStale(res);
+        }
+        throw error;
+      }
       if (submission.isAccepted !== true || !submission.transactionId) {
         if (submission.isAccepted === null && submission.transactionId) {
           await d.store.saveMembershipWorkflow({
@@ -947,7 +1022,9 @@ export function createApp(d: AppDependencies) {
       });
       await d.store.deleteMembershipWorkflow(id);
       if (outcome === "DUPLICATE")
-        return apiError(res, 409, "MEMBERSHIP_PRICE_UPDATE_STALE");
+        return apiError(res, 409, "MEMBERSHIP_PRICE_UPDATE_STALE", COPY.membershipStale, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       res.status(201).json({
         state: "CONFIRMED",
         transactionId: submission.transactionId,
@@ -971,17 +1048,26 @@ export function createApp(d: AppDependencies) {
         value.buyer !== req.walletSession!.address
       ) {
         metrics.membershipFinalizeAttempt("purchase", "not_found");
-        return apiError(res, 404, "MEMBERSHIP_PURCHASE_NOT_FOUND");
+        return apiError(res, 404, "MEMBERSHIP_PURCHASE_NOT_FOUND", undefined, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       }
       const body = z.object({ signedTransaction: z.string().min(1) }).parse(req.body);
       logger.info("membership_finalize", {
         requestId: req.requestId,
         kind: "purchase",
       });
-      const submission = await d.membershipGateway.submit(
-        value,
-        body.signedTransaction,
-      );
+      let submission: PaymentSubmission;
+      try {
+        submission = await d.membershipGateway.submit(value, body.signedTransaction);
+      } catch (error) {
+        if (error instanceof MembershipStateChangedError) {
+          await d.store.deleteMembershipWorkflow(id);
+          await d.store.deletePreparedMembership(id);
+          return membershipStale(res);
+        }
+        throw error;
+      }
       if (submission.isAccepted !== true || !submission.transactionId) {
         if (submission.isAccepted === null && submission.transactionId) {
           await d.store.saveMembershipWorkflow({
@@ -1035,7 +1121,9 @@ export function createApp(d: AppDependencies) {
       });
       await d.store.deleteMembershipWorkflow(id);
       if (outcome === "DUPLICATE")
-        return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS");
+        return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS", COPY.membershipPurchaseExists, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       metrics.membershipFinalizeAttempt("purchase", "confirmed");
       res.status(201).json({
         state: "CONFIRMED",
@@ -1085,7 +1173,9 @@ export function createApp(d: AppDependencies) {
         covenantId,
       });
       if (outcome === "DUPLICATE")
-        return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS");
+        return apiError(res, 409, "MEMBERSHIP_PURCHASE_EXISTS", COPY.membershipPurchaseExists, {
+          retry: RETRY_AFTER_REFRESH,
+        });
       metrics.membershipFinalizeAttempt("purchase", "confirmed");
       res.status(201).json(check);
     }),
@@ -1344,6 +1434,26 @@ function apiError(
 function routePattern(req: Request) {
   const route = req.route?.path;
   return typeof route === "string" ? `${req.baseUrl}${route}` : undefined;
+}
+/**
+ * The covenant moved underneath the request. It is not a fault: another
+ * submission against the refreshed state can succeed, so the response carries
+ * the generic `AFTER_REFRESH` hint and the client stays unaware of domain codes.
+ */
+function membershipStale(res: Response) {
+  return apiError(res, 409, "MEMBERSHIP_OFFER_STALE", COPY.membershipStale, {
+    retry: RETRY_AFTER_REFRESH,
+  });
+}
+/**
+ * Maps a failed membership prepare to a response, or returns undefined so the
+ * caller rethrows anything it does not recognise.
+ */
+function membershipGatewayError(res: Response, error: unknown) {
+  if (error instanceof MembershipStateChangedError) return membershipStale(res);
+  if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS")
+    return apiError(res, 422, "INSUFFICIENT_FUNDS", COPY.insufficientFunds);
+  return undefined;
 }
 function feedbackClientKey(req: Request) {
   const forwarded = req.get("x-forwarded-for");

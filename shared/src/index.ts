@@ -15,6 +15,15 @@ export const MIN_MEMBERSHIP_PRICE_SOMPI = 100_000_000n;
 export const MAX_MEMBERSHIP_PRICE_SOMPI = 100_000_000_000_000n;
 export const MEMBERSHIP_DURATION_DAA = 25_920_000n;
 
+/**
+ * A generic, client-agnostic hint attached to a failed response. It tells any
+ * caller what the state of the resource allows, without naming a domain code.
+ * `AFTER_REFRESH` means the resource changed underneath the request: refetch
+ * it, then the caller may submit again.
+ */
+export const RETRY_AFTER_REFRESH = "AFTER_REFRESH" as const;
+export type ApiRetry = typeof RETRY_AFTER_REFRESH;
+
 export const MEDIA_TYPES = [
   "image/jpeg",
   "image/png",
@@ -112,15 +121,25 @@ export function parseKasToSompi(value: string): bigint | null {
   return sompi > 0n ? sompi : null;
 }
 
+export type MembershipPriceProblem = "EMPTY" | "FORMAT" | "BELOW_MIN" | "ABOVE_MAX";
+
+/**
+ * The single grammar for a monthly price. Returns null when the value is
+ * acceptable, or the reason it is not, so the caller can explain the failure.
+ */
+export function membershipPriceProblem(value: string): MembershipPriceProblem | null {
+  const match = /^(\d+)(?:\.(\d{1,8}))?$/.exec(value.trim());
+  if (!match || !match[1]) return value.trim() ? "FORMAT" : "EMPTY";
+  const sompi =
+    BigInt(match[1]) * 100_000_000n + BigInt((match[2] ?? "").padEnd(8, "0"));
+  if (sompi < MIN_MEMBERSHIP_PRICE_SOMPI) return "BELOW_MIN";
+  if (sompi > MAX_MEMBERSHIP_PRICE_SOMPI) return "ABOVE_MAX";
+  return null;
+}
+
 export function parseMembershipPrice(value: string): bigint | null {
-  const sompi = parseKasToSompi(value);
-  if (
-    sompi === null ||
-    sompi < MIN_MEMBERSHIP_PRICE_SOMPI ||
-    sompi > MAX_MEMBERSHIP_PRICE_SOMPI
-  )
-    return null;
-  return sompi;
+  if (membershipPriceProblem(value) !== null) return null;
+  return parseKasToSompi(value);
 }
 
 export function membershipFeeSompi(priceSompi: bigint): bigint {

@@ -6,11 +6,13 @@ import type { EventLogger, Logger } from "./observability.js";
 import type { MembershipCheck, Post } from "./domain/models.js";
 import { StorageError } from "./r2-storage.js";
 import type { VerifiedMedia } from "./adapters/media/media.js";
-import type {
-  MembershipVerifier,
-  ObjectStorage,
-  PaymentGateway,
-  Repositories,
+import {
+  MembershipStateChangedError,
+  type MembershipGateway,
+  type MembershipVerifier,
+  type ObjectStorage,
+  type PaymentGateway,
+  type Repositories,
 } from "./application/ports.js";
 
 describe("API request diagnostics", () => {
@@ -731,6 +733,293 @@ describe("publish failure diagnostics", () => {
   });
 });
 
+describe("membership price validation", () => {
+  async function creatorSession(store: MemoryStore) {
+    const creator = `kaspatest:${"c".repeat(60)}`;
+    await store.createSession({
+      id: "creator-session",
+      address: creator,
+      expiresAt: Date.now() + 60_000,
+    });
+    return creator;
+  }
+
+  it.each(["/api/membership/offers/prepare", "/api/membership/price/prepare"])(
+    "rejects an invalid price on %s before touching the chain",
+    async (path) => {
+      const store = new MemoryStore();
+      await creatorSession(store);
+      const { app } = testApp(
+        store,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {} as MembershipGateway,
+      );
+
+      const response = await request(app)
+        .post(path)
+        .set("Cookie", "onlykas_session=creator-session")
+        .send({ price: "1,000" });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        error: "INVALID_MEMBERSHIP_PRICE",
+        message: "Enter the price in digits only, with up to 8 decimal places.",
+      });
+    },
+  );
+
+  it.each([
+    ["", "Enter a monthly subscription price."],
+    ["1,000", "Enter the price in digits only, with up to 8 decimal places."],
+    ["0.5", "The monthly subscription price must be at least 1 KAS."],
+    ["1000001", "The monthly subscription price can be at most 1,000,000 KAS."],
+  ])("explains why %s is rejected", async (price, message) => {
+    const store = new MemoryStore();
+    await creatorSession(store);
+    const { app } = testApp(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {} as MembershipGateway,
+    );
+
+    const response = await request(app)
+      .post("/api/membership/price/prepare")
+      .set("Cookie", "onlykas_session=creator-session")
+      .send({ price });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      error: "INVALID_MEMBERSHIP_PRICE",
+      message,
+    });
+  });
+});
+
+describe("membership state changes", () => {
+  const staleMessage =
+    "This subscription changed while you were confirming it. Nothing was charged — submit again.";
+  const covenantId = "a".repeat(64);
+
+  function gatewayThatThrows(error: Error): MembershipGateway {
+    return {
+      prepareOffer: async () => {
+        throw error;
+      },
+      prepareMint: async () => {
+        throw error;
+      },
+      preparePriceUpdate: async () => {
+        throw error;
+      },
+      prepareCancellation: async () => {
+        throw error;
+      },
+      submit: async () => {
+        throw error;
+      },
+    };
+  }
+
+  function gatewayThatConfirms(): MembershipGateway {
+    return {
+      ...gatewayThatThrows(new Error("unused")),
+      submit: async () => ({
+        isAccepted: true,
+        transactionId: "tx-1",
+        rejection: null,
+      }),
+    };
+  }
+
+  async function creatorSession(store: MemoryStore) {
+    const creator = `kaspatest:${"c".repeat(60)}`;
+    await store.createSession({
+      id: "creator-session",
+      address: creator,
+      expiresAt: Date.now() + 60_000,
+    });
+    return creator;
+  }
+
+  async function seedPrepared(
+    store: MemoryStore,
+    creator: string,
+    kind: "offer" | "purchase" | "update" | "cancel",
+  ) {
+    await store.savePreparedMembership({
+      id: "prepared-1",
+      transaction: "{}",
+      fingerprint: "fp",
+      covenantId,
+      signInputs: [],
+      memberOutputIndex: null,
+      creator,
+      buyer: creator,
+      kind,
+      expiresAt: Date.now() + 60_000,
+      priceSompi: "1000000000",
+    });
+  }
+
+  function appWithGateway(store: MemoryStore, membershipGateway?: MembershipGateway) {
+    return testApp(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      membershipGateway,
+    );
+  }
+
+  it.each([
+    ["price/prepare", "/api/membership/price/prepare", { price: "10" }],
+    ["cancel/prepare", "/api/membership/cancel/prepare", {}],
+  ])("reports a moved covenant on %s as retryable", async (_name, path, body) => {
+    const store = new MemoryStore();
+    const creator = await creatorSession(store);
+    await store.saveCreatorCovenant({ creator, covenantId, priceSompi: "1000000000" });
+    const { app } = appWithGateway(
+      store,
+      gatewayThatThrows(new MembershipStateChangedError()),
+    );
+
+    const response = await request(app)
+      .post(path)
+      .set("Cookie", "onlykas_session=creator-session")
+      .send(body);
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      error: "MEMBERSHIP_OFFER_STALE",
+      retry: "AFTER_REFRESH",
+      message: staleMessage,
+    });
+  });
+
+  it("reports a moved covenant while opening an offer", async () => {
+    const store = new MemoryStore();
+    await creatorSession(store);
+    const { app } = appWithGateway(
+      store,
+      gatewayThatThrows(new MembershipStateChangedError()),
+    );
+
+    const response = await request(app)
+      .post("/api/membership/offers/prepare")
+      .set("Cookie", "onlykas_session=creator-session")
+      .send({ price: "10" });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      error: "MEMBERSHIP_OFFER_STALE",
+      retry: "AFTER_REFRESH",
+      message: staleMessage,
+    });
+  });
+
+  it("reports a moved covenant while subscribing", async () => {
+    const store = new MemoryStore();
+    const creator = await creatorSession(store);
+    await store.saveCreatorCovenant({ creator, covenantId, priceSompi: "1000000000" });
+    const buyer = `kaspatest:${"d".repeat(60)}`;
+    await store.createSession({
+      id: "buyer-session",
+      address: buyer,
+      expiresAt: Date.now() + 60_000,
+    });
+    const { app } = appWithGateway(
+      store,
+      gatewayThatThrows(new MembershipStateChangedError()),
+    );
+
+    const response = await request(app)
+      .post(`/api/membership/${encodeURIComponent(creator)}/prepare`)
+      .set("Cookie", "onlykas_session=buyer-session");
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      error: "MEMBERSHIP_OFFER_STALE",
+      retry: "AFTER_REFRESH",
+      message: staleMessage,
+    });
+  });
+
+  it("still reports insufficient funds without a retry hint", async () => {
+    const store = new MemoryStore();
+    const creator = await creatorSession(store);
+    await store.saveCreatorCovenant({ creator, covenantId, priceSompi: "1000000000" });
+    const { app } = appWithGateway(
+      store,
+      gatewayThatThrows(new Error("INSUFFICIENT_FUNDS")),
+    );
+
+    const response = await request(app)
+      .post("/api/membership/price/prepare")
+      .set("Cookie", "onlykas_session=creator-session")
+      .send({ price: "10" });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toMatchObject({ error: "INSUFFICIENT_FUNDS" });
+    expect(response.body.retry).toBeUndefined();
+  });
+
+  it.each([
+    ["update", "/api/membership/price/prepared-1/finalize"],
+    ["cancel", "/api/membership/cancel/prepared-1/finalize"],
+  ] as const)("reports a moved covenant while confirming a %s", async (kind, path) => {
+    const store = new MemoryStore();
+    const creator = await creatorSession(store);
+    await store.saveCreatorCovenant({ creator, covenantId, priceSompi: "1000000000" });
+    await seedPrepared(store, creator, kind);
+    const { app } = appWithGateway(
+      store,
+      gatewayThatThrows(new MembershipStateChangedError()),
+    );
+
+    const response = await request(app)
+      .post(path)
+      .set("Cookie", "onlykas_session=creator-session")
+      .send({ signedTransaction: "aa01" });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      error: "MEMBERSHIP_OFFER_STALE",
+      retry: "AFTER_REFRESH",
+      message: staleMessage,
+    });
+    expect(await store.getPreparedMembership("prepared-1", Date.now())).toBeNull();
+  });
+
+  it("explains a price update that no longer matches the covenant", async () => {
+    const store = new MemoryStore();
+    const creator = await creatorSession(store);
+    await seedPrepared(store, creator, "update");
+    const { app } = appWithGateway(store, gatewayThatConfirms());
+
+    const response = await request(app)
+      .post("/api/membership/price/prepared-1/finalize")
+      .set("Cookie", "onlykas_session=creator-session")
+      .send({ signedTransaction: "aa01" });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      error: "MEMBERSHIP_PRICE_UPDATE_STALE",
+      retry: "AFTER_REFRESH",
+      message: staleMessage,
+    });
+  });
+});
+
 function testApp(
   store: Repositories = new MemoryStore(),
   paymentGateway?: PaymentGateway,
@@ -738,6 +1027,7 @@ function testApp(
   storageOverride?: ObjectStorage,
   verifyMediaOverride?: (path: string) => Promise<VerifiedMedia>,
   membershipVerifier?: MembershipVerifier,
+  membershipGateway?: MembershipGateway,
 ) {
   const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
   const record =
@@ -767,6 +1057,7 @@ function testApp(
     ...(paymentGateway ? { paymentGateway } : {}),
     ...(verifyMediaOverride ? { verifyMedia: verifyMediaOverride } : {}),
     ...(membershipVerifier ? { membershipVerifier } : {}),
+    ...(membershipGateway ? { membershipGateway } : {}),
     publicOrigin: "http://localhost:5173",
     logger,
     ...(metrics ? { metrics } : {}),
