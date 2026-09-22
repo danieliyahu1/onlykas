@@ -15,7 +15,12 @@ import {
   type PaymentSubmission,
   type PreparedMembershipTransaction,
 } from "./application/ports.js";
-import { membershipFeeSompi, DEFAULT_NETWORK, networkDefinition, type NetworkId } from "@onlykas/shared";
+import {
+  membershipFeeSompi,
+  DEFAULT_NETWORK,
+  networkDefinition,
+  type NetworkId,
+} from "@onlykas/shared";
 import {
   addressPublicKey,
   addressScript,
@@ -433,14 +438,23 @@ export class KaspaMembershipGateway implements MembershipGateway {
       creatorUtxos,
       creator,
       MEMBERSHIP_OUTPUT_VALUE,
-      (values) => estimatedFee([minterInput, ...values.map(walletInput)], provisionalOutputs, rate),
+      (values) =>
+        estimatedFee(
+          [minterInput, ...values.map(walletInput)],
+          provisionalOutputs,
+          rate,
+        ),
     );
     const inputs = [minterInput, ...selected.map(walletInput)];
     const fee = estimatedFee(inputs, provisionalOutputs, rate);
     const change = sumUtxos(selected) - MEMBERSHIP_OUTPUT_VALUE - fee;
     const outputs = [provisionalOutputs[0]!];
     if (change > 0n)
-      outputs.push({ value: change.toString(), scriptPublicKey: addressScript(creator), covenant: null });
+      outputs.push({
+        value: change.toString(),
+        scriptPublicKey: addressScript(creator),
+        covenant: null,
+      });
     const result = prepared(
       transaction(this.network, inputs, outputs, ""),
       covenantIdHex,
@@ -503,6 +517,15 @@ export class KaspaMembershipGateway implements MembershipGateway {
     });
     return {
       isAccepted: chain.is_accepted ? true : null,
+      transactionId,
+      rejection: null,
+    };
+  }
+
+  async status(transactionId: string): Promise<PaymentSubmission> {
+    const transaction = await this.transaction(transactionId);
+    return {
+      isAccepted: transaction ? (transaction.is_accepted ? true : null) : false,
       transactionId,
       rejection: null,
     };

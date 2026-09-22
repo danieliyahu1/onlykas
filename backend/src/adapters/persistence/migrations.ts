@@ -270,6 +270,20 @@ export const migrations: Migration[] = [
        WHERE price_sompi IS NULL`,
     ],
   },
+  {
+    version: 12,
+    name: "workflow_reconciliation",
+    statements: [
+      "ALTER TABLE payment_workflows ADD COLUMN submitted_at INTEGER",
+      "ALTER TABLE payment_workflows ADD COLUMN finalized_at INTEGER",
+      "ALTER TABLE membership_workflows ADD COLUMN submitted_at INTEGER",
+      "ALTER TABLE membership_workflows ADD COLUMN finalized_at INTEGER",
+      "UPDATE payment_workflows SET submitted_at = 0 WHERE submitted_at IS NULL",
+      "UPDATE membership_workflows SET submitted_at = 0 WHERE submitted_at IS NULL",
+      "CREATE INDEX IF NOT EXISTS payment_workflows_reconcile ON payment_workflows (state, submitted_at)",
+      "CREATE INDEX IF NOT EXISTS membership_workflows_reconcile ON membership_workflows (state, submitted_at)",
+    ],
+  },
 ];
 
 export async function applyMigrations(client: Client): Promise<void> {

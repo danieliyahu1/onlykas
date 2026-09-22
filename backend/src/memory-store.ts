@@ -56,7 +56,14 @@ export class MemoryStore implements Repositories {
       if (v.expiresAt <= now) this.preparedPaymentRecords.delete(id);
   }
   async savePaymentWorkflow(v: PaymentWorkflow) {
-    this.paymentWorkflows.set(v.preparedPaymentId, structuredClone(v));
+    const existing = this.paymentWorkflows.get(v.preparedPaymentId);
+    this.paymentWorkflows.set(
+      v.preparedPaymentId,
+      structuredClone({
+        ...v,
+        submittedAt: existing?.submittedAt ?? v.submittedAt ?? Date.now(),
+      }),
+    );
   }
   async getPaymentWorkflow(id: string) {
     const v = this.paymentWorkflows.get(id);
@@ -65,8 +72,35 @@ export class MemoryStore implements Repositories {
   async deletePaymentWorkflow(id: string) {
     this.paymentWorkflows.delete(id);
   }
+  async claimPaymentWorkflowTerminal(
+    id: string,
+    state: "CONFIRMED" | "REJECTED",
+    now: number,
+    rejection: string | null = null,
+  ) {
+    const v = this.paymentWorkflows.get(id);
+    if (!v || v.finalizedAt != null) return null;
+    v.state = state;
+    v.rejection = rejection;
+    v.finalizedAt = now;
+    return now;
+  }
+  async pendingPaymentWorkflows(limit: number) {
+    return [...this.paymentWorkflows.values()]
+      .filter((v) => v.state === "SUBMITTED")
+      .sort((a, b) => a.preparedPaymentId.localeCompare(b.preparedPaymentId))
+      .slice(0, limit)
+      .map((v) => structuredClone(v));
+  }
   async saveMembershipWorkflow(v: MembershipWorkflow) {
-    this.membershipWorkflows.set(v.preparedMembershipId, structuredClone(v));
+    const existing = this.membershipWorkflows.get(v.preparedMembershipId);
+    this.membershipWorkflows.set(
+      v.preparedMembershipId,
+      structuredClone({
+        ...v,
+        submittedAt: existing?.submittedAt ?? v.submittedAt ?? Date.now(),
+      }),
+    );
   }
   async getMembershipWorkflow(id: string) {
     const v = this.membershipWorkflows.get(id);
@@ -74,6 +108,26 @@ export class MemoryStore implements Repositories {
   }
   async deleteMembershipWorkflow(id: string) {
     this.membershipWorkflows.delete(id);
+  }
+  async claimMembershipWorkflowTerminal(
+    id: string,
+    state: "CONFIRMED" | "REJECTED",
+    now: number,
+    rejection: string | null = null,
+  ) {
+    const v = this.membershipWorkflows.get(id);
+    if (!v || v.finalizedAt != null) return null;
+    v.state = state;
+    v.rejection = rejection;
+    v.finalizedAt = now;
+    return now;
+  }
+  async pendingMembershipWorkflows(limit: number) {
+    return [...this.membershipWorkflows.values()]
+      .filter((v) => v.state === "SUBMITTED")
+      .sort((a, b) => a.preparedMembershipId.localeCompare(b.preparedMembershipId))
+      .slice(0, limit)
+      .map((v) => structuredClone(v));
   }
   async savePreparedMembership(v: PreparedMembershipRecord) {
     this.preparedMembershipRecords.set(v.id, structuredClone(v));
@@ -249,9 +303,10 @@ export class MemoryStore implements Repositories {
   }
   async finalizeOffer(id: string, value: CreatorCovenant): Promise<DuplicateOutcome> {
     const current = this.creatorCovenants.get(value.creator);
-    const outcome = current?.status === "CANCELED"
-      ? this.saveNewCovenant(value)
-      : await this.saveCreatorCovenant(value);
+    const outcome =
+      current?.status === "CANCELED"
+        ? this.saveNewCovenant(value)
+        : await this.saveCreatorCovenant(value);
     this.preparedMembershipRecords.delete(id);
     return outcome;
   }
@@ -270,9 +325,16 @@ export class MemoryStore implements Repositories {
     this.preparedMembershipRecords.delete(id);
     return "CREATED";
   }
-  async finalizeCancellation(id: string, value: Pick<CreatorCovenant, "creator" | "covenantId">) {
+  async finalizeCancellation(
+    id: string,
+    value: Pick<CreatorCovenant, "creator" | "covenantId">,
+  ) {
     const existing = this.creatorCovenants.get(value.creator);
-    if (!existing || existing.covenantId !== value.covenantId || existing.status === "CANCELED") {
+    if (
+      !existing ||
+      existing.covenantId !== value.covenantId ||
+      existing.status === "CANCELED"
+    ) {
       this.preparedMembershipRecords.delete(id);
       return "DUPLICATE" as const;
     }
@@ -283,7 +345,11 @@ export class MemoryStore implements Repositories {
     return "CREATED" as const;
   }
   private saveNewCovenant(value: CreatorCovenant): DuplicateOutcome {
-    if ([...this.creatorCovenantHistory.values()].some((x) => x.covenantId === value.covenantId))
+    if (
+      [...this.creatorCovenantHistory.values()].some(
+        (x) => x.covenantId === value.covenantId,
+      )
+    )
       return "DUPLICATE";
     const active = { ...value, status: "ACTIVE" as const };
     this.creatorCovenants.set(value.creator, active);

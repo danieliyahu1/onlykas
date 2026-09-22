@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createApp } from "./app.js";
 import { parseEnvironment } from "./config.js";
-import { createLogger } from "./observability.js";
+import { createLogger, safeError } from "./observability.js";
 import { createMetrics, createMetricsServer } from "./metrics.js";
 import { LibsqlStore } from "./libsql-store.js";
 import { R2Storage } from "./r2-storage.js";
@@ -9,11 +9,14 @@ import { KaspaWalletVerifier } from "./wallet-verifier.js";
 import { KaspaMembershipVerifier } from "./verifier.js";
 import { KaspaPaymentGateway } from "./payment-gateway.js";
 import { KaspaMembershipGateway } from "./membership-gateway.js";
+import { WorkflowReconciler } from "./application/reconcile-workflows.js";
 import {
   FeedbackService,
   FeedbackSpill,
   TelegramFeedback,
 } from "./adapters/feedback/feedback.js";
+
+const RECONCILE_INTERVAL_MS = 60_000;
 
 async function readVersion(): Promise<string> {
   try {
@@ -81,64 +84,62 @@ const feedbackService = new FeedbackService({
 // Retry accepted-but-undelivered feedback (crashes, Telegram outages) on
 // startup and then periodically until it lands.
 if (feedbackDeliverer.enabled) {
-   const pending = await store.pendingFeedback();
+  const pending = await store.pendingFeedback();
   logger.info("feedback_delivery_enabled", { pending });
-  void feedbackService
-    .drainPending()
-    .catch((error) =>
+  void feedbackService.drainPending().catch((error) =>
+    logger.debug("feedback_drain_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    }),
+  );
+
+  feedbackDrainTimer = setInterval(() => {
+    void feedbackService.drainPending().catch((error) =>
       logger.debug("feedback_drain_failed", {
         message: error instanceof Error ? error.message : String(error),
       }),
     );
-
-   feedbackDrainTimer = setInterval(() => {
-    void feedbackService
-      .drainPending()
-      .catch((error) =>
-        logger.debug("feedback_drain_failed", {
-          message: error instanceof Error ? error.message : String(error),
-        }),
-      );
   }, 120_000);
   feedbackDrainTimer.unref();
 } else {
-   const pending = await store.pendingFeedback();
+  const pending = await store.pendingFeedback();
   logger.warn("feedback_delivery_disabled", {
-    reason:
-      "TELEGRAM_FEEDBACK_BOT_TOKEN or TELEGRAM_FEEDBACK_CHAT_ID is not set",
+    reason: "TELEGRAM_FEEDBACK_BOT_TOKEN or TELEGRAM_FEEDBACK_CHAT_ID is not set",
     pending,
   });
 }
 
+const paymentGateway = new KaspaPaymentGateway(
+  environment.PLATFORM_FEE_ADDRESS,
+  environment.KASPA_NODE_URL,
+  undefined,
+  undefined,
+  metrics,
+  undefined,
+  environment.KASPA_NETWORK,
+);
+const membershipGateway = new KaspaMembershipGateway(
+  environment.PLATFORM_FEE_ADDRESS,
+  environment.KASPA_NODE_URL,
+  undefined,
+  undefined,
+  logger,
+  metrics,
+  environment.KASPA_NETWORK,
+);
+const membershipVerifier = new KaspaMembershipVerifier(
+  environment.KASPA_NODE_URL,
+  undefined,
+  undefined,
+  metrics,
+  environment.KASPA_NETWORK,
+);
 const app = createApp({
   store,
   storage,
   walletVerifier: new KaspaWalletVerifier(environment.KASPA_NETWORK),
-  paymentGateway: new KaspaPaymentGateway(
-    environment.PLATFORM_FEE_ADDRESS,
-    environment.KASPA_NODE_URL,
-    undefined,
-    undefined,
-    metrics,
-    undefined,
-    environment.KASPA_NETWORK,
-  ),
-  membershipGateway: new KaspaMembershipGateway(
-    environment.PLATFORM_FEE_ADDRESS,
-    environment.KASPA_NODE_URL,
-    undefined,
-    undefined,
-    logger,
-    metrics,
-    environment.KASPA_NETWORK,
-  ),
-  membershipVerifier: new KaspaMembershipVerifier(
-    environment.KASPA_NODE_URL,
-    undefined,
-    undefined,
-    metrics,
-    environment.KASPA_NETWORK,
-  ),
+  paymentGateway,
+  membershipGateway,
+  membershipVerifier,
   publicOrigin: environment.PUBLIC_ORIGIN,
   network: environment.KASPA_NETWORK,
   readinessCheck: () => store.isReady(),
@@ -147,6 +148,32 @@ const app = createApp({
   metrics,
   feedbackService,
 });
+// A payment can be approved in the wallet and then the buyer disappears (tab
+// closed, network lost). The chain may still accept it, so the backend keeps
+// polling the persisted transaction id and finalizes the receipt itself. This
+// runs on every replica; terminal claiming is atomic, so only one writes.
+const reconciler = new WorkflowReconciler({
+  store,
+  paymentGateway,
+  membershipGateway,
+  membershipVerifier,
+  logger,
+  metrics,
+});
+async function reconcileOnce(): Promise<void> {
+  try {
+    await reconciler.run();
+  } catch (error) {
+    logger.warn("workflow_reconcile_failed", { error: safeError(error) });
+  }
+}
+void reconcileOnce();
+const reconcileTimer = setInterval(
+  () => void reconcileOnce(),
+  RECONCILE_INTERVAL_MS,
+);
+reconcileTimer.unref();
+
 const appServer = app.listen(environment.PORT, "0.0.0.0", () =>
   logger.info("server_started", { port: environment.PORT }),
 );
@@ -161,6 +188,7 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   logger.info("server_shutdown_started", { signal });
   if (feedbackDrainTimer) clearInterval(feedbackDrainTimer);
+  if (reconcileTimer) clearInterval(reconcileTimer);
   await Promise.all([
     new Promise<void>((resolve) => appServer.close(() => resolve())),
     new Promise<void>((resolve) => metricsServer.close(() => resolve())),

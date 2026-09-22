@@ -7,10 +7,12 @@ import type {
   PreparedMembershipRecord,
   PreparedMembershipTransaction,
   MembershipWorkflow,
+  MembershipWorkflowState,
   PreparedPaymentRecord,
   PreparedPayment,
   PaymentSubmission,
   PaymentWorkflow,
+  PaymentWorkflowState,
   Profile,
   Purchase,
   Session,
@@ -40,6 +42,16 @@ export interface PreparedPaymentRepository {
   savePaymentWorkflow(value: PaymentWorkflow): Promise<void>;
   getPaymentWorkflow(preparedPaymentId: string): Promise<PaymentWorkflow | null>;
   deletePaymentWorkflow(preparedPaymentId: string): Promise<void>;
+  /**
+   * Atomically marks a workflow terminal the first time and returns that time.
+   * Returns null if it was already terminal, so only one caller reconciles it.
+   */
+  claimPaymentWorkflowTerminal(
+    preparedPaymentId: string,
+    state: Exclude<PaymentWorkflowState, "SUBMITTED">,
+    now: number,
+    rejection?: string | null,
+  ): Promise<number | null>;
 }
 
 export interface PreparedMembershipRepository {
@@ -55,6 +67,20 @@ export interface PreparedMembershipRepository {
     preparedMembershipId: string,
   ): Promise<MembershipWorkflow | null>;
   deleteMembershipWorkflow(preparedMembershipId: string): Promise<void>;
+  /**
+   * Atomically marks a workflow terminal the first time and returns that time.
+   * Returns null if it was already terminal, so only one caller reconciles it.
+   */
+  claimMembershipWorkflowTerminal(
+    preparedMembershipId: string,
+    state: Exclude<MembershipWorkflowState, "SUBMITTED">,
+    now: number,
+    rejection?: string | null,
+  ): Promise<number | null>;
+  /** Every unresolved (SUBMITTED) membership workflow, oldest first. */
+  pendingMembershipWorkflows(limit: number): Promise<MembershipWorkflow[]>;
+  /** Every unresolved (SUBMITTED) payment workflow, oldest first. */
+  pendingPaymentWorkflows(limit: number): Promise<PaymentWorkflow[]>;
 }
 
 export interface ProfileRepository {
@@ -182,6 +208,11 @@ export interface MembershipGateway {
     prepared: PreparedMembershipTransaction,
     signedTransaction: string,
   ): Promise<PaymentSubmission>;
+  /**
+   * Reports whether the chain has accepted a previously submitted transaction.
+   * Used by the reconciler to finish workflows whose client disappeared.
+   */
+  status?(transactionId: string): Promise<PaymentSubmission>;
 }
 
 export interface ObjectStorage {

@@ -19,9 +19,7 @@ export interface HttpRequestObservation {
   durationSeconds: number;
 }
 
-const HTTP_DURATION_BUCKETS = [
-  0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10,
-];
+const HTTP_DURATION_BUCKETS = [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 const MEDIA_BYTES_BUCKETS = [
   10_000, 100_000, 1_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000,
   100_000_000,
@@ -56,9 +54,8 @@ export class Metrics {
   private readonly authChallenge: Counter<"outcome">;
   private readonly authSession: Counter<"outcome">;
   private readonly feedback: Counter<"outcome">;
-  private readonly dependencyRequests: Counter<
-    "dependency" | "operation" | "outcome"
-  >;
+  private readonly workflowReconcile: Counter<"result">;
+  private readonly dependencyRequests: Counter<"dependency" | "operation" | "outcome">;
   private readonly dependencyDuration: Histogram<"dependency" | "operation">;
 
   constructor(build: BuildInfo, registry = new Registry()) {
@@ -175,6 +172,12 @@ export class Metrics {
       labelNames: ["outcome"],
       registers,
     });
+    this.workflowReconcile = new Counter({
+      name: "onlykas_workflow_reconcile_total",
+      help: "Background workflow reconciliation outcomes.",
+      labelNames: ["result"],
+      registers,
+    });
     this.dependencyRequests = new Counter({
       name: "onlykas_dependency_requests_total",
       help: "Outbound dependency requests by dependency, operation, and outcome.",
@@ -279,6 +282,23 @@ export class Metrics {
   /** Records an anonymous user feedback submission. */
   recordFeedback(fields: { outcome: string }): void {
     this.feedback.inc({ outcome: fields.outcome });
+  }
+
+  /** Records the outcome counters of one reconciliation pass. */
+  workflowReconcileRun(summary: {
+    confirmed: number;
+    rejected: number;
+    retried: number;
+    abandoned: number;
+  }): void {
+    if (summary.confirmed)
+      this.workflowReconcile.inc({ result: "confirmed" }, summary.confirmed);
+    if (summary.rejected)
+      this.workflowReconcile.inc({ result: "rejected" }, summary.rejected);
+    if (summary.retried)
+      this.workflowReconcile.inc({ result: "retried" }, summary.retried);
+    if (summary.abandoned)
+      this.workflowReconcile.inc({ result: "abandoned" }, summary.abandoned);
   }
 
   /**

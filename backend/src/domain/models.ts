@@ -96,6 +96,10 @@ export interface PaymentWorkflow {
   state: PaymentWorkflowState;
   transactionId: string;
   rejection: string | null;
+  /** First time this transaction was persisted as in flight, in epoch ms. */
+  submittedAt?: number | null;
+  /** First time the reconciler observed a terminal outcome for this workflow. */
+  finalizedAt?: number | null;
 }
 
 export interface PreparedMembershipRecord {
@@ -119,6 +123,10 @@ export interface MembershipWorkflow {
   state: MembershipWorkflowState;
   transactionId: string;
   rejection: string | null;
+  /** First time this transaction was persisted as in flight, in epoch ms. */
+  submittedAt?: number | null;
+  /** First time the reconciler observed a terminal outcome for this workflow. */
+  finalizedAt?: number | null;
 }
 
 export type MembershipCheckStatus =

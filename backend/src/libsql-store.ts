@@ -160,8 +160,19 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
   }
   async savePaymentWorkflow(v: PaymentWorkflow) {
     await this.execute({
-      sql: `INSERT INTO payment_workflows (prepared_payment_id,state,transaction_id,rejection) VALUES (?,?,?,?) ON CONFLICT(prepared_payment_id) DO UPDATE SET state=excluded.state,transaction_id=excluded.transaction_id,rejection=excluded.rejection`,
-      args: [v.preparedPaymentId, v.state, v.transactionId, v.rejection],
+      sql: `INSERT INTO payment_workflows (prepared_payment_id,state,transaction_id,rejection,submitted_at) VALUES (?,?,?,?,?)
+        ON CONFLICT(prepared_payment_id) DO UPDATE SET
+          state=excluded.state,
+          transaction_id=excluded.transaction_id,
+          rejection=excluded.rejection,
+          submitted_at=COALESCE(payment_workflows.submitted_at, excluded.submitted_at)`,
+      args: [
+        v.preparedPaymentId,
+        v.state,
+        v.transactionId,
+        v.rejection,
+        v.submittedAt ?? Date.now(),
+      ],
     });
   }
   async getPaymentWorkflow(id: string) {
@@ -176,6 +187,27 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
       sql: `DELETE FROM payment_workflows WHERE prepared_payment_id=?`,
       args: [id],
     });
+  }
+  async claimPaymentWorkflowTerminal(
+    id: string,
+    state: "CONFIRMED" | "REJECTED",
+    now: number,
+    rejection: string | null = null,
+  ) {
+    const r = await this.execute({
+      sql: `UPDATE payment_workflows SET state=?, rejection=?, finalized_at=?
+        WHERE prepared_payment_id=? AND finalized_at IS NULL
+        RETURNING finalized_at`,
+      args: [state, rejection, now, id],
+    });
+    return r.rows[0] ? number(r.rows[0].finalized_at) : null;
+  }
+  async pendingPaymentWorkflows(limit: number) {
+    const r = await this.execute({
+      sql: `SELECT * FROM payment_workflows WHERE state='SUBMITTED' ORDER BY prepared_payment_id LIMIT ?`,
+      args: [limit],
+    });
+    return r.rows.map(paymentWorkflowFromRow);
   }
   async savePreparedMembership(v: PreparedMembershipRecord) {
     await this.execute({
@@ -217,8 +249,19 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
   }
   async saveMembershipWorkflow(v: MembershipWorkflow) {
     await this.execute({
-      sql: `INSERT INTO membership_workflows (prepared_membership_id,state,transaction_id,rejection) VALUES (?,?,?,?) ON CONFLICT(prepared_membership_id) DO UPDATE SET state=excluded.state,transaction_id=excluded.transaction_id,rejection=excluded.rejection`,
-      args: [v.preparedMembershipId, v.state, v.transactionId, v.rejection],
+      sql: `INSERT INTO membership_workflows (prepared_membership_id,state,transaction_id,rejection,submitted_at) VALUES (?,?,?,?,?)
+        ON CONFLICT(prepared_membership_id) DO UPDATE SET
+          state=excluded.state,
+          transaction_id=excluded.transaction_id,
+          rejection=excluded.rejection,
+          submitted_at=COALESCE(membership_workflows.submitted_at, excluded.submitted_at)`,
+      args: [
+        v.preparedMembershipId,
+        v.state,
+        v.transactionId,
+        v.rejection,
+        v.submittedAt ?? Date.now(),
+      ],
     });
   }
   async getMembershipWorkflow(id: string) {
@@ -233,6 +276,27 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
       sql: `DELETE FROM membership_workflows WHERE prepared_membership_id=?`,
       args: [id],
     });
+  }
+  async claimMembershipWorkflowTerminal(
+    id: string,
+    state: "CONFIRMED" | "REJECTED",
+    now: number,
+    rejection: string | null = null,
+  ) {
+    const r = await this.execute({
+      sql: `UPDATE membership_workflows SET state=?, rejection=?, finalized_at=?
+        WHERE prepared_membership_id=? AND finalized_at IS NULL
+        RETURNING finalized_at`,
+      args: [state, rejection, now, id],
+    });
+    return r.rows[0] ? number(r.rows[0].finalized_at) : null;
+  }
+  async pendingMembershipWorkflows(limit: number) {
+    const r = await this.execute({
+      sql: `SELECT * FROM membership_workflows WHERE state='SUBMITTED' ORDER BY prepared_membership_id LIMIT ?`,
+      args: [limit],
+    });
+    return r.rows.map(membershipWorkflowFromRow);
   }
   async createSession(v: Session) {
     await this.execute({
@@ -519,7 +583,10 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
         args: [value.creator],
       });
       if (current.rows[0] && current.rows[0].status !== "CANCELED") {
-        await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+        await transaction.execute({
+          sql: "DELETE FROM prepared_memberships WHERE id=?",
+          args: [id],
+        });
         await transaction.commit();
         return "DUPLICATE";
       }
@@ -534,11 +601,17 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
         });
       } catch (error) {
         if (!isUniqueConstraint(error)) throw error;
-        await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+        await transaction.execute({
+          sql: "DELETE FROM prepared_memberships WHERE id=?",
+          args: [id],
+        });
         await transaction.commit();
         return "DUPLICATE";
       }
-      await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+      await transaction.execute({
+        sql: "DELETE FROM prepared_memberships WHERE id=?",
+        args: [id],
+      });
       await transaction.commit();
       return "CREATED";
     } catch (error) {
@@ -590,7 +663,10 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
         args: [value.creator, value.covenantId],
       });
       if (result.rowsAffected !== 1) {
-        await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+        await transaction.execute({
+          sql: "DELETE FROM prepared_memberships WHERE id=?",
+          args: [id],
+        });
         await transaction.commit();
         return "DUPLICATE";
       }
@@ -598,7 +674,10 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
         sql: `UPDATE creator_covenant_history SET status='CANCELED' WHERE creator=? AND covenant_id=?`,
         args: [value.creator, value.covenantId],
       });
-      await transaction.execute({ sql: "DELETE FROM prepared_memberships WHERE id=?", args: [id] });
+      await transaction.execute({
+        sql: "DELETE FROM prepared_memberships WHERE id=?",
+        args: [id],
+      });
       await transaction.commit();
       return "CREATED";
     } catch (error) {
@@ -685,17 +764,23 @@ const purchaseFromRow = (r: Record<string, unknown>): Purchase => ({
   buyer: text(r.buyer),
   transactionId: text(r.transaction_id),
 });
+const nullableNumber = (value: unknown): number | null =>
+  value === null || value === undefined ? null : number(value);
 const paymentWorkflowFromRow = (r: Record<string, unknown>): PaymentWorkflow => ({
   preparedPaymentId: text(r.prepared_payment_id),
   state: paymentWorkflowState(text(r.state)),
   transactionId: text(r.transaction_id),
   rejection: r.rejection === null ? null : text(r.rejection),
+  submittedAt: nullableNumber(r.submitted_at),
+  finalizedAt: nullableNumber(r.finalized_at),
 });
 const membershipWorkflowFromRow = (r: Record<string, unknown>): MembershipWorkflow => ({
   preparedMembershipId: text(r.prepared_membership_id),
   state: membershipWorkflowState(text(r.state)),
   transactionId: text(r.transaction_id),
   rejection: r.rejection === null ? null : text(r.rejection),
+  submittedAt: nullableNumber(r.submitted_at),
+  finalizedAt: nullableNumber(r.finalized_at),
 });
 const creatorCovenantFromRow = (r: Record<string, unknown>): CreatorCovenant => ({
   creator: text(r.creator),
