@@ -18,6 +18,7 @@ import {
   prepareSubscription,
   unlockPost,
 } from "./purchase.js";
+import { Icon } from "./Icons.js";
 import { PostTile, PostTileAction, PostTileMedia } from "./PostTile.js";
 import { Spinner } from "./Spinner.js";
 import { Toast, useToast } from "./Toast.js";
@@ -331,43 +332,43 @@ export function CreatorPage({
           )}
         </div>
         {showSubscription && (
-          <div className="access-strip">
+          <div className={owner ? "access-strip is-owner" : "access-strip"}>
             <p className="access-facts">
+              Subscription ·{" "}
               {currentCreator.membership.priceSompi
                 ? `${formatKas(currentCreator.membership.priceSompi)} KAS · 30 days`
-                : COPY.membershipAccess}
+                : "30 days"}
             </p>
-            {owner && currentCreator.membership.offered && (
-              <span className="access-note">
-                Existing memberships keep their expiry.
-              </span>
-            )}
             {!owner && currentCreator.membership.offered && currentCreator.membership.priceSompi && (
               <MembershipPaymentDetails priceSompi={currentCreator.membership.priceSompi} />
             )}
-            <SubscriptionAction
-              membership={currentCreator.membership}
-              owner={owner}
-              stage={busy}
-              disabled={busy !== null || signingIn}
-              price={membershipPrice}
-              onPriceChange={setMembershipPrice}
-              onAction={() =>
-                void (owner && currentCreator.membership.offered
-                  ? updateMembershipPrice()
-                  : membershipAction())
-              }
-            />
-            {owner && currentCreator.membership.offered && (
-              <button
-                className="text-button danger-action"
-                type="button"
+            <div className="access-actions">
+              <SubscriptionAction
+                membership={currentCreator.membership}
+                owner={owner}
+                stage={busy}
                 disabled={busy !== null || signingIn}
-                onClick={() => void cancelMembership()}
-              >
-                Close subscription permanently
-              </button>
-            )}
+                price={membershipPrice}
+                onPriceChange={setMembershipPrice}
+                onAction={() =>
+                  owner && currentCreator.membership.offered
+                    ? updateMembershipPrice()
+                    : membershipAction()
+                }
+              />
+              {owner && currentCreator.membership.offered && (
+                <button
+                  className="icon-button danger-icon"
+                  type="button"
+                  disabled={busy !== null || signingIn}
+                  onClick={() => void cancelMembership()}
+                  aria-label="Delete subscription"
+                  title="Delete subscription"
+                >
+                  <Icon name="trash" />
+                </button>
+              )}
+            </div>
           </div>
         )}
         <div className="creator-posts">
@@ -422,13 +423,15 @@ function SubscriptionAction({
   disabled: boolean;
   price: string;
   onPriceChange: (value: string) => void;
-  onAction: () => void;
+  onAction: () => Promise<void>;
 }) {
+  const [editing, setEditing] = useState(false);
+
   if (membership.active)
     return (
       <div className="subscription-renewal">
         <span className="access-status">Subscribed</span>
-        <button className="secondary" disabled={disabled} onClick={onAction}>
+        <button className="secondary" disabled={disabled} onClick={() => void onAction()}>
           {stage !== null && <Spinner />}
           Renew for 30 days
         </button>
@@ -438,30 +441,79 @@ function SubscriptionAction({
     return <span className="access-status">Subscription closed</span>;
   if (!owner && !membership.offered)
     return <span className="access-status">Subscription live</span>;
-  if (owner)
+  if (!owner)
+    return (
+      <button className="primary" disabled={disabled} onClick={() => void onAction()}>
+        {stage !== null && <Spinner />}
+        {subscriptionLabel(owner, stage)}
+      </button>
+    );
+
+  const updating = membership.offered;
+  const priceField = (
+    <span className="price-input subscription-price">
+      <input
+        inputMode="decimal"
+        value={price}
+        onChange={(event) => onPriceChange(event.target.value)}
+        disabled={disabled}
+        aria-label="Monthly subscription price in KAS"
+      />
+      <span className="price-unit">KAS</span>
+    </span>
+  );
+
+  if (updating && editing)
     return (
       <div className="subscription-form">
-        <label>
-          Monthly price (KAS)
-          <input
-            inputMode="decimal"
-            value={price}
-            onChange={(event) => onPriceChange(event.target.value)}
-            disabled={disabled}
-            aria-label="Monthly subscription price in KAS"
-          />
-        </label>
-        <button className="primary" disabled={disabled} onClick={onAction}>
-          {stage !== null && <Spinner />}
-          {membership.offered ? "Update price" : subscriptionLabel(owner, stage)}
+        {priceField}
+        <button
+          className="icon-button"
+          disabled={disabled}
+          onClick={() =>
+            void onAction().then(() => setEditing(false))
+          }
+          aria-label="Save price"
+          title="Save price"
+        >
+          {stage !== null ? <Spinner /> : <Icon name="check" />}
+        </button>
+        <button
+          className="icon-button"
+          type="button"
+          disabled={stage !== null}
+          onClick={() => setEditing(false)}
+          aria-label="Cancel"
+          title="Cancel"
+        >
+          <span className="icon-button-glyph" aria-hidden="true">
+            &times;
+          </span>
         </button>
       </div>
     );
+
+  if (updating)
+    return (
+      <button
+        className="icon-button"
+        disabled={disabled}
+        onClick={() => setEditing(true)}
+        aria-label="Update price"
+        title="Update price"
+      >
+        <Icon name="edit" />
+      </button>
+    );
+
   return (
-    <button className="primary" disabled={disabled} onClick={onAction}>
-      {stage !== null && <Spinner />}
-      {subscriptionLabel(owner, stage)}
-    </button>
+    <div className="subscription-form">
+      {priceField}
+      <button className="primary" disabled={disabled} onClick={() => void onAction()}>
+        {stage !== null && <Spinner />}
+        {subscriptionLabel(owner, stage)}
+      </button>
+    </div>
   );
 }
 
@@ -535,13 +587,14 @@ function PostCard({
           )}
           {owner && (
             <button
-              className="delete-post"
+              className="icon-button danger-icon"
               type="button"
               disabled={deleting}
               onClick={() => onDelete(post)}
+              aria-label="Delete"
+              title="Delete"
             >
-              {deleting && <Spinner />}
-              {deleting ? "Deleting..." : "Delete"}
+              {deleting ? <Spinner /> : <Icon name="trash" />}
             </button>
           )}
         </PostTileAction>

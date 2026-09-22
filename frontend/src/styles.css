@@ -435,12 +435,43 @@ h2 {
   text-underline-offset: 0.25em;
 }
 
-.danger-action {
-  color: #b42318;
-}
 .text-button:hover,
 .text-button:focus-visible {
   color: var(--acid-strong);
+}
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--paper);
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+.icon-button:hover:not(:disabled),
+.icon-button:focus-visible {
+  border-color: var(--acid);
+  color: var(--acid);
+}
+.danger-icon:hover:not(:disabled),
+.danger-icon:focus-visible {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.icon-button .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.icon-button-glyph {
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
 /* Forms */
@@ -1114,12 +1145,19 @@ progress {
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
+.access-strip.is-owner {
+  flex-wrap: nowrap;
+}
 .access-facts {
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   color: var(--paper);
   font:
     500 0.82rem "DM Mono",
     monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .access-note {
   color: var(--muted);
@@ -1136,6 +1174,13 @@ progress {
 .access-strip .primary {
   min-height: 2.75rem;
   padding: 0.7rem 1.1rem;
+}
+.access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 .subscription-form {
   display: flex;
@@ -1163,6 +1208,27 @@ progress {
   font:
     500 0.9rem "DM Mono",
     monospace;
+}
+.subscription-form {
+  align-items: center;
+}
+.subscription-price {
+  width: 11rem;
+  min-height: 2.75rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--line);
+  background: var(--ink);
+}
+.subscription-price input {
+  width: auto;
+  min-height: 2.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: right;
+}
+.subscription-price input:focus-visible {
+  outline: none;
 }
 .post-grid {
   margin-top: 3rem;
@@ -1650,6 +1716,9 @@ main:has(.message.is-centered) {
   }
   h1 {
     font-size: clamp(1.9rem, 9vw, 2.6rem);
+  }
+  .access-strip.is-owner {
+    flex-wrap: wrap;
   }
   .post-card {
     grid-template-columns: auto minmax(0, 1fr);

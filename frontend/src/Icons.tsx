@@ -1,9 +1,15 @@
 import type { ReactNode } from "react";
 
-type IconName = "check" | "image-plus" | "search" | "user";
+type IconName = "check" | "edit" | "image-plus" | "search" | "trash" | "user";
 
 const paths: Record<IconName, ReactNode> = {
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  edit: (
+    <>
+      <path d="M4 20h4L19.5 8.5l-4-4L4 16v4Z" />
+      <path d="m14.5 6.5 4 4" />
+    </>
+  ),
   "image-plus": (
     <>
       <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -15,6 +21,13 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <circle cx="11" cy="11" r="6.5" />
       <path d="m16 16 4 4" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M10 7V4h4v3" />
+      <path d="M6.5 7 7.5 20h9L17.5 7" />
     </>
   ),
   user: (
