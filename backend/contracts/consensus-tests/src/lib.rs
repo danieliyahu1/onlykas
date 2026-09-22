@@ -301,4 +301,155 @@ fn compile(creator: &[u8], platform: &[u8]) -> CompiledContract<'static> {
         );
         assert_eq!(execute(&unsigned, &entries, 0), Ok(()));
     }
+
+    fn mint_transaction(
+        compiled: &CompiledContract,
+        minter: &[u8],
+        _member: &[u8],
+        entries: &[UtxoEntry],
+        outputs: Vec<TransactionOutput>,
+    ) -> Transaction {
+        let creator_key = key(1).x_only_public_key().0.serialize();
+        let platform_key = key(3).x_only_public_key().0.serialize();
+        let buyer_key = key(2).x_only_public_key().0.serialize();
+        let unsigned = Transaction::new(
+            1,
+            vec![
+                TransactionInput::new_with_compute_budget(
+                    TransactionOutpoint { transaction_id: TransactionId::from_bytes([1; 32]), index: 0 },
+                    covenant_signature_script(compiled, minter, &creator_key, &platform_key, &buyer_key),
+                    0,
+                    COMPUTE_BUDGET,
+                ),
+                TransactionInput::new_with_compute_budget(
+                    TransactionOutpoint { transaction_id: TransactionId::from_bytes([2; 32]), index: 0 },
+                    vec![],
+                    0,
+                    COMPUTE_BUDGET,
+                ),
+            ],
+            outputs,
+            DAA,
+            Default::default(),
+            0,
+            vec![],
+        );
+        let mut inputs = unsigned.inputs.clone();
+        inputs[1].signature_script = buyer_signature(&unsigned, entries, &key(2));
+        Transaction::new(1, inputs, unsigned.outputs, DAA, Default::default(), 0, vec![])
+    }
+
+    fn mint_fixture() -> (CompiledContract<'static>, Vec<u8>, Vec<u8>, Vec<UtxoEntry>) {
+        let creator_key = key(1).x_only_public_key().0.serialize();
+        let platform_key = key(3).x_only_public_key().0.serialize();
+        let buyer_key = key(2).x_only_public_key().0.serialize();
+        let compiled = compile(&creator_key, &platform_key);
+        let minter = state(&compiled, &creator_key, &platform_key, &creator_key, 0, PRICE as i64, true);
+        let member = state(&compiled, &creator_key, &platform_key, &buyer_key, EXPIRY, PRICE as i64, false);
+        let buyer_spk = p2pk(&buyer_key);
+        let entries = vec![
+            UtxoEntry::new(DEPOSIT, pay_to_script_hash_script(&minter), 1, false, Some(COVENANT_ID)),
+            UtxoEntry::new(1_200_000_000, buyer_spk, 1, false, None),
+        ];
+        (compiled, minter, member, entries)
+    }
+
+    fn valid_mint_outputs(minter: &[u8], member: &[u8]) -> Vec<TransactionOutput> {
+        let creator_key = key(1).x_only_public_key().0.serialize();
+        let buyer_key = key(2).x_only_public_key().0.serialize();
+        let buyer_spk = p2pk(&buyer_key);
+        vec![
+            TransactionOutput { value: DEPOSIT, script_public_key: pay_to_script_hash_script(minter), covenant: Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID }) },
+            TransactionOutput { value: DEPOSIT, script_public_key: pay_to_script_hash_script(member), covenant: Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID }) },
+            TransactionOutput { value: PRICE, script_public_key: p2pk(&creator_key), covenant: None },
+            TransactionOutput { value: DEPOSIT, script_public_key: buyer_spk.clone(), covenant: None },
+            TransactionOutput { value: 100_000_000, script_public_key: buyer_spk, covenant: None },
+        ]
+    }
+
+    #[test]
+    fn mint_rejects_underpayment_to_the_creator() {
+        let (compiled, minter, member, entries) = mint_fixture();
+        let mut outputs = valid_mint_outputs(&minter, &member);
+        outputs[2].value = PRICE - 1;
+        assert_eq!(
+            execute(&mint_transaction(&compiled, &minter, &member, &entries, outputs), &entries, 0),
+            Err(TxScriptError::VerifyError),
+        );
+    }
+
+    #[test]
+    fn mint_rejects_payment_sent_to_the_wrong_key() {
+        let (compiled, minter, member, entries) = mint_fixture();
+        let attacker_key = key(9).x_only_public_key().0.serialize();
+        let mut outputs = valid_mint_outputs(&minter, &member);
+        outputs[2].script_public_key = p2pk(&attacker_key);
+        assert_eq!(
+            execute(&mint_transaction(&compiled, &minter, &member, &entries, outputs), &entries, 0),
+            Err(TxScriptError::VerifyError),
+        );
+    }
+
+    #[test]
+    fn mint_rejects_an_output_that_is_not_the_member_output() {
+        let (compiled, minter, member, entries) = mint_fixture();
+        let mut outputs = valid_mint_outputs(&minter, &member);
+        // A member-shaped output at a non-designated index must not satisfy the
+        // covenant; only the contract-selected member output carries the state.
+        outputs[4].script_public_key = pay_to_script_hash_script(&member);
+        outputs[4].covenant = Some(CovenantBinding { authorizing_input: 0, covenant_id: COVENANT_ID });
+        assert_eq!(
+            execute(&mint_transaction(&compiled, &minter, &member, &entries, outputs), &entries, 0),
+            Err(TxScriptError::VerifyError),
+        );
+    }
+
+    #[test]
+    fn mint_rejects_when_the_state_is_not_a_minter() {
+        let (compiled, minter, member, entries) = mint_fixture();
+        let creator_key = key(1).x_only_public_key().0.serialize();
+        // A spent non-minter state cannot authorize a new membership.
+        let non_minter = state(&compiled, &creator_key, &key(3).x_only_public_key().0.serialize(), &key(2).x_only_public_key().0.serialize(), EXPIRY, PRICE as i64, false);
+        let mut swapped = entries.clone();
+        swapped[0] = UtxoEntry::new(DEPOSIT, pay_to_script_hash_script(&non_minter), 1, false, Some(COVENANT_ID));
+        assert!(
+            execute(&mint_transaction(&compiled, &minter, &member, &swapped, valid_mint_outputs(&minter, &member)), &swapped, 0).is_err(),
+            "a non-minter state must not authorize a mint",
+        );
+    }
+
+    #[test]
+    fn mint_rejects_a_member_state_that_outlives_the_contract_lifetime() {
+        let (compiled, minter, _member, entries) = mint_fixture();
+        let creator_key = key(1).x_only_public_key().0.serialize();
+        let platform_key = key(3).x_only_public_key().0.serialize();
+        let buyer_key = key(2).x_only_public_key().0.serialize();
+        // Expiry beyond DAA + lifetime is not a valid mint window.
+        let overlong = state(&compiled, &creator_key, &platform_key, &buyer_key, DAA as i64 + 26_420_000 + 1, PRICE as i64, false);
+        assert_eq!(
+            execute(&mint_transaction(&compiled, &minter, &overlong, &entries, valid_mint_outputs(&minter, &overlong)), &entries, 0),
+            Err(TxScriptError::VerifyError),
+        );
+    }
+
+    #[test]
+    fn standalone_member_state_cannot_be_spent_as_a_mint() {
+        // An attacker can build a member-shaped UTXO outside the creator's
+        // covenant family. Spending it as if it were a minter must fail, so a
+        // forged state cannot mint or transfer membership on chain.
+        let creator_key = key(1).x_only_public_key().0.serialize();
+        let platform_key = key(3).x_only_public_key().0.serialize();
+        let buyer_key = key(2).x_only_public_key().0.serialize();
+        let compiled = compile(&creator_key, &platform_key);
+        let forged = state(&compiled, &creator_key, &platform_key, &buyer_key, EXPIRY, PRICE as i64, false);
+        let entries = vec![
+            UtxoEntry::new(DEPOSIT, pay_to_script_hash_script(&forged), 1, false, Some(COVENANT_ID)),
+            UtxoEntry::new(1_000_000_000, p2pk(&buyer_key), 1, false, None),
+        ];
+        let tx = mint_transaction(&compiled, &forged, &forged, &entries, valid_mint_outputs(&forged, &forged));
+        assert!(
+            execute(&tx, &entries, 0).is_err(),
+            "a forged member state must not be spendable as a minter",
+        );
+    }
 }
