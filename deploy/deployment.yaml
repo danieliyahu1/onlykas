@@ -62,19 +62,13 @@ spec:
                 secretKeyRef:
                   name: onlykas-secrets
                   key: R2_SECRET_ACCESS_KEY
-            # The platform fee wallet follows KASPA_NETWORK: the process reads
-            # only the entry that matches the selected network. Both keys come
-            # from the same Secret, so a network switch needs no manifest change.
+            # Production runs on mainnet, so only the mainnet platform fee
+            # wallet is configured; it must match KASPA_NETWORK.
             - name: PLATFORM_FEE_ADDRESS_MAINNET
               valueFrom:
                 secretKeyRef:
                   name: onlykas-platform-fee-address
                   key: mainnet
-            - name: PLATFORM_FEE_ADDRESS_TESTNET_10
-              valueFrom:
-                secretKeyRef:
-                  name: onlykas-platform-fee-address
-                  key: testnet-10
             - name: TELEGRAM_FEEDBACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
