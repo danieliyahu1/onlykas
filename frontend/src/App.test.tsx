@@ -159,7 +159,7 @@ describe("session and wallet reconciliation", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the session and prompts when the wallet is on the wrong network", async () => {
+  it("keeps the session when the wallet changes network on its own", async () => {
     const wallet = installWallet({
       getAccounts: vi.fn(async () => [signedInAddress]),
     });
@@ -171,7 +171,8 @@ describe("session and wallet reconciliation", () => {
     wallet.getNetwork.mockResolvedValue("kaspa_mainnet");
     handlers.networkChanged?.();
 
-    expect(await screen.findByText(COPY.wrongNetwork)).toBeInTheDocument();
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith("/api/profile"));
+    expect(screen.queryByText(COPY.wrongNetwork)).not.toBeInTheDocument();
     expect(apiMock).not.toHaveBeenCalledWith("/api/auth/logout", expect.anything());
     expect(screen.getByText(/Hi,/i)).toBeInTheDocument();
     expect(reloadMock).not.toHaveBeenCalled();

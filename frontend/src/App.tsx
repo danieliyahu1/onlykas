@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import type { ProfileResponse } from "@onlykas/shared";
-import { walletNetworkName } from "./app-config.js";
 import { COPY } from "./copy.js";
 import {
   authenticate,
@@ -113,11 +112,7 @@ export function App() {
         if (!walletAddress) return;
         if (!sameAddress(walletAddress, signedIn)) {
           await signOut();
-          return;
         }
-        const network = walletNetworkName();
-        const activeNetwork = await wallet.getNetwork().catch(() => network);
-        if (activeNetwork !== network) showToast(COPY.wrongNetwork, "notice");
       } finally {
         reconciling = false;
       }
