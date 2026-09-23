@@ -1812,9 +1812,7 @@ main:has(.single-post) {
   align-self: flex-start;
   margin-top: clamp(0.5rem, 1.5vh, 1rem);
   color: var(--muted);
-  font:
-    0.78rem "DM Mono",
-    monospace;
+  font-size: 0.92rem;
 }
 .creator-link:hover,
 .creator-link:focus-visible {

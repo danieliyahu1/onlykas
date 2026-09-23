@@ -9,7 +9,7 @@ import { LockIcon } from "./Icons.js";
 import { MediaTypeBadge } from "./MediaTypeBadge.js";
 import { HomeLink, Message } from "./Message.js";
 import { errorText } from "./errors.js";
-import { formatKas, relativeTime, shortenAddress } from "./format.js";
+import { formatKas, relativeTime } from "./format.js";
 import { PostMedia } from "./PostMedia.js";
 import { PreviewImage } from "./PreviewImage.js";
 import { previewUrl } from "./preview-url.js";
@@ -142,7 +142,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
           )}
         </div>
         <Link className="creator-link" to={creatorPath(currentPost.creator)}>
-          View creator · {shortenAddress(currentPost.creator)}
+          More from this creator
         </Link>
       </article>
       <Toast toast={toast} onDismiss={dismissToast} />
