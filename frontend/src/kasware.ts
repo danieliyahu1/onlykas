@@ -76,6 +76,16 @@ export const NETWORK_SWITCH_REQUIRED_EVENT = "onlykas:network-switch-required";
 /** The wallet landed on the right network; the detail is its display name. */
 export const NETWORK_SWITCHED_EVENT = "onlykas:network-switched";
 
+/**
+ * True while an action is opening the wallet's switcher. The background wallet
+ * listener checks this so it stays quiet and lets the action own the message.
+ */
+let switchingNetwork = false;
+
+export function isSwitchingNetwork(): boolean {
+  return switchingNetwork;
+}
+
 function announce(event: string, detail?: string) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -96,10 +106,15 @@ export async function ensureWalletNetwork(): Promise<void> {
   const expected = walletNetworkName();
   if ((await wallet.getNetwork()) === expected) return;
 
-  announce(NETWORK_SWITCH_REQUIRED_EVENT);
-  const approved = await requestNetworkSwitch(wallet, expected);
-  if (!approved) throw new WalletError(COPY.wrongNetwork);
-  announce(NETWORK_SWITCHED_EVENT, networkDisplayName());
+  switchingNetwork = true;
+  try {
+    announce(NETWORK_SWITCH_REQUIRED_EVENT);
+    const approved = await requestNetworkSwitch(wallet, expected);
+    if (!approved) throw new WalletError(COPY.wrongNetwork);
+    announce(NETWORK_SWITCHED_EVENT, networkDisplayName());
+  } finally {
+    switchingNetwork = false;
+  }
 }
 
 async function requestNetworkSwitch(

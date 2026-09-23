@@ -8,6 +8,7 @@ import {
   NETWORK_SWITCHED_EVENT,
   api,
   authenticate,
+  ensureWalletNetwork,
   type Kasware,
 } from "./kasware.js";
 import { reloadPage } from "./navigation.js";
@@ -159,7 +160,7 @@ describe("session and wallet reconciliation", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps the session when the wallet changes network on its own", async () => {
+  it("keeps the session and prompts when the wallet is on the wrong network", async () => {
     const wallet = installWallet({
       getAccounts: vi.fn(async () => [signedInAddress]),
     });
@@ -171,8 +172,7 @@ describe("session and wallet reconciliation", () => {
     wallet.getNetwork.mockResolvedValue("kaspa_mainnet");
     handlers.networkChanged?.();
 
-    await waitFor(() => expect(apiMock).toHaveBeenCalledWith("/api/profile"));
-    expect(screen.queryByText(COPY.wrongNetwork)).not.toBeInTheDocument();
+    expect(await screen.findByText(COPY.wrongNetwork)).toBeInTheDocument();
     expect(apiMock).not.toHaveBeenCalledWith("/api/auth/logout", expect.anything());
     expect(screen.getByText(/Hi,/i)).toBeInTheDocument();
     expect(reloadMock).not.toHaveBeenCalled();
@@ -207,6 +207,33 @@ describe("session and wallet reconciliation", () => {
     });
 
     expect(await screen.findByText(COPY.wrongNetwork)).toBeInTheDocument();
+  });
+
+  it("keeps one toast when a passive network change overlaps an action", async () => {
+    const wallet = installWallet({
+      getAccounts: vi.fn(async () => [signedInAddress]),
+      getNetwork: vi.fn(async () => "kaspa_mainnet"),
+    });
+    mockApi({ session: { address: signedInAddress } });
+
+    render(<App />);
+    expect(await screen.findByText(/Hi,/i)).toBeInTheDocument();
+
+    let network = "kaspa_mainnet";
+    wallet.getNetwork.mockImplementation(async () => network);
+    const switching = ensureWalletNetwork().catch(() => undefined);
+    await waitFor(() => expect(wallet.switchNetwork).toHaveBeenCalled());
+
+    act(() => {
+      handlers.networkChanged?.();
+    });
+
+    await waitFor(() => expect(screen.getAllByText(COPY.wrongNetwork)).toHaveLength(1));
+
+    network = walletNetwork;
+    handlers.networkChanged?.();
+    await switching;
+    expect(screen.getAllByText(COPY.wrongNetwork)).toHaveLength(1);
   });
 
   it("confirms a successful network switch by its display name", async () => {
