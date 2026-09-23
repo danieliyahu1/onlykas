@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { isVideoMedia, type PostResponse } from "@onlykas/shared";
+import { type PostResponse } from "@onlykas/shared";
 import { api } from "./kasware.js";
 import { unlockPost } from "./purchase.js";
 import { Toast, useToast } from "./Toast.js";
@@ -9,7 +9,7 @@ import { LockIcon } from "./Icons.js";
 import { HomeLink, Message } from "./Message.js";
 import { errorText } from "./errors.js";
 import { formatKas, shortenAddress } from "./format.js";
-import { VideoPlayer } from "./VideoPlayer.js";
+import { PostMedia } from "./PostMedia.js";
 import type { WalletProps } from "./wallet.js";
 import { creatorPath } from "./creator-url.js";
 
@@ -18,7 +18,6 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const location = useLocation();
   const [post, setPost] = useState<PostResponse | null>(null);
   const [busy, setBusy] = useState<null | "approval" | "unlock">(null);
-  const [mediaError, setMediaError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { toast, showToast, dismissToast } = useToast();
@@ -41,7 +40,6 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   useEffect(() => {
     setPost(null);
     setLoading(true);
-    setMediaError(false);
     setLoadError(null);
     void loadPost();
   }, [address, loadPost]);
@@ -99,10 +97,6 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
     }
   }
 
-  const isVideo = isVideoMedia(currentPost.mediaType);
-  const mediaLabel = currentPost.caption || (isVideo ? "Video" : "Photo");
-  const mediaUrl = `/api/posts/${encodeURIComponent(currentPost.id)}/media`;
-
   return (
     <>
       <article className="single-post">
@@ -110,25 +104,8 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
           <h1 className="caption">{currentPost.caption}</h1>
         )}
         <div className="post-stage">
-          {currentPost.canView && !mediaError ? (
-            isVideo ? (
-              <VideoPlayer
-                src={mediaUrl}
-                label={mediaLabel}
-                onError={() => setMediaError(true)}
-              />
-            ) : (
-              <img
-                className="post-media"
-                src={mediaUrl}
-                alt={mediaLabel}
-                onError={() => setMediaError(true)}
-              />
-            )
-          ) : mediaError ? (
-            <p className="feedback inline" role="alert">
-              This media isn&apos;t available right now.
-            </p>
+          {currentPost.canView ? (
+            <PostMedia key={currentPost.id} post={currentPost} />
           ) : (
             <div className="post-locked">
               <LockIcon open={false} />

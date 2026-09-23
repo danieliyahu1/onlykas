@@ -202,7 +202,7 @@ describe("CreatorPage subscription actions", () => {
     );
   });
 
-  it("links each post's media to the post page", async () => {
+  it("shows unlocked media inline and links only locked media to the post page", async () => {
     vi.mocked(api).mockResolvedValueOnce({
       ...creator(false, true),
       posts: [
@@ -215,8 +215,47 @@ describe("CreatorPage subscription actions", () => {
     const mediaLinks = await screen.findAllByRole("link", { name: "Open post" });
     expect(mediaLinks.map((link) => link.getAttribute("href"))).toEqual([
       "/post/locked-post",
-      "/post/open-post",
     ]);
+    expect(screen.getByRole("img", { name: "Open one" })).toHaveAttribute(
+      "src",
+      "/api/posts/open-post/media",
+    );
+  });
+
+  it("plays a free video inline on the profile", async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(false, true),
+      posts: [
+        {
+          ...post("free-video", "A free clip", true),
+          priceSompi: "0",
+          mediaType: "video/mp4",
+        },
+      ],
+    });
+    renderCreator(null);
+
+    const player = await screen.findByRole("group", { name: "A free clip video" });
+    expect(player.querySelector("video")).toHaveAttribute(
+      "src",
+      "/api/posts/free-video/media",
+    );
+  });
+
+  it("keeps a locked video behind a lock overlay", async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(false, true),
+      posts: [{ ...post("locked-video", "Locked clip", false), mediaType: "video/mp4" }],
+    });
+    renderCreator(null);
+
+    expect(await screen.findByRole("link", { name: "Open post" })).toHaveAttribute(
+      "href",
+      "/post/locked-video",
+    );
+    expect(
+      screen.queryByRole("group", { name: "Locked clip video" }),
+    ).not.toBeInTheDocument();
   });
 
   it("buys a locked post directly from the profile card", async () => {
@@ -244,6 +283,10 @@ describe("CreatorPage subscription actions", () => {
     expect(await screen.findByRole("link", { name: /watch/i })).toHaveAttribute(
       "href",
       "/post/locked-post",
+    );
+    expect(screen.getByRole("img", { name: "Locked one" })).toHaveAttribute(
+      "src",
+      "/api/posts/locked-post/media",
     );
     expect(screen.getByText("Unlocked.")).toBeVisible();
   });

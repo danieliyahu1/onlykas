@@ -1344,6 +1344,26 @@ progress {
   height: 100%;
   object-fit: cover;
 }
+.post-tile-media .post-media,
+.post-tile-media .video-player {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #050807;
+}
+.post-tile-media .video-player {
+  border: 0;
+}
+.post-tile-media .feedback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  margin: 0;
+  padding: 1.5rem;
+}
 .post-tile-overlay {
   position: absolute;
   top: 50%;

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   isFreePost,
-  isVideoMedia,
   membershipFeeSompi,
   RETRY_AFTER_REFRESH,
   type CreatorResponse,
@@ -20,6 +19,7 @@ import {
 } from "./purchase.js";
 import { Icon } from "./Icons.js";
 import { PostTile, PostTileAction, PostTileMedia } from "./PostTile.js";
+import { PostMedia } from "./PostMedia.js";
 import { Spinner } from "./Spinner.js";
 import { Toast, useToast } from "./Toast.js";
 import { HomeLink, Message } from "./Message.js";
@@ -546,24 +546,25 @@ function PostCard({
 }) {
   const free = isFreePost(post.priceSompi);
   const unlocked = free || post.canView;
-  const isVideo = isVideoMedia(post.mediaType);
-  const mediaUrl = `/api/posts/${encodeURIComponent(post.id)}/media`;
+  const postPath = `/post/${encodeURIComponent(post.id)}`;
 
   return (
     <PostTile
       media={
-        <PostTileMedia
-          thumbnail={unlocked && !isVideo ? mediaUrl : undefined}
-          overlay={!unlocked ? "locked" : isVideo ? "video" : "none"}
-          to={`/post/${encodeURIComponent(post.id)}`}
-        />
+        unlocked ? (
+          <div className="post-tile-media">
+            <PostMedia post={post} />
+          </div>
+        ) : (
+          <PostTileMedia overlay="locked" to={postPath} />
+        )
       }
       caption={post.caption}
       date={relativeTime(post.publishedAt)}
       action={
         <PostTileAction>
           {unlocked ? (
-            <Link className="secondary" to={`/post/${post.id}`}>
+            <Link className="secondary" to={postPath}>
               {free ? "Watch · Free" : "Watch"}
             </Link>
           ) : (
