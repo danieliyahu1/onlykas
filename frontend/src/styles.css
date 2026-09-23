@@ -405,13 +405,13 @@ h2 {
 }
 .buy {
   border: 1px solid var(--acid);
-  background: transparent;
+  background: #49eacb66;
   color: var(--paper);
 }
 .buy:hover:not(:disabled),
 .buy:focus-visible {
-  background: #49eacb1f;
-  box-shadow: 0 0 0 3px #49eacb33;
+  background: transparent;
+  color: var(--acid);
 }
 .secondary {
   border: 1px solid var(--line);
