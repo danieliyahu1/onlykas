@@ -16,7 +16,7 @@ import {
   prepareSubscription,
   unlockPost,
 } from "./purchase.js";
-import { Icon } from "./Icons.js";
+import { Icon, LockIcon } from "./Icons.js";
 import { PostTile, PostTileAction, PostTileMedia } from "./PostTile.js";
 import { previewUrl } from "./preview-url.js";
 import { PostMedia } from "./PostMedia.js";
@@ -539,49 +539,48 @@ function PostCard({
             <PostMedia post={post} />
           </div>
         ) : (
-          <PostTileMedia
-            thumbnail={previewUrl(post.id)}
-            overlay="locked"
-            to={postPath}
-          />
+          <PostTileMedia thumbnail={previewUrl(post.id)} to={postPath}>
+            <div className="post-tile-locked">
+              <LockIcon open={false} />
+              <button
+                className="buy"
+                type="button"
+                disabled={busy}
+                onClick={() => onBuy(post)}
+              >
+                {busy && <Spinner />}
+                {approved
+                  ? "Unlocking..."
+                  : busy
+                    ? "Approve in wallet..."
+                    : `Unlock for ${formatKas(post.priceSompi)} KAS`}
+              </button>
+            </div>
+          </PostTileMedia>
         )
       }
       caption={post.caption}
       date={relativeTime(post.publishedAt)}
       action={
-        <PostTileAction>
-          {unlocked ? (
+        unlocked ? (
+          <PostTileAction>
             <Link className="secondary" to={postPath}>
               {free ? "Watch · Free" : "Watch"}
             </Link>
-          ) : (
-            <button
-              className="buy"
-              type="button"
-              disabled={busy}
-              onClick={() => onBuy(post)}
-            >
-              {busy && <Spinner />}
-              {approved
-                ? "Unlocking..."
-                : busy
-                  ? "Approve in wallet..."
-                  : `Unlock · ${formatKas(post.priceSompi)} KAS`}
-            </button>
-          )}
-          {owner && (
-            <button
-              className="icon-button danger-icon"
-              type="button"
-              disabled={deleting}
-              onClick={() => onDelete(post)}
-              aria-label="Delete"
-              title="Delete"
-            >
-              {deleting ? <Spinner /> : <Icon name="trash" />}
-            </button>
-          )}
-        </PostTileAction>
+            {owner && (
+              <button
+                className="icon-button danger-icon"
+                type="button"
+                disabled={deleting}
+                onClick={() => onDelete(post)}
+                aria-label="Delete"
+                title="Delete"
+              >
+                {deleting ? <Spinner /> : <Icon name="trash" />}
+              </button>
+            )}
+          </PostTileAction>
+        ) : undefined
       }
     />
   );

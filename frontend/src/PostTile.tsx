@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { LockIcon, VideoIcon } from "./Icons.js";
 import { PreviewImage } from "./PreviewImage.js";
-
-export type PostTileOverlay = "none" | "locked" | "video";
 
 export function PostTile({
   media,
@@ -14,7 +11,7 @@ export function PostTile({
   media: ReactNode;
   caption: string;
   date?: string | undefined;
-  action: ReactNode;
+  action?: ReactNode;
 }) {
   return (
     <article className="post-tile">
@@ -30,35 +27,29 @@ export function PostTile({
 
 export function PostTileMedia({
   thumbnail,
-  overlay,
   to,
+  children,
 }: {
   thumbnail?: string | undefined;
-  overlay: PostTileOverlay;
   to?: string | undefined;
+  children?: ReactNode;
 }) {
-  const content = (
-    <>
-      {thumbnail ? (
-        <PreviewImage className="post-tile-thumb" src={thumbnail} />
-      ) : null}
-      {overlay === "none" ? null : (
-        <span className={`post-tile-overlay is-${overlay}`}>
-          {overlay === "locked" ? <LockIcon open={false} /> : <VideoIcon name="play" />}
-        </span>
+  const image = thumbnail ? (
+    <PreviewImage className="post-tile-thumb" src={thumbnail} />
+  ) : null;
+
+  return (
+    <div className="post-tile-media">
+      {to ? (
+        <Link className="post-tile-media-link" to={to} aria-label="Open post">
+          {image}
+        </Link>
+      ) : (
+        image
       )}
-    </>
+      {children}
+    </div>
   );
-
-  if (to) {
-    return (
-      <Link className="post-tile-media is-link" to={to} aria-label="Open post">
-        {content}
-      </Link>
-    );
-  }
-
-  return <div className="post-tile-media">{content}</div>;
 }
 
 export function PostTileAction({ children }: { children: ReactNode }) {
