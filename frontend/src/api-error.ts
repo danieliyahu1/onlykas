@@ -18,6 +18,7 @@ export interface ApiErrorBody {
   message?: string | undefined;
   requestId?: string | undefined;
   retry?: ApiRetry | undefined;
+  errorFields?: string[] | undefined;
 }
 
 /**

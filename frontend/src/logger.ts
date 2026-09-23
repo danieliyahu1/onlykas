@@ -4,7 +4,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export type LogFields = Record<string, unknown>;
 
 const sensitiveKey =
-  /authorization|cookie|secret|token|password|signature|transaction|payload|url/i;
+  /authorization|cookie|secret|token|password|signature|transaction|payload|url|address/i;
 const development = import.meta.env.DEV;
 
 function redact(value: unknown, key?: string): unknown {
