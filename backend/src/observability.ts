@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 const sensitiveKey =
-  /authorization|cookie|secret|token|password|signature|transaction|payload|url/i;
+  /authorization|cookie|secret|token|password|signature|transaction|payload|url|address/i;
 const requestIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 
 export type LogLevel = "debug" | "info" | "warn" | "error";

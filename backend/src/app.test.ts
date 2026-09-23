@@ -110,6 +110,80 @@ describe("API request diagnostics", () => {
     });
     expect(events.some((entry) => "postId" in entry.fields)).toBe(false);
   });
+
+  it("names the failing field when a request body is invalid", async () => {
+    const { app, events } = testApp();
+
+    const response = await request(app)
+      .post("/api/auth/challenge")
+      .set("X-Request-Id", "validation-trace")
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(events).toContainEqual({
+      event: "validation_failed",
+      fields: expect.objectContaining({
+        level: "warn",
+        requestId: "validation-trace",
+        route: "/api/auth/challenge",
+        fields: ["address"],
+        issues: expect.arrayContaining([
+          expect.objectContaining({ path: "address" }),
+        ]),
+      }),
+    });
+    expect(events).toContainEqual({
+      event: "request_completed",
+      fields: expect.objectContaining({
+        requestId: "validation-trace",
+        statusCode: 400,
+        errorCode: "INVALID_REQUEST",
+        errorFields: ["address"],
+      }),
+    });
+  });
+
+  it("explains a wrong-network wallet address without logging it", async () => {
+    const address =
+      "kaspa:qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
+    const { app, events } = testApp();
+
+    const response = await request(app)
+      .post("/api/auth/challenge")
+      .set("X-Request-Id", "prefix-trace")
+      .send({ address });
+
+    expect(response.status).toBe(400);
+    expect(events).toContainEqual({
+      event: "challenge_rejected",
+      fields: expect.objectContaining({
+        level: "warn",
+        requestId: "prefix-trace",
+        problem: "wrong_prefix",
+        prefix: "kaspa",
+        expectedPrefix: "kaspatest",
+      }),
+    });
+    expect(JSON.stringify(events)).not.toContain(address);
+  });
+
+  it("resolves a rejected challenge request by its correlation id", async () => {
+    const { app, events } = testApp();
+
+    const response = await request(app)
+      .post("/api/auth/challenge")
+      .set("X-Request-Id", "resolve-trace")
+      .send({ address: "not-an-address" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.requestId).toBe("resolve-trace");
+    const trace = events.filter(
+      (entry) => entry.fields.requestId === "resolve-trace",
+    );
+    expect(trace.map((entry) => entry.event)).toEqual(
+      expect.arrayContaining(["validation_failed", "challenge_rejected", "request_completed"]),
+    );
+  });
 });
 
 describe("request metrics", () => {

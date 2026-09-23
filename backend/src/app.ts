@@ -58,6 +58,7 @@ import {
   requestId,
   type Logger,
 } from "./observability.js";
+import { diagnoseAddress } from "./adapters/http/address-diagnostic.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 import {
   MediaValidationError,
@@ -190,6 +191,9 @@ export function createApp(d: AppDependencies) {
           durationMs: Date.now() - startedAt,
           authenticated: Boolean(req.walletSession),
           ...(res.locals.apiErrorCode ? { errorCode: res.locals.apiErrorCode } : {}),
+          ...(res.locals.apiErrorFields
+            ? { errorFields: res.locals.apiErrorFields }
+            : {}),
           ...(req.params?.id ? { postId: req.params.id } : {}),
         });
       }
@@ -242,6 +246,17 @@ export function createApp(d: AppDependencies) {
   app.post(
     "/api/auth/challenge",
     asyncHandler(async (req, res) => {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      if (
+        typeof body.address !== "string" ||
+        !addressPattern.test(body.address)
+      ) {
+        logger.warn("challenge_rejected", {
+          requestId: req.requestId,
+          expectedPrefix: networkConfig.addressPrefix,
+          ...diagnoseAddress(body.address, networkConfig.addressPrefix),
+        });
+      }
       const b = z.object({ address: z.string().regex(addressPattern) }).parse(req.body);
       trusted(req, d.publicOrigin);
       await sessions.pruneChallenges(now());
@@ -1307,7 +1322,21 @@ export function createApp(d: AppDependencies) {
   );
   app.use((e: unknown, req: Request, res: Response, next: NextFunction) => {
     void next;
-    if (e instanceof z.ZodError) return apiError(res, 400, "INVALID_REQUEST");
+    if (e instanceof z.ZodError) {
+      const issues = e.issues.map(validationIssue);
+      logger.warn("validation_failed", {
+        requestId: req.requestId,
+        method: req.method,
+        path: req.path,
+        route: routePattern(req),
+        issueCount: issues.length,
+        fields: issues.map((issue) => issue.path),
+        issues,
+      });
+      return apiError(res, 400, "INVALID_REQUEST", undefined, {
+        errorFields: issues.map((issue) => issue.path),
+      });
+    }
     if (e instanceof HttpError) return apiError(res, e.status, e.code);
     const storageFailure = e instanceof StorageError;
     logger.error("request_failed", {
@@ -1418,6 +1447,7 @@ function apiError(
   extra?: Record<string, unknown>,
 ) {
   res.locals.apiErrorCode = code;
+  if (Array.isArray(extra?.errorFields)) res.locals.apiErrorFields = extra.errorFields;
   return res.status(status).json({
     error: code,
     message: message ?? `${code.toLowerCase().replaceAll("_", " ")}.`,
@@ -1428,6 +1458,31 @@ function apiError(
 function routePattern(req: Request) {
   const route = req.route?.path;
   return typeof route === "string" ? `${req.baseUrl}${route}` : undefined;
+}
+/**
+ * Distils a Zod issue into the facts a developer needs to debug a rejected
+ * request, while deliberately dropping any offending value (an address, a
+ * signature, a token) so validation logs never leak secrets.
+ */
+function validationIssue(issue: z.core.$ZodIssue) {
+  const details = issue as unknown as {
+    expected?: unknown;
+    received?: unknown;
+    validation?: unknown;
+    minimum?: unknown;
+    maximum?: unknown;
+  };
+  return {
+    path: issue.path.join(".") || "(root)",
+    code: issue.code,
+    ...(details.validation !== undefined
+      ? { validation: String(details.validation) }
+      : {}),
+    ...(details.expected !== undefined ? { expected: String(details.expected) } : {}),
+    ...(details.received !== undefined ? { received: String(details.received) } : {}),
+    ...(details.minimum !== undefined ? { minimum: String(details.minimum) } : {}),
+    ...(details.maximum !== undefined ? { maximum: String(details.maximum) } : {}),
+  };
 }
 /**
  * The covenant moved underneath the request. It is not a fault: another
