@@ -6,18 +6,26 @@ export function PostTile({
   media,
   caption,
   date,
+  to,
   action,
 }: {
   media: ReactNode;
   caption: string;
   date?: string | undefined;
+  to?: string | undefined;
   action?: ReactNode;
 }) {
   return (
     <article className="post-tile">
       {media}
       <div className="post-tile-copy">
-        <p>{caption}</p>
+        {to ? (
+          <Link className="post-tile-caption" to={to}>
+            {caption}
+          </Link>
+        ) : (
+          <p className="post-tile-caption">{caption}</p>
+        )}
         {date ? <span className="post-tile-date">{date}</span> : null}
       </div>
       {action}

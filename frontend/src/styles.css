@@ -1387,7 +1387,7 @@ progress {
   gap: 0.4rem;
   padding: 1rem 1.1rem;
 }
-.post-tile-copy p {
+.post-tile-caption {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -1398,6 +1398,10 @@ progress {
   font-weight: 400;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+a.post-tile-caption {
+  text-decoration: none;
+  cursor: pointer;
 }
 .post-tile-date {
   color: var(--paper);
@@ -1413,21 +1417,10 @@ progress {
   margin-top: auto;
   padding: 0 1.1rem 1.2rem;
 }
-.post-tile-action .primary,
-.post-tile-action .secondary {
+.post-tile-action .primary {
   flex: 1 1 auto;
   min-height: 2.75rem;
   padding: 0.7rem 1rem;
-}
-.post-tile-action .secondary {
-  border-color: var(--acid);
-}
-.post-tile-action .secondary:hover:not(:disabled),
-.post-tile-action .secondary:focus-visible {
-  background: #49eacb1f;
-  color: var(--acid);
-  box-shadow: none;
-  transform: none;
 }
 .post-tile-action .delete-post {
   flex: 0 0 auto;

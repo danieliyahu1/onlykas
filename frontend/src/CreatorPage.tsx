@@ -535,9 +535,9 @@ function PostCard({
     <PostTile
       media={
         unlocked ? (
-          <div className="post-tile-media">
+          <PostTileMedia>
             <PostMedia post={post} />
-          </div>
+          </PostTileMedia>
         ) : (
           <PostTileMedia thumbnail={previewUrl(post.id)} to={postPath}>
             <div className="post-tile-locked">
@@ -561,24 +561,20 @@ function PostCard({
       }
       caption={post.caption}
       date={relativeTime(post.publishedAt)}
+      to={postPath}
       action={
-        unlocked ? (
+        owner ? (
           <PostTileAction>
-            <Link className="secondary" to={postPath}>
-              {free ? "Watch · Free" : "Watch"}
-            </Link>
-            {owner && (
-              <button
-                className="icon-button danger-icon"
-                type="button"
-                disabled={deleting}
-                onClick={() => onDelete(post)}
-                aria-label="Delete"
-                title="Delete"
-              >
-                {deleting ? <Spinner /> : <Icon name="trash" />}
-              </button>
-            )}
+            <button
+              className="icon-button danger-icon"
+              type="button"
+              disabled={deleting}
+              onClick={() => onDelete(post)}
+              aria-label="Delete"
+              title="Delete"
+            >
+              {deleting ? <Spinner /> : <Icon name="trash" />}
+            </button>
           </PostTileAction>
         ) : undefined
       }

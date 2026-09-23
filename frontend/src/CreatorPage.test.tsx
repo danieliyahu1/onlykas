@@ -183,7 +183,7 @@ describe("CreatorPage subscription actions", () => {
     expect(screen.getByRole("button", { name: "Copy Kaspa address" })).toBeVisible();
   });
 
-  it("shows locked posts with an unlock action and unlocked posts with a watch link", async () => {
+  it("shows locked posts with an unlock action and links captions to the post", async () => {
     vi.mocked(api).mockResolvedValueOnce({
       ...creator(false, true),
       posts: [
@@ -195,8 +195,7 @@ describe("CreatorPage subscription actions", () => {
 
     expect(await screen.findByRole("button", { name: /unlock/i })).toBeVisible();
     expect(screen.getByText("Locked one")).toBeVisible();
-    expect(screen.getByText("Open one")).toBeVisible();
-    expect(screen.getByRole("link", { name: /watch/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Open one" })).toHaveAttribute(
       "href",
       "/post/open-post",
     );
@@ -294,7 +293,7 @@ describe("CreatorPage subscription actions", () => {
       method: "POST",
       body: JSON.stringify({ signedTransaction: "signed" }),
     });
-    expect(await screen.findByRole("link", { name: /watch/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Locked one" })).toHaveAttribute(
       "href",
       "/post/locked-post",
     );
