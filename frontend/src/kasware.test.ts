@@ -1,9 +1,11 @@
 import { DEFAULT_NETWORK, networkDefinition } from "@onlykas/shared";
 import { COPY } from "./copy.js";
+import { isNetworkRequired } from "./errors.js";
 import {
   NETWORK_SWITCH_REQUIRED_EVENT,
   NETWORK_SWITCHED_EVENT,
   SESSION_EXPIRED_EVENT,
+  WalletNetworkError,
   api,
   authenticate,
   ensureWalletNetwork,
@@ -224,7 +226,7 @@ describe("wallet network reconciliation", () => {
     window.removeEventListener(NETWORK_SWITCHED_EVENT, switched);
   });
 
-  it("releases the action when the network switch is rejected", async () => {
+  it("marks a rejected switch as a quiet network outcome, not a failure", async () => {
     const wallet = {
       getNetwork: vi.fn(async () => "kaspa_mainnet"),
       switchNetwork: vi.fn(async () => {
@@ -235,10 +237,13 @@ describe("wallet network reconciliation", () => {
     };
     window.kasware = wallet as unknown as Kasware;
 
-    await expect(ensureWalletNetwork()).rejects.toThrow(COPY.wrongNetwork);
+    const error = await ensureWalletNetwork().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(WalletNetworkError);
+    expect(isNetworkRequired(error)).toBe(true);
+    expect((error as Error).message).toBe(COPY.wrongNetwork);
   });
 
-  it("releases the action when the network is not switched in time", async () => {
+  it("ends quietly when the network is not switched in time", async () => {
     vi.useFakeTimers();
     const wallet = {
       getNetwork: vi.fn(async () => "kaspa_mainnet"),
@@ -248,9 +253,10 @@ describe("wallet network reconciliation", () => {
     };
     window.kasware = wallet as unknown as Kasware;
 
-    const pending = ensureWalletNetwork();
-    const assertion = expect(pending).rejects.toThrow(COPY.wrongNetwork);
+    const pending = ensureWalletNetwork().catch((caught: unknown) => caught);
     await vi.advanceTimersByTimeAsync(10_000);
-    await assertion;
+    const error = await pending;
+    expect(isNetworkRequired(error)).toBe(true);
+    expect((error as Error).message).toBe(COPY.wrongNetwork);
   });
 });

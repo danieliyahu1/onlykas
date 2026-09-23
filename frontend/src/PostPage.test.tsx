@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { PostResponse } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { PostPage } from "./PostPage.js";
-import { api, ApiError, signPreparedPayment } from "./kasware.js";
+import { api, ApiError, signPreparedPayment, WalletNetworkError } from "./kasware.js";
 import { consumerAddress, post } from "./test-fixtures.js";
 
 vi.mock("./kasware.js", async () => ({
@@ -223,6 +223,23 @@ describe("PostPage", () => {
     fireEvent.focus(window);
 
     expect(await screen.findByRole("img", { name: "A private moment" })).toBeVisible();
+    expect(api).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays quiet when the wallet needs a network switch", async () => {
+    vi.mocked(api)
+      .mockResolvedValueOnce(post("paid-post", "A paid moment", false))
+      .mockResolvedValueOnce({ id: "pay-1", transaction: "{}" });
+    vi.mocked(signPreparedPayment).mockRejectedValue(
+      new WalletNetworkError(COPY.wrongNetwork),
+    );
+    renderPost(post("paid-post", "A paid moment", false), consumerAddress);
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: /unlock for/i }));
+
+    expect(await screen.findByRole("button", { name: /unlock for/i })).toBeEnabled();
+    expect(screen.queryByText(COPY.wrongNetwork)).not.toBeInTheDocument();
     expect(api).toHaveBeenCalledTimes(2);
   });
 

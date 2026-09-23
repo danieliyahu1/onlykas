@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { CreatorPage } from "./CreatorPage.js";
 import { shortenAddress } from "./format.js";
-import { ApiError, api, signPreparedPayment } from "./kasware.js";
+import {
+  ApiError,
+  api,
+  signPreparedPayment,
+  WalletNetworkError,
+} from "./kasware.js";
+import { COPY } from "./copy.js";
 import {
   creator,
   creatorAddress,
@@ -118,6 +124,22 @@ describe("CreatorPage subscription actions", () => {
      await waitFor(() => expect(screen.getByText("Subscribed")).toBeVisible());
    });
  
+   it("stays quiet when the wallet needs a network switch", async () => {
+     vi.mocked(api)
+       .mockResolvedValueOnce(creator(false, true))
+       .mockResolvedValueOnce({ id: "purchase", transaction: "{}", signInputs: [1] });
+     vi.mocked(signPreparedPayment).mockRejectedValue(
+       new WalletNetworkError(COPY.wrongNetwork),
+     );
+     const user = userEvent.setup();
+     renderCreator(consumerAddress);
+
+     await user.click(await screen.findByRole("button", { name: "Subscribe" }));
+
+     expect(await screen.findByRole("button", { name: "Subscribe" })).toBeEnabled();
+     expect(screen.queryByText(COPY.wrongNetwork)).not.toBeInTheDocument();
+   });
+
    it("sends the price to the server and surfaces its rejection", async () => {
      vi.mocked(api)
        .mockResolvedValueOnce(creator(true, true))

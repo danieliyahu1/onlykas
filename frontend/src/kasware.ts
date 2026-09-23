@@ -70,6 +70,7 @@ export function walletOrNull(): Kasware | null {
 
 const NETWORK_SWITCH_TIMEOUT_MS = 10_000;
 const NETWORK_POLL_INTERVAL_MS = 500;
+const NETWORK_QUIET_WINDOW_MS = 1_000;
 
 /** The wallet needs a network switch and its switcher is being opened. */
 export const NETWORK_SWITCH_REQUIRED_EVENT = "onlykas:network-switch-required";
@@ -77,13 +78,24 @@ export const NETWORK_SWITCH_REQUIRED_EVENT = "onlykas:network-switch-required";
 export const NETWORK_SWITCHED_EVENT = "onlykas:network-switched";
 
 /**
- * True while an action is opening the wallet's switcher. The background wallet
- * listener checks this so it stays quiet and lets the action own the message.
+ * True from the moment an action opens the wallet's switcher until a short
+ * quiet window after it settles. The background wallet listener checks this so
+ * it stays quiet and lets the action own the message, even when the wallet
+ * re-announces the network just after the switch.
  */
 let switchingNetwork = false;
+let quietTimer: number | undefined;
 
 export function isSwitchingNetwork(): boolean {
   return switchingNetwork;
+}
+
+function holdQuietWindow(): void {
+  if (quietTimer !== undefined) window.clearTimeout(quietTimer);
+  quietTimer = window.setTimeout(() => {
+    switchingNetwork = false;
+    quietTimer = undefined;
+  }, NETWORK_QUIET_WINDOW_MS);
 }
 
 function announce(event: string, detail?: string) {
@@ -95,11 +107,14 @@ function announce(event: string, detail?: string) {
   );
 }
 
+export class WalletNetworkError extends WalletError {}
+
 /**
  * Blocks until the wallet is on the network the server selected. When a switch
  * is needed it opens the wallet's switcher, announces it for the UI, and gives
  * the user ten seconds to approve. A rejection, a dismissal, or the deadline
- * releases the action with a single `wrongNetwork` error.
+ * ends the action quietly: the user already has the wrong-network notice, so
+ * nothing more is said. Only a switch we could not start is a real error.
  */
 export async function ensureWalletNetwork(): Promise<void> {
   const wallet = kasware();
@@ -110,10 +125,10 @@ export async function ensureWalletNetwork(): Promise<void> {
   try {
     announce(NETWORK_SWITCH_REQUIRED_EVENT);
     const approved = await requestNetworkSwitch(wallet, expected);
-    if (!approved) throw new WalletError(COPY.wrongNetwork);
+    if (!approved) throw new WalletNetworkError(COPY.wrongNetwork);
     announce(NETWORK_SWITCHED_EVENT, networkDisplayName());
   } finally {
-    switchingNetwork = false;
+    holdQuietWindow();
   }
 }
 
@@ -179,8 +194,9 @@ export async function authenticate(): Promise<string> {
   try {
     logger.info("auth_switching_network", { network });
     await ensureWalletNetwork();
-  } catch {
+  } catch (caught) {
     logger.error("auth_network_switch_failed", { network });
+    if (caught instanceof WalletNetworkError) throw caught;
     throw new WalletError(COPY.wrongNetwork);
   }
   logger.info("auth_network_ready", { network });

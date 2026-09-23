@@ -1,4 +1,13 @@
 import { ApiError } from "./api-error.js";
+import { WalletNetworkError } from "./kasware.js";
+
+/**
+ * A wrong network is not a failure: the switching action already told the user.
+ * Callers use this to end quietly instead of repeating the notice as an error.
+ */
+export function isNetworkRequired(error: unknown): boolean {
+  return error instanceof WalletNetworkError;
+}
 
 /**
  * User-facing error text. Server faults carry a short reference so a report can

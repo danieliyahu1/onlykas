@@ -25,7 +25,7 @@ import { GlobalSearch } from "./GlobalSearch.js";
 import { AccountMenu } from "./AccountMenu.js";
 import { HomeLink, Message } from "./Message.js";
 import { Spinner } from "./Spinner.js";
-import { errorText } from "./errors.js";
+import { errorText, isNetworkRequired } from "./errors.js";
 import { Toast, useToast } from "./Toast.js";
 import { reloadPage } from "./navigation.js";
 
@@ -169,7 +169,8 @@ export function App() {
       setAddress(authenticatedAddress);
       return authenticatedAddress;
     } catch (error) {
-      showToast(errorText(error, COPY.verificationFailed), "error");
+      if (!isNetworkRequired(error))
+        showToast(errorText(error, COPY.verificationFailed), "error");
       return null;
     } finally {
       setSigningIn(false);
