@@ -258,6 +258,20 @@ describe("CreatorPage subscription actions", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the blurred preview behind the lock on a locked post card", async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(false, true),
+      posts: [post("locked-post", "Locked one", false)],
+    });
+    renderCreator(null);
+
+    const link = await screen.findByRole("link", { name: "Open post" });
+    expect(link.querySelector("img")).toHaveAttribute(
+      "src",
+      "/api/posts/locked-post/preview?v=8",
+    );
+  });
+
   it("buys a locked post directly from the profile card", async () => {
     vi.mocked(api)
       .mockResolvedValueOnce({

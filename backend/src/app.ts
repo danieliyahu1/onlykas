@@ -68,6 +68,11 @@ import { FeedbackError, type FeedbackService } from "./adapters/feedback/feedbac
 import { RateLimiter } from "./adapters/http/rate-limit.js";
 import { createPublishPostUseCase } from "./application/publication-use-cases.js";
 import { createDeletePostUseCase } from "./application/delete-post.js";
+import {
+  PREVIEW_CONTENT_TYPE,
+  type MediaPreview,
+} from "./application/media-preview.js";
+import { createMediaPreview } from "./adapters/media/media-preview.js";
 import { MembershipAccess } from "./application/membership-access.js";
 import { StorageError } from "./r2-storage.js";
 import { discardTempDir } from "./temp-files.js";
@@ -78,6 +83,7 @@ export interface AppDependencies {
   storage: ObjectStorage;
   walletVerifier: WalletVerifier;
   verifyMedia?: (path: string) => Promise<VerifiedMedia>;
+  mediaPreview?: MediaPreview;
   paymentGateway?: PaymentGateway;
   membershipGateway?: MembershipGateway;
   membershipVerifier?: MembershipVerifier;
@@ -145,6 +151,8 @@ export function createApp(d: AppDependencies) {
     storage: d.storage,
     logger,
   });
+  const mediaPreview =
+    d.mediaPreview ?? createMediaPreview({ storage: d.storage, logger });
   app.disable("x-powered-by");
   app.use((req, res, next) => {
     const startedHr = process.hrtime.bigint();
@@ -418,6 +426,8 @@ export function createApp(d: AppDependencies) {
           );
         }
         metrics.mediaPublished(result.post.mediaType, result.post.mediaSize);
+        // Warm the blurred preview without making the creator wait for it.
+        void mediaPreview.ensure(result.post);
         res.status(201).json({ id: result.post.id });
       } catch (e) {
         if (e instanceof MediaValidationError) {
@@ -1183,6 +1193,22 @@ export function createApp(d: AppDependencies) {
       const check = await d.membershipVerifier.verifyUtxo(tx, index, owner);
       metrics.membershipVerificationAttempt("utxo", check.status);
       res.json(check);
+    }),
+  );
+  app.get(
+    "/api/posts/:id/preview",
+    asyncHandler(async (req, res) => {
+      const p = await d.store.getPost(param(req, "id"));
+      if (!p) return apiError(res, 404, "POST_NOT_FOUND");
+      const bytes = await mediaPreview.ensure(p);
+      if (!bytes) {
+        res.setHeader("Cache-Control", "no-store");
+        return apiError(res, 404, "PREVIEW_UNAVAILABLE");
+      }
+      res.setHeader("Content-Type", PREVIEW_CONTENT_TYPE);
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      res.setHeader("Content-Length", String(bytes.byteLength));
+      res.send(Buffer.from(bytes));
     }),
   );
   app.all(

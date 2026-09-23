@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OnlyKas - Blur Lab</title>
+<style>
+  :root {
+    --bg: #0b1210;
+    --card: #161f1d;
+    --line: #232c2a;
+    --paper: #f2f5f4;
+    --muted: #8e9a97;
+    --acid: #49eacb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--paper);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .lab { max-width: 1180px; margin: 0 auto; padding: 1.5rem; display: grid; gap: 1.5rem; grid-template-columns: 320px 1fr; }
+  header { grid-column: 1 / -1; border-bottom: 1px solid var(--line); padding-bottom: 0.75rem; }
+  header h1 { margin: 0; font-size: 1.4rem; letter-spacing: 0.02em; }
+  .prod-note { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.85rem; font-family: "DM Mono", ui-monospace, monospace; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 1rem; }
+  .controls { display: flex; flex-direction: column; gap: 1rem; align-self: start; }
+  .drop {
+    display: grid;
+    place-items: center;
+    gap: 0.6rem;
+    min-height: 120px;
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+    padding: 1rem;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .drop.is-over { border-color: var(--acid); color: var(--paper); }
+  .drop:focus-visible { outline: 2px solid var(--acid); outline-offset: 2px; }
+  .drop .choose { flex: 0 0 auto; }
+  .control { display: grid; gap: 0.35rem; }
+  .control label { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.9rem; color: var(--paper); }
+  .control output { color: var(--acid); font-family: "DM Mono", ui-monospace, monospace; font-size: 0.85rem; }
+  input[type="range"] { width: 100%; accent-color: var(--acid); }
+  details summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; user-select: none; }
+  details[open] summary { color: var(--paper); }
+  details .control { margin-top: 0.7rem; }
+  .video-controls { display: grid; gap: 0.6rem; }
+  .hidden { display: none !important; }
+  .readout { min-height: 1.2em; color: var(--muted); font-family: "DM Mono", ui-monospace, monospace; font-size: 0.85rem; }
+  .row { display: flex; gap: 0.5rem; }
+  .btn {
+    flex: 1 1 auto;
+    min-height: 2.75rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--acid);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--acid);
+    font: inherit;
+    cursor: pointer;
+  }
+  .btn:hover { background: #49eacb1f; }
+  .btn.ghost { border-color: var(--line); color: var(--paper); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .compare figure { margin: 0 auto; max-width: 340px; width: 100%; display: grid; gap: 0.4rem; grid-template-rows: auto 1fr; }
+  .compare figcaption { color: var(--muted); font-family: "DM Mono", ui-monospace, monospace; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    aspect-ratio: 9 / 16;
+    max-height: 62vh;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #050807;
+    overflow: hidden;
+  }
+  .stage img, .stage video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #050807;
+  }
+  .stage .hint { position: relative; color: var(--muted); font-size: 0.85rem; text-align: center; padding: 1rem; }
+  .mock-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+  .mock-head h2 { margin: 0; font-size: 1rem; }
+  .mock-head select { background: var(--bg); color: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.6rem; font: inherit; }
+  .post-locked {
+    position: relative;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    justify-items: center;
+    align-items: center;
+    width: 100%;
+    max-width: 420px;
+    min-height: 420px;
+    margin: 0 auto;
+    background: #050807;
+    overflow: hidden;
+  }
+  .post-locked.is-tile { aspect-ratio: 9 / 16; min-height: 0; max-width: 320px; }
+  .post-locked-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .post-locked::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #05080700 40%, #050807b3); pointer-events: none; }
+  .post-locked-content {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: 1rem;
+    justify-items: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .post-lock-icon { width: 2.5rem; height: 2.5rem; color: var(--muted); }
+  .post-lock-icon path { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .post-locked .buy { min-width: 14rem; min-height: 3rem; padding: 0.85rem 1.6rem; border: 1px solid var(--acid); border-radius: 6px; background: #05080733; color: var(--acid); font: inherit; cursor: pointer; }
+  .post-locked .buy:hover { background: #49eacb1f; }
+  footer { grid-column: 1 / -1; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--line); padding-top: 0.75rem; }
+  @media (max-width: 860px) {
+    .lab { grid-template-columns: 1fr; }
+    header, footer { grid-column: 1; }
+    .compare { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main class="lab">
+  <header>
+    <h1>Blur Lab</h1>
+    <p class="prod-note">Production poster defaults &middot; blur &sigma; = 6 &middot; max edge = 720px &middot; jpeg quality = 72</p>
+  </header>
+
+  <section class="controls card">
+    <div class="drop" id="drop" role="button" tabindex="0" aria-label="Choose a file">
+      <input type="file" id="file" accept="image/*,video/*" hidden />
+      <span class="drop-hint">Drop an image or video here</span>
+      <button class="btn choose" type="button">Choose file</button>
+    </div>
+
+    <div class="control">
+      <label for="sigma">Blur &sigma; <output id="sigmaOut">6</output></label>
+      <input type="range" id="sigma" min="0" max="12" step="0.5" value="6" />
+    </div>
+
+    <details id="advanced" open>
+      <summary>Advanced</summary>
+      <div class="control">
+        <label for="edge">Max edge (px) <output id="edgeOut">720</output></label>
+        <input type="range" id="edge" min="96" max="1080" step="8" value="720" />
+      </div>
+      <div class="control">
+        <label for="quality">JPEG quality <output id="qualityOut">72</output></label>
+        <input type="range" id="quality" min="20" max="100" step="1" value="72" />
+      </div>
+    </details>
+
+    <div class="video-controls hidden" id="videoControls">
+      <div class="control">
+        <label for="frame">Frame <output id="frameOut">0.0s</output></label>
+        <input type="range" id="frame" min="0" max="1000" value="0" />
+      </div>
+      <button class="btn ghost" id="grab" type="button">Grab frame</button>
+    </div>
+
+    <div class="readout" id="readout"></div>
+
+    <a class="btn" id="download" download="blur-lab.jpg" disabled>Download processed JPEG</a>
+  </section>
+
+  <div class="results" style="display:grid; gap:1.5rem;">
+    <section class="compare">
+      <figure>
+        <figcaption>Original</figcaption>
+        <div class="stage" id="originalStage"><span class="hint" id="originalHint">No media loaded</span></div>
+      </figure>
+      <figure>
+        <figcaption>Processed</figcaption>
+        <div class="stage" id="processedStage"><span class="hint" id="processedHint">Drop a file to try the poster treatment</span></div>
+      </figure>
+    </section>
+
+    <section class="card mock-card">
+      <div class="mock-head">
+        <h2>Locked tile mock</h2>
+        <select id="mockView">
+          <option value="post">Post page</option>
+          <option value="tile">Post tile (9:16)</option>
+        </select>
+      </div>
+      <div class="post-locked" id="mock">
+        <img class="post-locked-preview" id="mockPreview" alt="" hidden />
+        <div class="post-locked-content">
+          <svg class="post-lock-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 11h14v9H5z" />
+            <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          </svg>
+          <button class="buy" type="button">Unlock</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>Uses the same Gaussian &sigma; as sharp's blur(). Resampling and the JPEG encoder may differ slightly from the server pipeline.</footer>
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const fileInput = $("file");
+const drop = $("drop");
+const sigmaInput = $("sigma");
+const edgeInput = $("edge");
+const qualityInput = $("quality");
+const sigmaOut = $("sigmaOut");
+const edgeOut = $("edgeOut");
+const qualityOut = $("qualityOut");
+const frameInput = $("frame");
+const frameOut = $("frameOut");
+const videoControls = $("videoControls");
+const grabBtn = $("grab");
+const originalStage = $("originalStage");
+const originalHint = $("originalHint");
+const processedStage = $("processedStage");
+const processedHint = $("processedHint");
+const mockPreview = $("mockPreview");
+const mock = $("mock");
+const readout = $("readout");
+const download = $("download");
+
+let source = null;
+let video = null;
+let lastUrl = null;
+let remainingUrl = null;
+let renderTimer = 0;
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    fileInput.click();
+  }
+});
+fileInput.addEventListener("click", (e) => e.stopPropagation());
+drop.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  drop.classList.add("is-over");
+});
+drop.addEventListener("dragleave", () => drop.classList.remove("is-over"));
+drop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  drop.classList.remove("is-over");
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) void handleFile(file);
+});
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (file) void handleFile(file);
+});
+
+for (const [input, output] of [
+  [sigmaInput, sigmaOut],
+  [edgeInput, edgeOut],
+  [qualityInput, qualityOut],
+]) {
+  input.addEventListener("input", () => {
+    output.value = input.value;
+    scheduleRender();
+  });
+}
+
+frameInput.addEventListener("input", () => {
+  if (video && Number.isFinite(video.duration)) {
+    frameOut.value = ((Number(frameInput.value) / 1000) * video.duration).toFixed(1) + "s";
+  }
+});
+frameInput.addEventListener("change", () => void grabFrame());
+grabBtn.addEventListener("click", () => void grabFrame());
+
+$("mockView").addEventListener("change", (e) => {
+  mock.classList.toggle("is-tile", e.target.value === "tile");
+});
+
+async function handleFile(file) {
+  if (file.type.startsWith("video/")) {
+    await loadVideo(file);
+  } else if (file.type.startsWith("image/")) {
+    await loadImageFile(file);
+  }
+}
+
+function showOriginal(url, isVideo) {
+  if (remainingUrl) {
+    URL.revokeObjectURL(remainingUrl);
+    remainingUrl = null;
+  }
+  remainingUrl = url;
+  originalStage.textContent = "";
+  if (isVideo) {
+    const v = document.createElement("video");
+    v.src = url;
+    v.muted = true;
+    v.controls = true;
+    v.playsInline = true;
+    v.preload = "auto";
+    originalStage.appendChild(v);
+  } else {
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "Original";
+    originalStage.appendChild(img);
+  }
+  originalHint.hidden = true;
+}
+
+function releaseVideo() {
+  video = null;
+  videoControls.classList.add("hidden");
+}
+
+async function loadImageFile(file) {
+  releaseVideo();
+  const url = URL.createObjectURL(file);
+  showOriginal(url, false);
+  try {
+    source = await createImageBitmap(file);
+  } catch {
+    source = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Could not read image"));
+      img.src = url;
+    });
+  }
+  await render();
+}
+
+async function loadVideo(file) {
+  releaseVideo();
+  const url = URL.createObjectURL(file);
+  showOriginal(url, true);
+  const v = document.createElement("video");
+  v.src = url;
+  v.muted = true;
+  v.controls = true;
+  v.playsInline = true;
+  v.preload = "auto";
+  await new Promise((resolve) => {
+    v.addEventListener("loadeddata", resolve, { once: true });
+    v.addEventListener("error", () => resolve(), { once: true });
+    setTimeout(resolve, 8000);
+  });
+  video = v;
+  source = null;
+  videoControls.classList.remove("hidden");
+  frameInput.value = "0";
+  frameOut.value = "0.0s";
+  try {
+    await grabFrame();
+  } catch {
+    source = null;
+    readout.textContent = "Could not read a video frame.";
+  }
+}
+
+async function grabFrame() {
+  if (!video) return;
+  const duration = Number.isFinite(video.duration) ? video.duration : 0;
+  const t = Math.min(
+    (Number(frameInput.value) / 1000) * duration,
+    Math.max(0.001, duration - 0.001),
+  );
+  frameInput.value = Math.round((t / duration) * 1000);
+  frameOut.value = t.toFixed(1) + "s";
+  await new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (!done) {
+        done = true;
+        resolve();
+      }
+    };
+    video.addEventListener("seeked", finish, { once: true });
+    setTimeout(finish, 2000);
+    video.currentTime = t;
+  });
+  const w = video.videoWidth || 1;
+  const h = video.videoHeight || 1;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  c.getContext("2d").drawImage(video, 0, 0, w, h);
+  source = c;
+  await render();
+}
+
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(() => void render(), 60);
+}
+
+async function render() {
+  if (!source) return;
+  const edge = Number(edgeInput.value);
+  const sigma = Number(sigmaInput.value);
+  const quality = Number(qualityInput.value) / 100;
+  const sw = source.naturalWidth ?? source.width;
+  const sh = source.naturalHeight ?? source.height;
+  const scale = Math.min(1, Math.min(edge / sw, edge / sh));
+  const w = Math.max(1, Math.round(sw * scale));
+  const h = Math.max(1, Math.round(sh * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, w, h);
+
+  const output = sigma >= 0.05 ? await svgBlur(canvas, sigma) : canvas;
+  const blob = await new Promise((resolve) => output.toBlob(resolve, "image/jpeg", quality));
+  if (!blob) return;
+
+  const url = URL.createObjectURL(blob);
+  if (lastUrl) URL.revokeObjectURL(lastUrl);
+  lastUrl = url;
+  fill(processedStage, url, "Processed");
+  mockPreview.src = url;
+  mockPreview.hidden = false;
+  download.href = url;
+  download.removeAttribute("disabled");
+  readout.textContent = w + "\u00d7" + h + " \u00b7 " + (blob.size / 1024).toFixed(1) + " KB \u00b7 \u03c3 " + sigma + " \u00b7 edge " + edge + " \u00b7 q " + Math.round(quality * 100);
+}
+
+function fill(stage, url, label) {
+  stage.textContent = "";
+  const img = document.createElement("img");
+  img.src = url;
+  img.alt = label;
+  stage.appendChild(img);
+}
+
+async function svgBlur(canvas, sigma) {
+  const w = canvas.width;
+  const h = canvas.height;
+  const png = canvas.toDataURL("image/png");
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+    '<filter id="g" x="-30%" y="-30%" width="160%" height="160%">' +
+    '<feGaussianBlur in="SourceGraphic" stdDeviation="' + sigma + '" edgeMode="duplicate"/>' +
+    "</filter>" +
+    '<image href="' + png + '" width="' + w + '" height="' + h + '" filter="url(#g)"/>' +
+    "</svg>";
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+  try {
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error("SVG render failed"));
+      img.src = url;
+    });
+    const out = document.createElement("canvas");
+    out.width = w;
+    out.height = h;
+    out.getContext("2d").drawImage(img, 0, 0, w, h);
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+</script>
+</body>
+</html>

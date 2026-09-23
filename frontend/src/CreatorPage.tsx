@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   isFreePost,
-  membershipFeeSompi,
   RETRY_AFTER_REFRESH,
   type CreatorResponse,
   type PostResponse,
@@ -19,6 +18,7 @@ import {
 } from "./purchase.js";
 import { Icon } from "./Icons.js";
 import { PostTile, PostTileAction, PostTileMedia } from "./PostTile.js";
+import { previewUrl } from "./preview-url.js";
 import { PostMedia } from "./PostMedia.js";
 import { Spinner } from "./Spinner.js";
 import { Toast, useToast } from "./Toast.js";
@@ -335,9 +335,6 @@ export function CreatorPage({
                 ? `${formatKas(currentCreator.membership.priceSompi)} KAS · 30 days`
                 : "30 days"}
             </p>
-            {!owner && currentCreator.membership.offered && currentCreator.membership.priceSompi && (
-              <MembershipPaymentDetails priceSompi={currentCreator.membership.priceSompi} />
-            )}
             <div className="access-actions">
               <SubscriptionAction
                 membership={currentCreator.membership}
@@ -513,20 +510,6 @@ function SubscriptionAction({
   );
 }
 
-function MembershipPaymentDetails({ priceSompi }: { priceSompi: string }) {
-  const price = BigInt(priceSompi);
-  const fee = membershipFeeSompi(price);
-  return (
-    <span className="access-note">
-      Creator receives {formatKas((price - fee).toString())} KAS
-      {fee > 0n
-        ? ` · Platform fee ${formatKas(fee.toString())} KAS`
-        : " · Platform fee waived below 100 KAS"}
-      {" · Network fee paid by buyer"}
-    </span>
-  );
-}
-
 function PostCard({
   post,
   busy,
@@ -556,7 +539,11 @@ function PostCard({
             <PostMedia post={post} />
           </div>
         ) : (
-          <PostTileMedia overlay="locked" to={postPath} />
+          <PostTileMedia
+            thumbnail={previewUrl(post.id)}
+            overlay="locked"
+            to={postPath}
+          />
         )
       }
       caption={post.caption}

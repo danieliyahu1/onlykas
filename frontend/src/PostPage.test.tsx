@@ -102,6 +102,17 @@ describe("PostPage", () => {
     expect(await screen.findByRole("button", { name: "Unlocking..." })).toBeDisabled();
   });
 
+  it("shows a blurred preview while a paid post stays locked", async () => {
+    vi.mocked(api).mockResolvedValueOnce(post("locked-post", "A paid moment", false));
+    renderPost(post("locked-post", "A paid moment", false));
+
+    expect(await screen.findByRole("button", { name: /unlock for/i })).toBeVisible();
+    expect(
+      document.querySelector('img[src="/api/posts/locked-post/preview?v=8"]'),
+    ).not.toBeNull();
+    expect(document.querySelector("img.post-media")).toBeNull();
+  });
+
   it("tells the buyer when the payment is still confirming", async () => {
     vi.mocked(api)
       .mockResolvedValueOnce(post("paid-post", "A paid moment", false))

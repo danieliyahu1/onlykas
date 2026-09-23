@@ -5,6 +5,7 @@ import { MemoryStore } from "./memory-store.js";
 import type { EventLogger, Logger } from "./observability.js";
 import type { MembershipCheck, Post } from "./domain/models.js";
 import { StorageError } from "./r2-storage.js";
+import { TestStorage } from "./test-storage.js";
 import type { VerifiedMedia } from "./adapters/media/media.js";
 import {
   MembershipStateChangedError,
@@ -578,15 +579,50 @@ describe("anonymous media access", () => {
     const response = await request(app).get("/api/posts/free-post/media");
     expect(response.status).toBe(200);
   });
-
   it("requires a session for paid post media", async () => {
     const store = new MemoryStore();
     await store.publishPost(post("paid-post"));
     const { app } = testApp(store);
 
     const response = await request(app).get("/api/posts/paid-post/media");
+
     expect(response.status).toBe(401);
     expect(response.body.error).toBe("AUTHENTICATION_REQUIRED");
+  });
+});
+
+describe("locked media previews", () => {
+  const onePixelPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  it("serves a blurred preview for a locked post without exposing its media", async () => {
+    const store = new MemoryStore();
+    await store.publishPost(post("preview-post"));
+    const storage = new TestStorage();
+    storage.objects.set("media/preview-post", {
+      bytes: new Uint8Array(onePixelPng),
+      contentType: "image/jpeg",
+    });
+    const { app } = testApp(store, undefined, undefined, storage);
+
+    const media = await request(app).get("/api/posts/preview-post/media");
+    expect(media.status).toBe(401);
+
+    const preview = await request(app).get("/api/posts/preview-post/preview");
+    expect(preview.status).toBe(200);
+    expect(preview.headers["content-type"]).toContain("image/jpeg");
+    expect(storage.objects.has("previews/v8/preview-post.jpg")).toBe(true);
+  });
+
+  it("keeps a served preview out of the way when the post is missing", async () => {
+    const { app } = testApp();
+
+    const response = await request(app).get("/api/posts/missing-post/preview");
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe("POST_NOT_FOUND");
   });
 });
 
@@ -660,7 +696,10 @@ describe("post deletion", () => {
     expect(response.status).toBe(204);
     expect(await store.getPost("paid-post")).toBeNull();
     expect(await store.getPurchase("paid-post", other)).toBeNull();
-    expect(removedMedia).toEqual(["media/creator/ab/digest"]);
+    expect(removedMedia).toEqual([
+      "media/creator/ab/digest",
+      "previews/v8/creator/ab/digest.jpg",
+    ]);
   });
 });
 

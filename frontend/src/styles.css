@@ -1342,7 +1342,7 @@ progress {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 .post-tile-media .post-media,
 .post-tile-media .video-player {
@@ -1734,10 +1734,35 @@ main:has(.single-post) {
   white-space: nowrap;
 }
 .post-locked {
+  position: relative;
   display: grid;
+  width: 100%;
+  min-height: min(60vh, 24rem);
+  background: #050807;
+  overflow: hidden;
+}
+.post-locked-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.post-locked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #05080700 40%, #050807b3);
+}
+.post-locked-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: 1fr auto;
   justify-items: center;
-  gap: clamp(1rem, 3vh, 1.75rem);
-  padding: 2rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
   text-align: center;
 }
 .post-locked .post-lock-icon {

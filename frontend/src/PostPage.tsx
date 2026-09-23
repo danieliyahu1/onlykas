@@ -10,6 +10,8 @@ import { HomeLink, Message } from "./Message.js";
 import { errorText } from "./errors.js";
 import { formatKas, shortenAddress } from "./format.js";
 import { PostMedia } from "./PostMedia.js";
+import { PreviewImage } from "./PreviewImage.js";
+import { previewUrl } from "./preview-url.js";
 import type { WalletProps } from "./wallet.js";
 import { creatorPath } from "./creator-url.js";
 
@@ -108,19 +110,25 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
             <PostMedia key={currentPost.id} post={currentPost} />
           ) : (
             <div className="post-locked">
-              <LockIcon open={false} />
-              <button
-                className="buy"
-                disabled={busy !== null || signingIn}
-                onClick={() => void unlock()}
-              >
-                {busy && <Spinner />}
-                {busy === "unlock"
-                  ? "Unlocking..."
-                  : busy === "approval"
-                    ? "Approve in wallet..."
-                    : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
-              </button>
+              <PreviewImage
+                className="post-locked-preview"
+                src={previewUrl(currentPost.id)}
+              />
+              <div className="post-locked-content">
+                <LockIcon open={false} />
+                <button
+                  className="buy"
+                  disabled={busy !== null || signingIn}
+                  onClick={() => void unlock()}
+                >
+                  {busy && <Spinner />}
+                  {busy === "unlock"
+                    ? "Unlocking..."
+                    : busy === "approval"
+                      ? "Approve in wallet..."
+                      : `Unlock for ${formatKas(currentPost.priceSompi)} KAS`}
+                </button>
+              </div>
             </div>
           )}
         </div>

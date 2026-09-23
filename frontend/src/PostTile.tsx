@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { LockIcon, VideoIcon } from "./Icons.js";
+import { PreviewImage } from "./PreviewImage.js";
 
 export type PostTileOverlay = "none" | "locked" | "video";
 
@@ -39,7 +40,7 @@ export function PostTileMedia({
   const content = (
     <>
       {thumbnail ? (
-        <img className="post-tile-thumb" src={thumbnail} alt="" loading="lazy" />
+        <PreviewImage className="post-tile-thumb" src={thumbnail} />
       ) : null}
       {overlay === "none" ? null : (
         <span className={`post-tile-overlay is-${overlay}`}>

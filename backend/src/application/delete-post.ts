@@ -1,6 +1,7 @@
 import type { Post } from "../domain/models.js";
 import { logger as defaultLogger, safeError, type Logger } from "../observability.js";
 import type { ObjectStorage, PostRepository } from "./ports.js";
+import { previewKey } from "./media-preview.js";
 
 export type DeletePostResult =
   | { kind: "DELETED"; post: Post }
@@ -19,13 +20,19 @@ export function createDeletePostUseCase(dependencies: {
     if (post.creator !== requester) return { kind: "FORBIDDEN" };
     const deleted = await dependencies.posts.deletePost(post.id);
     if (!deleted) return { kind: "NOT_FOUND" };
-    await dependencies.storage.delete(deleted.mediaKey).catch((error) => {
-      logger.error("post_media_delete_failed", {
-        postId: deleted.id,
-        mediaKey: deleted.mediaKey,
-        ...safeError(error),
+    const objects: ReadonlyArray<[string, string]> = [
+      ["media", deleted.mediaKey],
+      ["preview", previewKey(deleted.mediaKey)],
+    ];
+    for (const [label, key] of objects) {
+      await dependencies.storage.delete(key).catch((error) => {
+        logger.error(`post_${label}_delete_failed`, {
+          postId: deleted.id,
+          mediaKey: key,
+          ...safeError(error),
+        });
       });
-    });
+    }
     return { kind: "DELETED", post: deleted };
   };
 }

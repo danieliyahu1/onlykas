@@ -15,6 +15,7 @@ FROM node:24-alpine AS runtime
 ARG GIT_REVISION=unknown
 ENV NODE_ENV=production
 ENV FFPROBE_PATH=/usr/bin/ffprobe
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
 ENV GIT_REVISION=$GIT_REVISION
 WORKDIR /app/backend
 RUN apk add --no-cache ffmpeg
