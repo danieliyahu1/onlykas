@@ -163,7 +163,7 @@ export function createProfileUseCases(dependencies: {
       const profile: Profile = {
         address: input.address,
         displayName: displayName === "" ? null : displayName,
-        isPublic: input.isPublic ?? existing?.isPublic ?? false,
+        isPublic: input.isPublic ?? existing?.isPublic ?? true,
         updatedAt: input.now,
       };
       await dependencies.profiles.saveProfile(profile);

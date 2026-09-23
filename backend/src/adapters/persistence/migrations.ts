@@ -29,7 +29,7 @@ export const migrations: Migration[] = [
       `CREATE TABLE IF NOT EXISTS profiles (
         address TEXT PRIMARY KEY NOT NULL,
         display_name TEXT,
-        is_public INTEGER NOT NULL DEFAULT 0 CHECK (is_public IN (0, 1)),
+        is_public INTEGER NOT NULL DEFAULT 1 CHECK (is_public IN (0, 1)),
         updated_at INTEGER NOT NULL CHECK (updated_at > 0)
       )`,
       `CREATE TABLE IF NOT EXISTS posts (

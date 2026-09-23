@@ -465,7 +465,7 @@ export function createApp(d: AppDependencies) {
         address,
         displayAddress: shorten(address),
         displayName: profile?.displayName ?? null,
-        isPublic: profile?.isPublic ?? false,
+        isPublic: profile?.isPublic ?? true,
         isOwner,
         membership: {
           offered,
@@ -1352,7 +1352,7 @@ function profileResponse(p: Profile | null, address: string) {
     address,
     displayAddress: shorten(address),
     displayName: p?.displayName ?? null,
-    isPublic: p?.isPublic ?? false,
+    isPublic: p?.isPublic ?? true,
   };
 }
 function shorten(a: string) {

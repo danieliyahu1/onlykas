@@ -164,21 +164,21 @@ describe("profile visibility", () => {
     return { store, app: testApp(store).app };
   }
 
-  it("defaults profiles to private and allows visibility-only updates", async () => {
+  it("defaults profiles to public and allows visibility-only updates", async () => {
     const { app, store } = await profileApp();
 
     const initial = await request(app)
       .get("/api/profile")
       .set("Cookie", "onlykas_session=profile-session");
-    expect(initial.body).toMatchObject({ address, displayName: null, isPublic: false });
+    expect(initial.body).toMatchObject({ address, displayName: null, isPublic: true });
 
     const updated = await request(app)
       .put("/api/profile")
       .set("Cookie", "onlykas_session=profile-session")
-      .send({ isPublic: true });
+      .send({ isPublic: false });
     expect(updated.status).toBe(200);
-    expect(updated.body).toMatchObject({ address, isPublic: true });
-    expect((await store.getProfile(address))?.isPublic).toBe(true);
+    expect(updated.body).toMatchObject({ address, isPublic: false });
+    expect((await store.getProfile(address))?.isPublic).toBe(false);
   });
 
   it("returns only public profiles from the public creators endpoint", async () => {
@@ -225,7 +225,7 @@ describe("profile visibility", () => {
       .put("/api/profile")
       .set("Cookie", "onlykas_session=profile-session")
       .send({ displayName: "Maya" });
-    expect(named.body).toMatchObject({ address, displayName: "Maya", isPublic: false });
+    expect(named.body).toMatchObject({ address, displayName: "Maya", isPublic: true });
 
     const toggled = await request(app)
       .put("/api/profile")
