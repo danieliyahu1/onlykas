@@ -4,14 +4,14 @@ import { COPY } from "./copy.js";
 import { api, ApiError } from "./kasware.js";
 import { logger } from "./logger.js";
 import { Spinner } from "./Spinner.js";
-import { Toast, useToast } from "./Toast.js";
+import { useToast } from "./Toast.js";
 
 export function FeedbackButton() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const { toast, showToast, dismissToast } = useToast();
+  const { showToast } = useToast();
 
   function open() {
     setNote(null);
@@ -110,7 +110,6 @@ export function FeedbackButton() {
           </div>
         </form>
       </dialog>
-      <Toast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

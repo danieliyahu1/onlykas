@@ -6,7 +6,7 @@ import type { PostResponse } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import { PostPage } from "./PostPage.js";
 import { api, ApiError, signPreparedPayment, WalletNetworkError } from "./kasware.js";
-import { consumerAddress, post } from "./test-fixtures.js";
+import { consumerAddress, post, ToastSlot } from "./test-fixtures.js";
 
 vi.mock("./kasware.js", async () => ({
   ...(await vi.importActual("./kasware.js")),
@@ -29,6 +29,7 @@ function renderPost(result: PostResponse, address: string | null = null) {
           }
         />
       </Routes>
+      <ToastSlot />
     </MemoryRouter>,
   );
 }
@@ -263,6 +264,7 @@ describe("PostPage", () => {
               }
             />
           </Routes>
+          <ToastSlot />
         </MemoryRouter>
       </StrictMode>,
     );

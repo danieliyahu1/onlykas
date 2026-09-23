@@ -1,4 +1,11 @@
 import type { CreatorResponse, PostResponse } from "@onlykas/shared";
+import { Toast, useToast } from "./Toast.js";
+
+/** Renders the shared toast slot the app shell owns, for page-level tests. */
+export function ToastSlot() {
+  const { toast, dismissToast } = useToast();
+  return <Toast toast={toast} onDismiss={dismissToast} />;
+}
 
 export const creatorAddress =
   "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";

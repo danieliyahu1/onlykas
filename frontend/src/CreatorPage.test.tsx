@@ -15,6 +15,7 @@ import {
   creatorAddress,
   consumerAddress,
   post,
+  ToastSlot,
   unnamedCreator,
 } from "./test-fixtures.js";
 
@@ -44,6 +45,7 @@ function renderCreator(
           }
         />
       </Routes>
+      <ToastSlot />
     </MemoryRouter>,
   );
 }

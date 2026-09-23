@@ -1,10 +1,28 @@
+import { useEffect } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { COPY } from "./copy.js";
 import { PublishPage } from "./PublishPage.js";
-import { api } from "./kasware.js";
+import { api, NETWORK_SWITCH_REQUIRED_EVENT } from "./kasware.js";
 import { uploadMedia } from "./upload.js";
+import { ToastSlot } from "./test-fixtures.js";
+import { useToast } from "./Toast.js";
+
+/** Mirrors the app shell: turns the network event into the notice toast. */
+function NetworkNoticeRelay() {
+  const { showToast } = useToast();
+  useEffect(() => {
+    const required = () => showToast(COPY.wrongNetwork, "notice");
+    window.addEventListener(NETWORK_SWITCH_REQUIRED_EVENT, required);
+    return () => window.removeEventListener(NETWORK_SWITCH_REQUIRED_EVENT, required);
+  }, [showToast]);
+  return null;
+}
+
+function emitNetworkNotice() {
+  window.dispatchEvent(new Event(NETWORK_SWITCH_REQUIRED_EVENT));
+}
 
 vi.mock("./kasware.js", async () => ({
   ...(await vi.importActual("./kasware.js")),
@@ -26,6 +44,8 @@ function renderPage({
   return render(
     <MemoryRouter>
       <PublishPage address={currentAddress} signIn={signIn} signingIn={false} />
+      <NetworkNoticeRelay />
+      <ToastSlot />
     </MemoryRouter>,
   );
 }
@@ -56,6 +76,7 @@ function renderPublishWithNavigation() {
         />
         <Route path="/post/:id" element={<PostRoute />} />
       </Routes>
+      <ToastSlot />
     </MemoryRouter>,
   );
 }
@@ -193,6 +214,26 @@ describe("creator publish experience", () => {
     await user.click(screen.getByRole("button", { name: /^publish/i }));
 
     expect(await screen.findByText("post:existing-post-id")).toBeVisible();
+  });
+
+  it("lets the network notice replace the sign-in prompt", async () => {
+    const signIn = vi.fn(async () => {
+      emitNetworkNotice();
+      return null;
+    });
+    const user = userEvent.setup();
+    renderPage({ currentAddress: null, signIn });
+    await user.upload(
+      screen.getByLabelText(/choose image or video/i),
+      new File(["image"], "release.png", { type: "image/png" }),
+    );
+    await user.click(screen.getByRole("button", { name: /^publish/i }));
+
+    expect(await screen.findByText(COPY.wrongNetwork)).toBeVisible();
+    expect(
+      screen.queryByText("Sign in with Kasware to publish."),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
   it("keeps the error when the same media has no existing post", async () => {

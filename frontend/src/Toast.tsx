@@ -16,16 +16,42 @@ const DWELL_MS: Record<ToastTone, number> = {
   success: CONFIRMATION_DWELL_MS,
 };
 
-export function useToast() {
-  const [toast, setToast] = useState<ToastMessage | null>(null);
+/**
+ * The whole app shares one toast slot. Separate slots let an app-level message
+ * (a network switch notice) and a page-level message (a sign-in prompt) show
+ * side by side, which is never wanted: the last caller owns the single banner.
+ */
+let currentToast: ToastMessage | null = null;
+const toastListeners = new Set<(toast: ToastMessage | null) => void>();
 
-  const showToast = useCallback((message: string, tone: ToastTone = "info") => {
-    setToast({ message, tone });
+function publishToast(next: ToastMessage | null): void {
+  currentToast = next;
+  for (const listener of toastListeners) listener(next);
+}
+
+/** Clears the shared toast only when it still shows the given message. */
+export function dismissToastIf(message: string): void {
+  if (currentToast?.message === message) publishToast(null);
+}
+
+export function useToast() {
+  const [toast, setToast] = useState<ToastMessage | null>(currentToast);
+
+  useEffect(() => {
+    toastListeners.add(setToast);
+    setToast(currentToast);
+    return () => {
+      toastListeners.delete(setToast);
+    };
   }, []);
 
-  const dismissToast = useCallback(() => setToast(null), []);
+  const show = useCallback((message: string, tone: ToastTone = "info") => {
+    publishToast({ message, tone });
+  }, []);
 
-  return { toast, showToast, dismissToast };
+  const dismiss = useCallback(() => publishToast(null), []);
+
+  return { toast, showToast: show, dismissToast: dismiss };
 }
 
 export function Toast({

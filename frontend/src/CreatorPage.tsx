@@ -21,7 +21,7 @@ import { PostTile, PostTileAction, PostTileMedia } from "./PostTile.js";
 import { previewUrl } from "./preview-url.js";
 import { PostMedia } from "./PostMedia.js";
 import { Spinner } from "./Spinner.js";
-import { Toast, useToast } from "./Toast.js";
+import { useToast } from "./Toast.js";
 import { HomeLink, Message } from "./Message.js";
 import { COPY } from "./copy.js";
 import { errorText, isNetworkRequired } from "./errors.js";
@@ -58,7 +58,7 @@ export function CreatorPage({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [visibilityBusy, setVisibilityBusy] = useState(false);
-  const { toast, showToast, dismissToast } = useToast();
+  const { showToast, dismissToast } = useToast();
   const requestId = useRef(0);
 
   async function loadCreator() {
@@ -391,7 +391,6 @@ export function CreatorPage({
           )}
         </div>
       </section>
-      <Toast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

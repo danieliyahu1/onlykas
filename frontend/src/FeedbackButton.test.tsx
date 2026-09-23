@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { COPY } from "./copy.js";
 import { FeedbackButton } from "./FeedbackButton.js";
 import { api, ApiError } from "./kasware.js";
+import { ToastSlot } from "./test-fixtures.js";
 
 vi.mock("./kasware.js", async () => ({
   ...(await vi.importActual("./kasware.js")),
@@ -30,7 +31,12 @@ describe("FeedbackButton", () => {
 
   it("opens the dialog and asks for text before sending", async () => {
     const user = userEvent.setup();
-    render(<FeedbackButton />);
+    render(
+      <>
+        <FeedbackButton />
+        <ToastSlot />
+      </>,
+    );
 
     await user.click(screen.getByRole("button", { name: COPY.feedbackButton }));
 
@@ -44,7 +50,12 @@ describe("FeedbackButton", () => {
   it("posts the message, closes the dialog, and shows a toast", async () => {
     vi.mocked(api).mockResolvedValue({ accepted: true });
     const user = userEvent.setup();
-    render(<FeedbackButton />);
+    render(
+      <>
+        <FeedbackButton />
+        <ToastSlot />
+      </>,
+    );
 
     await user.click(screen.getByRole("button", { name: COPY.feedbackButton }));
     const dialog = screen.getByRole("dialog");
@@ -64,7 +75,12 @@ describe("FeedbackButton", () => {
       new ApiError("RATE_LIMITED", COPY.feedbackFailed, 429),
     );
     const user = userEvent.setup();
-    render(<FeedbackButton />);
+    render(
+      <>
+        <FeedbackButton />
+        <ToastSlot />
+      </>,
+    );
 
     await user.click(screen.getByRole("button", { name: COPY.feedbackButton }));
     await user.type(screen.getByLabelText(COPY.feedbackLabel), "Too many notes");

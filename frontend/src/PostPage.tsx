@@ -3,7 +3,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { type PostResponse } from "@onlykas/shared";
 import { api } from "./kasware.js";
 import { unlockPost } from "./purchase.js";
-import { Toast, useToast } from "./Toast.js";
+import { useToast } from "./Toast.js";
 import { Spinner } from "./Spinner.js";
 import { LockIcon } from "./Icons.js";
 import { MediaTypeBadge } from "./MediaTypeBadge.js";
@@ -23,7 +23,7 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   const [busy, setBusy] = useState<null | "approval" | "unlock">(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const { toast, showToast, dismissToast } = useToast();
+  const { showToast, dismissToast } = useToast();
   const notice = (location.state as { notice?: string } | null)?.notice;
   const shownNotice = useRef(false);
 
@@ -146,7 +146,6 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
           More from this creator
         </Link>
       </article>
-      <Toast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }

@@ -6,7 +6,7 @@ import { uploadMedia, type UploadResult } from "./upload.js";
 import { Icon } from "./Icons.js";
 import { Spinner } from "./Spinner.js";
 import { errorText } from "./errors.js";
-import { Toast, useToast } from "./Toast.js";
+import { dismissToastIf, useToast } from "./Toast.js";
 import type { WalletProps } from "./wallet.js";
 
 const DEFAULT_CAPTION = "Shared just for supporters.";
@@ -25,7 +25,7 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
     priceKas: DEFAULT_PRICE_KAS,
   });
 
-  const { toast, showToast, dismissToast } = useToast();
+  const { showToast, dismissToast } = useToast();
 
   useEffect(
     () => () => {
@@ -69,9 +69,10 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
 
   async function ensureSignedIn(): Promise<boolean> {
     if (address) return true;
-    showToast("Sign in with Kasware to publish.");
+    const prompt = "Sign in with Kasware to publish.";
+    showToast(prompt);
     const signedIn = await signIn();
-    if (!signedIn) dismissToast();
+    if (!signedIn) dismissToastIf(prompt);
     return Boolean(signedIn);
   }
 
@@ -189,7 +190,6 @@ export function PublishPage({ address, signIn, signingIn }: WalletProps) {
           </div>
         </form>
       </section>
-      <Toast toast={toast} onDismiss={dismissToast} />
     </>
   );
 }
