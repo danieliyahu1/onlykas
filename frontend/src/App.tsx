@@ -4,7 +4,14 @@ import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-do
 import type { ProfileResponse } from "@onlykas/shared";
 import { walletNetworkName } from "./app-config.js";
 import { COPY } from "./copy.js";
-import { authenticate, walletOrNull, api, SESSION_EXPIRED_EVENT } from "./kasware.js";
+import {
+  authenticate,
+  walletOrNull,
+  api,
+  SESSION_EXPIRED_EVENT,
+  NETWORK_SWITCH_REQUIRED_EVENT,
+  NETWORK_SWITCHED_EVENT,
+} from "./kasware.js";
 import { HomePage } from "./HomePage.js";
 import { PublishPage } from "./PublishPage.js";
 import { CreatorPage } from "./CreatorPage.js";
@@ -46,6 +53,20 @@ export function App() {
     window.addEventListener(SESSION_EXPIRED_EVENT, expired);
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expired);
   }, []);
+
+  useEffect(() => {
+    const required = () => showToast(COPY.wrongNetwork, "notice");
+    const switched = (event: Event) => {
+      const name = (event as CustomEvent<string>).detail;
+      showToast(COPY.networkSwitched.replace("{network}", name), "success");
+    };
+    window.addEventListener(NETWORK_SWITCH_REQUIRED_EVENT, required);
+    window.addEventListener(NETWORK_SWITCHED_EVENT, switched);
+    return () => {
+      window.removeEventListener(NETWORK_SWITCH_REQUIRED_EVENT, required);
+      window.removeEventListener(NETWORK_SWITCHED_EVENT, switched);
+    };
+  }, [showToast]);
 
   useEffect(() => {
     if (!address) {

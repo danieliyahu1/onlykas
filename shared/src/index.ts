@@ -4,6 +4,8 @@ export interface NetworkDefinition {
   id: NetworkId;
   /** The value Kasware expects from `getNetwork`/`switchNetwork`. */
   walletNetwork: string;
+  /** The human-readable network name shown to people. */
+  displayName: string;
   /** The human-readable address prefix, without the trailing colon. */
   addressPrefix: string;
   addressPattern: RegExp;
@@ -14,6 +16,7 @@ export const NETWORK_DEFINITIONS: Record<NetworkId, NetworkDefinition> = {
   mainnet: {
     id: "mainnet",
     walletNetwork: "kaspa_mainnet",
+    displayName: "Mainnet",
     addressPrefix: "kaspa",
     addressPattern: /^kaspa:[a-z0-9]{40,80}$/,
     defaultNodeUrl: "https://api.kaspa.org",
@@ -21,6 +24,7 @@ export const NETWORK_DEFINITIONS: Record<NetworkId, NetworkDefinition> = {
   "testnet-10": {
     id: "testnet-10",
     walletNetwork: "kaspa_testnet_10",
+    displayName: "Testnet 10",
     addressPrefix: "kaspatest",
     addressPattern: /^kaspatest:[a-z0-9]{40,80}$/,
     defaultNodeUrl: "https://api-tn10.kaspa.org",
@@ -43,8 +47,7 @@ export function isAddressForNetwork(network: NetworkId, value: string): boolean 
 
 export const KASPA_TESTNET_ADDRESS_PATTERN =
   NETWORK_DEFINITIONS["testnet-10"].addressPattern;
-export const KASPA_MAINNET_ADDRESS_PATTERN =
-  NETWORK_DEFINITIONS.mainnet.addressPattern;
+export const KASPA_MAINNET_ADDRESS_PATTERN = NETWORK_DEFINITIONS.mainnet.addressPattern;
 
 /** The server's authoritative network identity, served to the browser. */
 export interface NetworkConfigResponse {

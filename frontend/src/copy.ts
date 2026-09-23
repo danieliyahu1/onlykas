@@ -3,8 +3,8 @@ export const COPY = {
     "Connect to OnlyKas. This only identifies your wallet. No KAS will be sent.",
   kaswareMissing:
     "Open Kasware to connect. Your wallet is used to identify you and approve payments.",
-  wrongNetwork:
-    "Your wallet is on the wrong network. Switch networks in Kasware and try again.",
+  wrongNetwork: "Your wallet is on the wrong network. Switch networks and try again.",
+  networkSwitched: "You're on {network} now.",
   walletCancelled: "Wallet connection cancelled.",
   signInCancelled: "Sign-in cancelled.",
   verificationFailed: "OnlyKas could not verify this wallet. Try again.",

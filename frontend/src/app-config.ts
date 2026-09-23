@@ -22,6 +22,10 @@ export function walletNetworkName(): string {
   return current.walletNetwork;
 }
 
+export function networkDisplayName(): string {
+  return networkDefinition(current.network).displayName;
+}
+
 export function addressPrefix(): string {
   return current.addressPrefix;
 }

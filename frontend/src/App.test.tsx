@@ -1,9 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DEFAULT_NETWORK, networkDefinition } from "@onlykas/shared";
 import { App } from "./App.js";
 import { COPY } from "./copy.js";
-import { api, authenticate, type Kasware } from "./kasware.js";
+import {
+  NETWORK_SWITCH_REQUIRED_EVENT,
+  NETWORK_SWITCHED_EVENT,
+  api,
+  authenticate,
+  type Kasware,
+} from "./kasware.js";
 import { reloadPage } from "./navigation.js";
 
 const walletNetwork = networkDefinition(DEFAULT_NETWORK).walletNetwork;
@@ -148,7 +154,9 @@ describe("session and wallet reconciliation", () => {
       expect(apiMock).toHaveBeenCalledWith("/api/auth/logout", expect.anything()),
     );
     expect(reloadMock).toHaveBeenCalled();
-    expect(await screen.findByRole("button", { name: "Sign in with Kasware" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Sign in with Kasware" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the session and prompts when the wallet is on the wrong network", async () => {
@@ -185,6 +193,38 @@ describe("session and wallet reconciliation", () => {
     expect(await screen.findByText(/Hi,/i)).toBeInTheDocument();
     expect(apiMock).not.toHaveBeenCalledWith("/api/auth/logout", expect.anything());
     expect(reloadMock).not.toHaveBeenCalled();
+  });
+
+  it("prompts when an action opens the wallet's network switcher", async () => {
+    installWallet();
+    mockApi();
+
+    render(<App />);
+
+    act(() => {
+      window.dispatchEvent(new Event(NETWORK_SWITCH_REQUIRED_EVENT));
+    });
+
+    expect(await screen.findByText(COPY.wrongNetwork)).toBeInTheDocument();
+  });
+
+  it("confirms a successful network switch by its display name", async () => {
+    installWallet();
+    mockApi();
+
+    render(<App />);
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent<string>(NETWORK_SWITCHED_EVENT, {
+          detail: "Testnet 10",
+        }),
+      );
+    });
+
+    expect(
+      await screen.findByText(COPY.networkSwitched.replace("{network}", "Testnet 10")),
+    ).toBeInTheDocument();
   });
 
   it("signs out only when the user asks", async () => {

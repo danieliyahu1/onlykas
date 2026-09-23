@@ -1,4 +1,4 @@
-import { walletNetworkName } from "./app-config.js";
+import { networkDisplayName, walletNetworkName } from "./app-config.js";
 import { ApiError, toApiError, type ApiErrorBody } from "./api-error.js";
 import { COPY } from "./copy.js";
 import { logger } from "./logger.js";
@@ -33,6 +33,7 @@ export async function signPreparedPayment(
   transaction: string,
   signInputs?: number[],
 ): Promise<string> {
+  await ensureWalletNetwork();
   try {
     const inputs = (JSON.parse(transaction) as { inputs?: unknown[] }).inputs ?? [];
     return await kasware().signPskt({
@@ -67,6 +68,77 @@ export function walletOrNull(): Kasware | null {
   return window.kasware ?? null;
 }
 
+const NETWORK_SWITCH_TIMEOUT_MS = 10_000;
+const NETWORK_POLL_INTERVAL_MS = 500;
+
+/** The wallet needs a network switch and its switcher is being opened. */
+export const NETWORK_SWITCH_REQUIRED_EVENT = "onlykas:network-switch-required";
+/** The wallet landed on the right network; the detail is its display name. */
+export const NETWORK_SWITCHED_EVENT = "onlykas:network-switched";
+
+function announce(event: string, detail?: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    detail === undefined
+      ? new Event(event)
+      : new CustomEvent<string>(event, { detail }),
+  );
+}
+
+/**
+ * Blocks until the wallet is on the network the server selected. When a switch
+ * is needed it opens the wallet's switcher, announces it for the UI, and gives
+ * the user ten seconds to approve. A rejection, a dismissal, or the deadline
+ * releases the action with a single `wrongNetwork` error.
+ */
+export async function ensureWalletNetwork(): Promise<void> {
+  const wallet = kasware();
+  const expected = walletNetworkName();
+  if ((await wallet.getNetwork()) === expected) return;
+
+  announce(NETWORK_SWITCH_REQUIRED_EVENT);
+  const approved = await requestNetworkSwitch(wallet, expected);
+  if (!approved) throw new WalletError(COPY.wrongNetwork);
+  announce(NETWORK_SWITCHED_EVENT, networkDisplayName());
+}
+
+async function requestNetworkSwitch(
+  wallet: Kasware,
+  expected: string,
+): Promise<boolean> {
+  let settled = false;
+  let settle: (approved: boolean) => void = () => undefined;
+  const decision = new Promise<boolean>((resolve) => {
+    settle = resolve;
+  });
+  const finish = (approved: boolean) => {
+    if (settled) return;
+    settled = true;
+    settle(approved);
+  };
+  const check = async () => {
+    if ((await wallet.getNetwork().catch(() => expected)) === expected) {
+      finish(true);
+    }
+  };
+  const onChanged = () => void check();
+  wallet.on("networkChanged", onChanged);
+  const poll = window.setInterval(() => void check(), NETWORK_POLL_INTERVAL_MS);
+  const deadline = window.setTimeout(() => finish(false), NETWORK_SWITCH_TIMEOUT_MS);
+  try {
+    try {
+      void wallet.switchNetwork(expected).catch(() => finish(false));
+    } catch {
+      finish(false);
+    }
+    return await decision;
+  } finally {
+    window.clearInterval(poll);
+    window.clearTimeout(deadline);
+    wallet.removeListener("networkChanged", onChanged);
+  }
+}
+
 export async function authenticate(): Promise<string> {
   logger.info("auth_started");
   const wallet = kasware();
@@ -89,16 +161,12 @@ export async function authenticate(): Promise<string> {
     address: shortenAddress(address),
   });
   const network = walletNetworkName();
-  if ((await wallet.getNetwork()) !== network) {
-    try {
-      logger.info("auth_switching_network", { network });
-      await wallet.switchNetwork(network);
-    } catch {
-      logger.error("auth_network_switch_failed", { network });
-      throw new WalletError(COPY.wrongNetwork);
-    }
-    if ((await wallet.getNetwork()) !== network)
-      throw new WalletError(COPY.wrongNetwork);
+  try {
+    logger.info("auth_switching_network", { network });
+    await ensureWalletNetwork();
+  } catch {
+    logger.error("auth_network_switch_failed", { network });
+    throw new WalletError(COPY.wrongNetwork);
   }
   logger.info("auth_network_ready", { network });
   const challenge = await api<{ challengeId: string; message: string }>(

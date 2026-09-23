@@ -1,10 +1,14 @@
 import { DEFAULT_NETWORK, networkDefinition } from "@onlykas/shared";
 import { COPY } from "./copy.js";
 import {
+  NETWORK_SWITCH_REQUIRED_EVENT,
+  NETWORK_SWITCHED_EVENT,
   SESSION_EXPIRED_EVENT,
   api,
   authenticate,
+  ensureWalletNetwork,
   signPreparedPayment,
+  type Kasware,
 } from "./kasware.js";
 
 const walletNetwork = networkDefinition(DEFAULT_NETWORK).walletNetwork;
@@ -57,7 +61,7 @@ describe("Kasware authentication", () => {
     window.kasware = {
       getAccounts: vi.fn(),
       requestAccounts: vi.fn(),
-      getNetwork: vi.fn(),
+      getNetwork: vi.fn(async () => walletNetwork),
       switchNetwork: vi.fn(),
       getPublicKey: vi.fn(),
       signMessage: vi.fn(),
@@ -162,5 +166,91 @@ describe("Kasware authentication", () => {
     expect(listener).not.toHaveBeenCalled();
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener);
     fetchMock.mockRestore();
+  });
+});
+
+describe("wallet network reconciliation", () => {
+  afterEach(() => {
+    delete window.kasware;
+    vi.useRealTimers();
+  });
+
+  it("skips the switcher when the wallet is already on the expected network", async () => {
+    const wallet = {
+      getNetwork: vi.fn(async () => walletNetwork),
+      switchNetwork: vi.fn(),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    window.kasware = wallet as unknown as Kasware;
+
+    await expect(ensureWalletNetwork()).resolves.toBeUndefined();
+    expect(wallet.switchNetwork).not.toHaveBeenCalled();
+  });
+
+  it("continues the action once the wallet switches to the expected network", async () => {
+    let network = "kaspa_mainnet";
+    const handlers: Record<string, () => void> = {};
+    const wallet = {
+      getNetwork: vi.fn(async () => network),
+      switchNetwork: vi.fn(async () => {
+        network = walletNetwork;
+        handlers.networkChanged?.();
+      }),
+      on: vi.fn((event: string, handler: () => void) => {
+        handlers[event] = handler;
+      }),
+      removeListener: vi.fn(),
+    };
+    window.kasware = wallet as unknown as Kasware;
+
+    const required = vi.fn();
+    const switched = vi.fn();
+    window.addEventListener(NETWORK_SWITCH_REQUIRED_EVENT, required);
+    window.addEventListener(NETWORK_SWITCHED_EVENT, switched);
+
+    await expect(ensureWalletNetwork()).resolves.toBeUndefined();
+
+    expect(required).toHaveBeenCalledTimes(1);
+    expect(switched).toHaveBeenCalledTimes(1);
+    expect((switched.mock.calls[0]![0] as CustomEvent<string>).detail).toBe(
+      "Testnet 10",
+    );
+    expect(wallet.removeListener).toHaveBeenCalledWith(
+      "networkChanged",
+      expect.any(Function),
+    );
+    window.removeEventListener(NETWORK_SWITCH_REQUIRED_EVENT, required);
+    window.removeEventListener(NETWORK_SWITCHED_EVENT, switched);
+  });
+
+  it("releases the action when the network switch is rejected", async () => {
+    const wallet = {
+      getNetwork: vi.fn(async () => "kaspa_mainnet"),
+      switchNetwork: vi.fn(async () => {
+        throw new Error("dismissed");
+      }),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    window.kasware = wallet as unknown as Kasware;
+
+    await expect(ensureWalletNetwork()).rejects.toThrow(COPY.wrongNetwork);
+  });
+
+  it("releases the action when the network is not switched in time", async () => {
+    vi.useFakeTimers();
+    const wallet = {
+      getNetwork: vi.fn(async () => "kaspa_mainnet"),
+      switchNetwork: vi.fn(() => new Promise<void>(() => undefined)),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+    window.kasware = wallet as unknown as Kasware;
+
+    const pending = ensureWalletNetwork();
+    const assertion = expect(pending).rejects.toThrow(COPY.wrongNetwork);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await assertion;
   });
 });
