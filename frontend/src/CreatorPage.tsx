@@ -562,6 +562,7 @@ function PostCard({
       caption={post.caption}
       date={relativeTime(post.publishedAt)}
       to={postPath}
+      mediaType={post.mediaType}
       action={
         owner ? (
           <PostTileAction>

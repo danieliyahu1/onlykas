@@ -221,6 +221,26 @@ describe("CreatorPage subscription actions", () => {
     );
   });
 
+  it("marks each post with its media type", async () => {
+    vi.mocked(api).mockResolvedValueOnce({
+      ...creator(false, true),
+      posts: [
+        post("image-post", "A photo", true),
+        { ...post("video-post", "A clip", true), mediaType: "video/mp4" },
+      ],
+    });
+    renderCreator(null);
+
+    expect(await screen.findByRole("link", { name: "Image" })).toHaveAttribute(
+      "href",
+      "/post/image-post",
+    );
+    expect(screen.getByRole("link", { name: "Video" })).toHaveAttribute(
+      "href",
+      "/post/video-post",
+    );
+  });
+
   it("plays a free video inline on the profile", async () => {
     vi.mocked(api).mockResolvedValueOnce({
       ...creator(false, true),

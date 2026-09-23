@@ -59,6 +59,33 @@ export function LockIcon({ open }: { open: boolean }) {
   );
 }
 
+export type MediaIconKind = "image" | "video" | "media";
+
+const mediaPaths: Record<MediaIconKind, ReactNode> = {
+  image: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m4.5 16.5 4.5-4.5 3.5 3.5L16 12l3.5 3.5" />
+      <path d="M9 9.5h.01" />
+    </>
+  ),
+  video: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m10.5 9.5 5 2.5-5 2.5v-5Z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  media: <rect x="3" y="5" width="18" height="14" rx="2" />,
+};
+
+export function MediaIcon({ kind }: { kind: MediaIconKind }) {
+  return (
+    <svg className="media-icon" viewBox="0 0 24 24" aria-hidden="true">
+      {mediaPaths[kind]}
+    </svg>
+  );
+}
+
 export type VideoIconName =
   | "exit-fullscreen"
   | "fullscreen"

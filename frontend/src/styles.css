@@ -1279,6 +1279,28 @@ progress {
   stroke-linejoin: round;
   stroke-width: 1.8;
 }
+.media-type-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--muted);
+}
+a.media-type-badge {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.media-type-badge:hover,
+a.media-type-badge:focus-visible {
+  color: var(--acid);
+}
+.media-icon {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
 .post-price {
   color: var(--muted);
   font:
@@ -1387,6 +1409,11 @@ progress {
   gap: 0.4rem;
   padding: 1rem 1.1rem;
 }
+.post-tile-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
 .post-tile-caption {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -1477,11 +1504,30 @@ main:has(.single-post) {
   height: 100%;
   min-height: 0;
 }
-.single-post .caption {
+.single-post .post-details {
   order: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: clamp(0.75rem, 2vh, 1.25rem) 0 0;
+}
+.single-post .post-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.single-post .post-date {
+  color: var(--paper);
+  font:
+    0.68rem "DM Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.single-post .caption {
   flex: 0 0 auto;
   max-width: 40rem;
-  margin: clamp(0.75rem, 2vh, 1.25rem) 0 0;
+  margin: 0;
   color: var(--paper);
   font-size: clamp(1rem, 1.5vw, 1.15rem);
   font-weight: 400;

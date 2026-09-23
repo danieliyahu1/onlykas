@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import type { MediaType } from "@onlykas/shared";
+import { MediaTypeBadge } from "./MediaTypeBadge.js";
 import { PreviewImage } from "./PreviewImage.js";
 
 export function PostTile({
@@ -7,12 +9,14 @@ export function PostTile({
   caption,
   date,
   to,
+  mediaType,
   action,
 }: {
   media: ReactNode;
   caption: string;
   date?: string | undefined;
   to?: string | undefined;
+  mediaType?: MediaType | undefined;
   action?: ReactNode;
 }) {
   return (
@@ -26,7 +30,10 @@ export function PostTile({
         ) : (
           <p className="post-tile-caption">{caption}</p>
         )}
-        {date ? <span className="post-tile-date">{date}</span> : null}
+        <div className="post-tile-meta">
+          {mediaType ? <MediaTypeBadge mediaType={mediaType} to={to} /> : null}
+          {date ? <span className="post-tile-date">{date}</span> : null}
+        </div>
       </div>
       {action}
     </article>

@@ -107,10 +107,19 @@ describe("PostPage", () => {
     renderPost(post("locked-post", "A paid moment", false));
 
     expect(await screen.findByRole("button", { name: /unlock for/i })).toBeVisible();
+    expect(screen.getByRole("img", { name: "Image" })).toBeVisible();
     expect(
       document.querySelector('img[src="/api/posts/locked-post/preview?v=8"]'),
     ).not.toBeNull();
     expect(document.querySelector("img.post-media")).toBeNull();
+  });
+
+  it("marks an unlocked video with its media type", async () => {
+    const videoPost = post("video-post", "A moment for the circle", true);
+    vi.mocked(api).mockResolvedValueOnce({ ...videoPost, mediaType: "video/mp4" });
+    renderPost(videoPost);
+
+    expect(await screen.findByRole("img", { name: "Video" })).toBeVisible();
   });
 
   it("tells the buyer when the payment is still confirming", async () => {

@@ -6,9 +6,10 @@ import { unlockPost } from "./purchase.js";
 import { Toast, useToast } from "./Toast.js";
 import { Spinner } from "./Spinner.js";
 import { LockIcon } from "./Icons.js";
+import { MediaTypeBadge } from "./MediaTypeBadge.js";
 import { HomeLink, Message } from "./Message.js";
 import { errorText } from "./errors.js";
-import { formatKas, shortenAddress } from "./format.js";
+import { formatKas, relativeTime, shortenAddress } from "./format.js";
 import { PostMedia } from "./PostMedia.js";
 import { PreviewImage } from "./PreviewImage.js";
 import { previewUrl } from "./preview-url.js";
@@ -102,9 +103,17 @@ export function PostPage({ address, signIn, signingIn }: WalletProps) {
   return (
     <>
       <article className="single-post">
-        {currentPost.caption && (
-          <h1 className="caption">{currentPost.caption}</h1>
-        )}
+        <div className="post-details">
+          {currentPost.caption && (
+            <h1 className="caption">{currentPost.caption}</h1>
+          )}
+          <div className="post-meta">
+            <MediaTypeBadge mediaType={currentPost.mediaType} />
+            <span className="post-date">
+              {relativeTime(currentPost.publishedAt)}
+            </span>
+          </div>
+        </div>
         <div className="post-stage">
           {currentPost.canView ? (
             <PostMedia key={currentPost.id} post={currentPost} />
