@@ -138,6 +138,96 @@ describe("VideoPlayer", () => {
     expect(pauseMock).not.toHaveBeenCalled();
   });
 
+  it("shows a sound icon while unmuted and a mute icon once muted", () => {
+    renderPlayer();
+    const mute = screen.getByRole("button", { name: "Mute video" });
+    expect(mute.querySelector("path")).toHaveAttribute(
+      "d",
+      "M3 10v4h4l5 4V6l-5 4H3M16 9c2 2 2 4 0 6M19 6c4 4 4 8 0 12",
+    );
+
+    fireEvent.click(mute);
+
+    const unmute = screen.getByRole("button", { name: "Unmute video" });
+    expect(unmute.querySelector("path")).toHaveAttribute(
+      "d",
+      "M3 10v4h4l5 4V6l-5 4H3M16 9l5 6M21 9l-5 6",
+    );
+  });
+
+  function volumeSlider() {
+    const slider = screen.getByRole("slider", { name: "Volume" });
+    vi.spyOn(slider, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 40,
+      bottom: 100,
+      width: 40,
+      height: 100,
+      toJSON: () => ({}),
+    } as DOMRect);
+    return slider;
+  }
+
+  function pressVolumeAt(slider: HTMLElement, clientY: number) {
+    fireEvent(slider, new MouseEvent("pointerdown", { bubbles: true, clientY }));
+  }
+
+  it("reaches the full range, shows the level, and mutes at zero", () => {
+    renderPlayer();
+    const { video } = readyPlayer();
+    const slider = volumeSlider();
+    const level = () => slider.querySelector(".video-volume-value")?.textContent;
+
+    pressVolumeAt(slider, 0);
+    expect(video.volume).toBe(1);
+    expect(video.muted).toBe(false);
+    expect(level()).toBe("100");
+
+    pressVolumeAt(slider, 25);
+    expect(video.volume).toBe(0.75);
+    expect(video.muted).toBe(false);
+    expect(level()).toBe("75");
+
+    pressVolumeAt(slider, 50);
+    expect(video.volume).toBe(0.5);
+    expect(video.muted).toBe(false);
+    expect(level()).toBe("50");
+
+    pressVolumeAt(slider, 100);
+    expect(video.volume).toBe(0);
+    expect(video.muted).toBe(true);
+    expect(level()).toBe("0");
+    expect(screen.getByRole("button", { name: "Unmute video" })).toBeVisible();
+  });
+
+  it("adjusts volume with the keyboard without seeking", () => {
+    renderPlayer();
+    const { video } = readyPlayer();
+    const slider = volumeSlider();
+
+    fireEvent.keyDown(slider, { key: "ArrowDown" });
+    expect(video.volume).toBeCloseTo(0.95);
+    expect(video.currentTime).toBe(30);
+
+    fireEvent.keyDown(slider, { key: "ArrowUp" });
+    expect(video.volume).toBe(1);
+  });
+
+  it("restores full volume when unmuting from zero", () => {
+    renderPlayer();
+    const { video } = readyPlayer();
+    pressVolumeAt(volumeSlider(), 100);
+    expect(video.muted).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unmute video" }));
+
+    expect(video.volume).toBe(1);
+    expect(video.muted).toBe(false);
+  });
+
   it("takes the player container fullscreen, never the video", () => {
     const requestFullscreen = vi.fn();
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
