@@ -1813,6 +1813,7 @@ main:has(.single-post) {
   margin-top: clamp(0.5rem, 1.5vh, 1rem);
   color: var(--muted);
   font-size: 0.92rem;
+  text-decoration: none;
 }
 .creator-link:hover,
 .creator-link:focus-visible {
