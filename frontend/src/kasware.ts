@@ -172,6 +172,16 @@ async function requestNetworkSwitch(
 export async function authenticate(): Promise<string> {
   logger.info("auth_started");
   const wallet = kasware();
+  const network = walletNetworkName();
+  try {
+    logger.info("auth_switching_network", { network });
+    await ensureWalletNetwork();
+  } catch (caught) {
+    logger.error("auth_network_switch_failed", { network });
+    if (caught instanceof WalletNetworkError) throw caught;
+    throw new WalletError(COPY.wrongNetwork);
+  }
+  logger.info("auth_network_ready", { network });
   let accounts = await wallet.getAccounts();
   logger.debug("auth_wallet_accounts_checked", {
     count: accounts.length,
@@ -188,18 +198,9 @@ export async function authenticate(): Promise<string> {
   const address = accounts[0];
   if (!address) throw new WalletError(COPY.walletCancelled);
   logger.info("auth_wallet_address_received", {
-    address: shortenAddress(address),
+    addressPrefix: address.split(":")[0],
+    length: address.length,
   });
-  const network = walletNetworkName();
-  try {
-    logger.info("auth_switching_network", { network });
-    await ensureWalletNetwork();
-  } catch (caught) {
-    logger.error("auth_network_switch_failed", { network });
-    if (caught instanceof WalletNetworkError) throw caught;
-    throw new WalletError(COPY.wrongNetwork);
-  }
-  logger.info("auth_network_ready", { network });
   const challenge = await api<{ challengeId: string; message: string }>(
     "/api/auth/challenge",
     { method: "POST", body: JSON.stringify({ address }) },
@@ -227,7 +228,7 @@ export async function authenticate(): Promise<string> {
     }),
   });
   logger.info("auth_session_established", {
-    address: shortenAddress(address),
+    addressPrefix: address.split(":")[0],
   });
   return address;
 }
@@ -270,6 +271,9 @@ export async function api<T = unknown>(path: string, init?: RequestInit): Promis
       code: error.code,
       message: error.message,
       requestId: error.requestId,
+      ...(body && Array.isArray(body.errorFields)
+        ? { errorFields: body.errorFields }
+        : {}),
     });
     throw error;
   }
@@ -280,8 +284,4 @@ export async function api<T = unknown>(path: string, init?: RequestInit): Promis
     requestId: headerRequestId,
   });
   return body as T;
-}
-
-function shortenAddress(address: string) {
-  return `${address.slice(0, 10)}...${address.slice(-6)}`;
 }

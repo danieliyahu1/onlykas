@@ -59,6 +59,61 @@ describe("Kasware authentication", () => {
     fetchMock.mockRestore();
   });
 
+  it("re-reads the account after the network switch and binds the challenge to it", async () => {
+    let network = "kaspa_mainnet";
+    const handlers: Record<string, () => void> = {};
+    const mainnetAddress = `kaspa:${"q".repeat(60)}`;
+    const wallet = {
+      getAccounts: vi.fn(async () =>
+        network === walletNetwork ? [address] : [mainnetAddress],
+      ),
+      requestAccounts: vi.fn(),
+      getNetwork: vi.fn(async () => network),
+      switchNetwork: vi.fn(async () => {
+        network = walletNetwork;
+        handlers.networkChanged?.();
+      }),
+      getPublicKey: vi.fn(async () => "public-key"),
+      signMessage: vi.fn(async () => "signature"),
+      signPskt: vi.fn(),
+      on: vi.fn((event: string, handler: () => void) => {
+        handlers[event] = handler;
+      }),
+      removeListener: vi.fn(),
+    };
+    window.kasware = wallet as unknown as Kasware;
+    const fetchMock = vi
+      .spyOn(window, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            challengeId: "challenge",
+            message: COPY.authPrompt,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ address }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    await expect(authenticate()).resolves.toBe(address);
+    expect(wallet.getAccounts).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({
+      address,
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1]![1]!.body as string)).toEqual({
+      challengeId: "challenge",
+      address,
+      publicKey: "public-key",
+      signature: "signature",
+    });
+    fetchMock.mockRestore();
+  });
+
   it("surfaces the underlying wallet error when signing a prepared transaction fails", async () => {
     window.kasware = {
       getAccounts: vi.fn(),
@@ -84,7 +139,7 @@ describe("Kasware authentication", () => {
       requestAccounts: vi.fn(async () => {
         throw new Error("rejected");
       }),
-      getNetwork: vi.fn(),
+      getNetwork: vi.fn(async () => walletNetwork),
       switchNetwork: vi.fn(),
       getPublicKey: vi.fn(),
       signMessage: vi.fn(),
