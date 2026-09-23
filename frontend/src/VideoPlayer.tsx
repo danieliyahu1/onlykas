@@ -13,6 +13,7 @@ const DOUBLE_TAP_MS = 250;
 const SEEK_STEP = 10;
 const DEAD_ZONE_RATIO = 0.05;
 const VOLUME_STEP = 0.05;
+const CONTROLS_IDLE_MS = 3000;
 
 export function VideoPlayer({
   src,
@@ -27,11 +28,13 @@ export function VideoPlayer({
   const player = useRef<HTMLDivElement>(null);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(false);
   const [flash, setFlash] = useState<"back" | "forward" | null>(null);
 
   useEffect(() => {
@@ -44,9 +47,49 @@ export function VideoPlayer({
     () => () => {
       if (clickTimer.current) clearTimeout(clickTimer.current);
       if (flashTimer.current) clearTimeout(flashTimer.current);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
     },
     [],
   );
+
+  function clearHideTimer() {
+    if (hideTimer.current) {
+      clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }
+
+  function scheduleHide() {
+    clearHideTimer();
+    hideTimer.current = setTimeout(() => {
+      hideTimer.current = null;
+      setControlsVisible(false);
+    }, CONTROLS_IDLE_MS);
+  }
+
+  function handlePlay() {
+    scheduleHide();
+  }
+
+  function handlePause() {
+    clearHideTimer();
+    setControlsVisible(true);
+  }
+
+  function handlePointerActivity(event: MouseEvent<HTMLDivElement>) {
+    setControlsVisible(true);
+    if (video.current?.paused) return;
+    if ((event.target as HTMLElement).closest(".video-controls")) {
+      clearHideTimer();
+      return;
+    }
+    scheduleHide();
+  }
+
+  function handlePointerLeave() {
+    clearHideTimer();
+    setControlsVisible(false);
+  }
 
   function togglePlayback() {
     if (!video.current) return;
@@ -141,6 +184,8 @@ export function VideoPlayer({
       aria-label={`${label} video`}
       onKeyDown={handleKeyDown}
       onClick={handleSurfaceClick}
+      onMouseMove={handlePointerActivity}
+      onMouseLeave={handlePointerLeave}
     >
       <video
         ref={video}
@@ -149,6 +194,8 @@ export function VideoPlayer({
         preload="metadata"
         onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+        onPlay={handlePlay}
+        onPause={handlePause}
         onError={onError}
       />
       {flash && (
@@ -156,8 +203,9 @@ export function VideoPlayer({
           {flash === "back" ? `-${SEEK_STEP}s` : `+${SEEK_STEP}s`}
         </span>
       )}
-      <div className="video-controls">
+      <div className={`video-controls${controlsVisible ? "" : " is-hidden"}`}>
         <input
+          className="video-progress"
           type="range"
           min="0"
           max={duration || 0}

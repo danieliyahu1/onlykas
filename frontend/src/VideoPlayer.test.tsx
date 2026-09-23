@@ -138,6 +138,51 @@ describe("VideoPlayer", () => {
     expect(pauseMock).not.toHaveBeenCalled();
   });
 
+  it("starts with the control bar hidden until the pointer moves", () => {
+    renderPlayer();
+    const player = screen.getByRole("group", { name: "Clip video" });
+    const controls = player.querySelector(".video-controls") as HTMLElement;
+    expect(controls.className).toContain("is-hidden");
+
+    fireEvent.mouseMove(player, { clientX: 10, clientY: 10 });
+    expect(controls.className).not.toContain("is-hidden");
+  });
+
+  it("hides the control bar while playing and reveals it on movement", () => {
+    renderPlayer();
+    const { player, video } = readyPlayer();
+    const controls = player.querySelector(".video-controls") as HTMLElement;
+    paused = false;
+
+    fireEvent.play(video);
+    act(() => vi.advanceTimersByTime(3000));
+    expect(controls.className).toContain("is-hidden");
+
+    fireEvent.mouseMove(player, { clientX: 10, clientY: 10 });
+    expect(controls.className).not.toContain("is-hidden");
+  });
+
+  it("hides the control bar when the pointer leaves a playing video", () => {
+    renderPlayer();
+    const { player } = readyPlayer();
+    const controls = player.querySelector(".video-controls") as HTMLElement;
+    paused = false;
+
+    fireEvent.mouseMove(player, { clientX: 10, clientY: 10 });
+    fireEvent.mouseLeave(player);
+    expect(controls.className).toContain("is-hidden");
+  });
+
+  it("keeps the control bar visible while paused", () => {
+    renderPlayer();
+    const { player, video } = readyPlayer();
+    const controls = player.querySelector(".video-controls") as HTMLElement;
+
+    fireEvent.pause(video);
+    act(() => vi.advanceTimersByTime(3000));
+    expect(controls.className).not.toContain("is-hidden");
+  });
+
   it("shows a sound icon while unmuted and a mute icon once muted", () => {
     renderPlayer();
     const mute = screen.getByRole("button", { name: "Mute video" });
