@@ -79,6 +79,8 @@ import { StorageError } from "./r2-storage.js";
 import { discardTempDir } from "./temp-files.js";
 
 const sessionCookie = "onlykas_session";
+const RESPONSE_STALL_MS = 10_000;
+
 export interface AppDependencies {
   store: Repositories;
   storage: ObjectStorage;
@@ -92,6 +94,7 @@ export interface AppDependencies {
   network?: NetworkId;
   production?: boolean;
   now?: () => number;
+  responseStallMs?: number;
   readinessCheck?: () => boolean | Promise<boolean>;
   logger?: Logger;
   metrics?: Metrics;
@@ -112,6 +115,7 @@ declare global {
 export function createApp(d: AppDependencies) {
   const app = express();
   const now = d.now ?? Date.now;
+  const responseStallMs = d.responseStallMs ?? RESPONSE_STALL_MS;
   const logger = d.logger ?? defaultLogger;
   const metrics = d.metrics ?? defaultMetrics;
   // The selected network is the single source of truth for address validation
@@ -174,29 +178,63 @@ export function createApp(d: AppDependencies) {
     res.locals.requestId = req.requestId;
     res.setHeader("X-Request-Id", req.requestId);
     const startedAt = Date.now();
+    const apiRequest = req.path.startsWith("/api/");
+    let finished = false;
+    const stallTimer = apiRequest
+      ? setTimeout(() => {
+          if (res.headersSent || !req.complete) return;
+          logger.warn("request_stalled", {
+            requestId: req.requestId,
+            method: req.method,
+            path: req.path,
+            route: routePattern(req),
+            elapsedMs: Date.now() - startedAt,
+          });
+        }, responseStallMs)
+      : undefined;
+    stallTimer?.unref();
+    if (apiRequest)
+      logger.debug("request_started", {
+        requestId: req.requestId,
+        method: req.method,
+        path: req.path,
+      });
     res.on("finish", () => {
-      if (req.path.startsWith("/api/")) {
-        const write =
-          res.statusCode >= 500
-            ? logger.error
-            : res.statusCode >= 400
-              ? logger.warn
-              : logger.info;
-        write("request_completed", {
-          requestId: req.requestId,
-          method: req.method,
-          path: req.path,
-          route: routePattern(req),
-          statusCode: res.statusCode,
-          durationMs: Date.now() - startedAt,
-          authenticated: Boolean(req.walletSession),
-          ...(res.locals.apiErrorCode ? { errorCode: res.locals.apiErrorCode } : {}),
-          ...(res.locals.apiErrorFields
-            ? { errorFields: res.locals.apiErrorFields }
-            : {}),
-          ...(req.params?.id ? { postId: req.params.id } : {}),
-        });
-      }
+      finished = true;
+      if (stallTimer) clearTimeout(stallTimer);
+      if (!apiRequest) return;
+      const write =
+        res.statusCode >= 500
+          ? logger.error
+          : res.statusCode >= 400
+            ? logger.warn
+            : logger.info;
+      write("request_completed", {
+        requestId: req.requestId,
+        method: req.method,
+        path: req.path,
+        route: routePattern(req),
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+        authenticated: Boolean(req.walletSession),
+        ...(res.locals.apiErrorCode ? { errorCode: res.locals.apiErrorCode } : {}),
+        ...(res.locals.apiErrorFields
+          ? { errorFields: res.locals.apiErrorFields }
+          : {}),
+        ...(req.params?.id ? { postId: req.params.id } : {}),
+      });
+    });
+    res.on("close", () => {
+      if (stallTimer) clearTimeout(stallTimer);
+      if (finished || !apiRequest) return;
+      logger.warn("request_aborted", {
+        requestId: req.requestId,
+        method: req.method,
+        path: req.path,
+        route: routePattern(req),
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+      });
     });
     next();
   });
@@ -1274,10 +1312,37 @@ export function createApp(d: AppDependencies) {
           );
         }
         const body = Readable.from(streamed.body);
-        body.on("data", (chunk: Uint8Array) =>
-          metrics.mediaDelivered(p.mediaType, chunk.byteLength),
-        );
-        return body.pipe(res);
+        let delivered = 0;
+        body.on("data", (chunk: Uint8Array) => {
+          delivered += chunk.byteLength;
+          metrics.mediaDelivered(p.mediaType, chunk.byteLength);
+        });
+        body.on("error", (error: unknown) => {
+          logger.warn("media_stream_failed", {
+            requestId: req.requestId,
+            postId: p.id,
+            mediaKey: p.mediaKey,
+            mediaType: p.mediaType,
+            range: range ? `${range.start}-${range.end}` : "full",
+            expectedBytes: Number(res.getHeader("Content-Length") ?? 0),
+            deliveredBytes: delivered,
+            headersSent: res.headersSent,
+            ...safeError(error),
+          });
+          if (res.headersSent) {
+            res.destroy();
+            return;
+          }
+          res.removeHeader("Content-Range");
+          res.removeHeader("Content-Type");
+          res.removeHeader("Content-Length");
+          apiError(res, 504, "MEDIA_STREAM_FAILED");
+        });
+        res.on("close", () => {
+          if (!res.writableFinished) body.destroy();
+        });
+        body.pipe(res);
+        return;
       }
       const object = await d.storage.readRange(p.mediaKey, range?.start, range?.end);
       res.setHeader("Content-Length", object.bytes.byteLength);
@@ -1339,14 +1404,20 @@ export function createApp(d: AppDependencies) {
     }
     if (e instanceof HttpError) return apiError(res, e.status, e.code);
     const storageFailure = e instanceof StorageError;
+    const storageTimedOut = storageFailure && e.category === "STORAGE_TIMEOUT";
     logger.error("request_failed", {
       requestId: req.requestId,
       method: req.method,
       path: req.path,
       route: routePattern(req),
-      errorCode: storageFailure ? "MEDIA_STORAGE_FAILED" : "SERVICE_UNAVAILABLE",
+      errorCode: storageFailure
+        ? storageTimedOut
+          ? "MEDIA_STORAGE_TIMEOUT"
+          : "MEDIA_STORAGE_FAILED"
+        : "SERVICE_UNAVAILABLE",
       ...safeError(e),
     });
+    if (storageTimedOut) return apiError(res, 504, "MEDIA_STORAGE_TIMEOUT");
     return storageFailure
       ? apiError(res, 502, "MEDIA_STORAGE_FAILED")
       : apiError(res, 503, "SERVICE_UNAVAILABLE");

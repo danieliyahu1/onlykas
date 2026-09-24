@@ -665,6 +665,184 @@ describe("anonymous media access", () => {
   });
 });
 
+describe("media stream diagnostics", () => {
+  it("logs and fails a stalled media read with its byte counts", async () => {
+    const store = new MemoryStore();
+    await store.publishPost({
+      ...post("stalled-post"),
+      priceSompi: "0",
+      mediaType: "video/mp4",
+      mediaSize: 3_070_591,
+      mediaKey: "media/stalled",
+    });
+    const storage: ObjectStorage = {
+      putFile: async () => undefined,
+      readRange: async () => ({
+        bytes: new Uint8Array(),
+        size: 0,
+        contentType: "video/mp4",
+      }),
+      streamRange: async () => ({
+        body: {
+          [Symbol.asyncIterator]: () => ({
+            next: () =>
+              Promise.reject(
+                new StorageError(
+                  "get_object",
+                  "media/stalled",
+                  "STORAGE_TIMEOUT",
+                  undefined,
+                  "TimeoutError",
+                  "r2-timeout-1",
+                  undefined,
+                  new Error("socket timed out"),
+                ),
+              ),
+          }),
+        },
+        size: 3_070_591,
+        contentType: "video/mp4",
+      }),
+      delete: async () => undefined,
+    };
+    const { app, events } = testApp(store, undefined, undefined, storage);
+
+    const response = await request(app).get("/api/posts/stalled-post/media");
+
+    expect(response.status).toBe(504);
+    expect(response.body.error).toBe("MEDIA_STREAM_FAILED");
+    expect(events).toContainEqual({
+      event: "media_stream_failed",
+      fields: expect.objectContaining({
+        level: "warn",
+        postId: "stalled-post",
+        mediaKey: "media/stalled",
+        mediaType: "video/mp4",
+        expectedBytes: 3_070_591,
+        deliveredBytes: 0,
+        headersSent: false,
+        storageOperation: "get_object",
+        storageCategory: "STORAGE_TIMEOUT",
+        storageRequestId: "r2-timeout-1",
+      }),
+    });
+  });
+
+  it("maps a storage timeout before streaming to 504 with its correlation id", async () => {
+    const store = new MemoryStore();
+    await store.publishPost({ ...post("timeout-post"), priceSompi: "0" });
+    const storage: ObjectStorage = {
+      putFile: async () => undefined,
+      readRange: async () => ({
+        bytes: new Uint8Array(),
+        size: 0,
+        contentType: "image/jpeg",
+      }),
+      streamRange: async () => {
+        throw new StorageError(
+          "head_object",
+          "media/timeout-post",
+          "STORAGE_TIMEOUT",
+          undefined,
+          "TimeoutError",
+          "r2-timeout-2",
+          undefined,
+          new Error("connection timed out"),
+        );
+      },
+      delete: async () => undefined,
+    };
+    const { app, events } = testApp(store, undefined, undefined, storage);
+
+    const response = await request(app)
+      .get("/api/posts/timeout-post/media")
+      .set("X-Request-Id", "timeout-trace");
+
+    expect(response.status).toBe(504);
+    expect(response.body).toMatchObject({
+      error: "MEDIA_STORAGE_TIMEOUT",
+      requestId: "timeout-trace",
+    });
+    expect(events).toContainEqual({
+      event: "request_failed",
+      fields: expect.objectContaining({
+        level: "error",
+        requestId: "timeout-trace",
+        errorCode: "MEDIA_STORAGE_TIMEOUT",
+        storageCategory: "STORAGE_TIMEOUT",
+      }),
+    });
+  });
+
+  it("records a stalled request and the abort that follows it", async () => {
+    const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
+    const record =
+      (level: string): EventLogger =>
+      (event, fields = {}) => {
+        events.push({ event, fields: { level, ...fields } });
+      };
+    const logger: Logger = {
+      debug: record("debug"),
+      info: record("info"),
+      warn: record("warn"),
+      error: record("error"),
+    };
+    const store = new MemoryStore();
+    await store.publishPost({
+      ...post("hang-post"),
+      priceSompi: "0",
+      mediaKey: "media/hang",
+    });
+    const storage: ObjectStorage = {
+      putFile: async () => undefined,
+      readRange: async () => ({
+        bytes: new Uint8Array(),
+        size: 0,
+        contentType: "video/mp4",
+      }),
+      streamRange: async () => ({
+        body: (async function* () {
+          await new Promise(() => undefined);
+          yield new Uint8Array();
+        })(),
+        size: 10,
+        contentType: "video/mp4",
+      }),
+      delete: async () => undefined,
+    };
+    const app = createApp({
+      store,
+      storage,
+      walletVerifier: { verify: async () => false },
+      publicOrigin: "http://localhost:5173",
+      logger,
+      responseStallMs: 20,
+    });
+
+    await request(app)
+      .get("/api/posts/hang-post/media")
+      .timeout({ response: 150 })
+      .catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(events).toContainEqual({
+      event: "request_stalled",
+      fields: expect.objectContaining({
+        level: "warn",
+        path: "/api/posts/hang-post/media",
+        route: "/api/posts/:id/media",
+      }),
+    });
+    expect(events).toContainEqual({
+      event: "request_aborted",
+      fields: expect.objectContaining({
+        level: "warn",
+        path: "/api/posts/hang-post/media",
+      }),
+    });
+  });
+});
+
 describe("locked media previews", () => {
   const onePixelPng = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
