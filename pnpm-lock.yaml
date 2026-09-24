@@ -44,6 +44,9 @@ importers:
       '@onlykas/shared':
         specifier: workspace:*
         version: link:../shared
+      '@smithy/node-http-handler':
+        specifier: ^4.11.3
+        version: 4.11.3
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7

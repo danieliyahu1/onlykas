@@ -7,8 +7,13 @@ import {
   type HeadObjectCommandOutput,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { ObjectStorage } from "./application/ports.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
+
+const CONNECTION_TIMEOUT_MS = 3_000;
+const SOCKET_TIMEOUT_MS = 15_000;
+const MAX_ATTEMPTS = 2;
 
 export type StorageFailureCategory =
   "OBJECT_NOT_FOUND" | "STORAGE_FORBIDDEN" | "STORAGE_TIMEOUT" | "STORAGE_FAILURE";
@@ -48,6 +53,11 @@ export class R2Storage implements ObjectStorage {
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
       },
+      maxAttempts: MAX_ATTEMPTS,
+      requestHandler: new NodeHttpHandler({
+        connectionTimeout: CONNECTION_TIMEOUT_MS,
+        socketTimeout: SOCKET_TIMEOUT_MS,
+      }),
     });
   }
   close(): void {
@@ -176,7 +186,7 @@ function toStorageError(operation: string, key: string, error: unknown): Storage
       ? "OBJECT_NOT_FOUND"
       : statusCode === 401 || statusCode === 403
         ? "STORAGE_FORBIDDEN"
-        : details.name === "TimeoutError" || details.name === "AbortError"
+        : isTimeoutError(error)
           ? "STORAGE_TIMEOUT"
           : "STORAGE_FAILURE",
     statusCode,
@@ -186,4 +196,31 @@ function toStorageError(operation: string, key: string, error: unknown): Storage
     error,
   );
 }
+
+function isTimeoutError(error: unknown): boolean {
+  const candidate = error as {
+    name?: unknown;
+    code?: unknown;
+    message?: unknown;
+    cause?: { name?: unknown; code?: unknown; message?: unknown };
+  };
+  const names = [candidate?.name, candidate?.cause?.name];
+  if (names.some((name) => name === "TimeoutError" || name === "AbortError"))
+    return true;
+  const codes = [candidate?.code, candidate?.cause?.code];
+  if (
+    codes.some(
+      (code) =>
+        code === "ETIMEDOUT" ||
+        code === "UND_ERR_CONNECT_TIMEOUT" ||
+        code === "UND_ERR_HEADERS_TIMEOUT" ||
+        code === "UND_ERR_BODY_TIMEOUT",
+    )
+  )
+    return true;
+  return [candidate?.message, candidate?.cause?.message].some(
+    (message) => typeof message === "string" && /timed? ?out|timeout/i.test(message),
+  );
+}
+
 import { createReadStream } from "node:fs";
