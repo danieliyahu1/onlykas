@@ -1,4 +1,4 @@
-import type { CreatorResponse, PostResponse } from "@onlykas/shared";
+import type { CreatorResponse, PostResponse } from "@kaskama/shared";
 import { Toast, useToast } from "./Toast.js";
 
 /** Renders the shared toast slot the app shell owns, for page-level tests. */

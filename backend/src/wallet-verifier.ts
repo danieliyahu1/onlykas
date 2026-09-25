@@ -1,5 +1,5 @@
 import { PublicKey, verifyMessage } from "kaspa-wasm";
-import { DEFAULT_NETWORK, type NetworkId } from "@onlykas/shared";
+import { DEFAULT_NETWORK, type NetworkId } from "@kaskama/shared";
 import type { WalletVerifier } from "./application/ports.js";
 
 export class KaspaWalletVerifier implements WalletVerifier {

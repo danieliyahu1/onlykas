@@ -41,7 +41,7 @@ importers:
       '@noble/hashes':
         specifier: ^2.0.0
         version: 2.4.0
-      '@onlykas/shared':
+      '@kaskama/shared':
         specifier: workspace:*
         version: link:../shared
       '@smithy/node-http-handler':
@@ -99,7 +99,7 @@ importers:
 
   frontend:
     dependencies:
-      '@onlykas/shared':
+      '@kaskama/shared':
         specifier: workspace:*
         version: link:../shared
       '@vitejs/plugin-react':

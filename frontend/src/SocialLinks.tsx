@@ -11,7 +11,7 @@ export function SocialLinks() {
         href={SOCIAL_LINKS.telegram}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="OnlyKas on Telegram"
+        aria-label="Kaskama on Telegram"
         title="Join us on Telegram"
       >
         <TelegramIcon />
@@ -21,8 +21,8 @@ export function SocialLinks() {
         href={SOCIAL_LINKS.github}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="OnlyKas on GitHub"
-        title="OnlyKas on GitHub"
+        aria-label="Kaskama on GitHub"
+        title="Kaskama on GitHub"
       >
         <GitHubIcon />
       </a>

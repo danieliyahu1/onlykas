@@ -16,7 +16,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { FEEDBACK_MAX_MESSAGE } from "@onlykas/shared";
+import { FEEDBACK_MAX_MESSAGE } from "@kaskama/shared";
 
 export class FeedbackError extends Error {
   constructor(
@@ -45,7 +45,7 @@ export function validateFeedback(input: { message?: unknown } = {}): {
 }
 
 export function formatFeedbackMessage(entry: { message: string }): string {
-  return [`New OnlyKas feedback:`, "", entry.message].join("\n");
+  return [`New Kaskama feedback:`, "", entry.message].join("\n");
 }
 
 export interface FeedbackMetrics {

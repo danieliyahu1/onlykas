@@ -1,4 +1,4 @@
-import type { ApiRetry } from "@onlykas/shared";
+import type { ApiRetry } from "@kaskama/shared";
 
 export class ApiError extends Error {
   constructor(

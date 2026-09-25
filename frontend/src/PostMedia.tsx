@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isVideoMedia, type PostResponse } from "@onlykas/shared";
+import { isVideoMedia, type PostResponse } from "@kaskama/shared";
 import { VideoPlayer } from "./VideoPlayer.js";
 
 export function PostMedia({ post }: { post: PostResponse }) {

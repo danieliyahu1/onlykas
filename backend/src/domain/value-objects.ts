@@ -1,4 +1,4 @@
-import { KASPA_TESTNET_ADDRESS_PATTERN } from "@onlykas/shared";
+import { KASPA_TESTNET_ADDRESS_PATTERN } from "@kaskama/shared";
 
 export type KaspaAddress = string & { readonly __kaspaAddress: unique symbol };
 export type Sompi = bigint & { readonly __sompi: unique symbol };

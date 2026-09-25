@@ -1,4 +1,4 @@
-import { SITE, publicPageByPath, type PublicPage } from "@onlykas/shared";
+import { SITE, publicPageByPath, type PublicPage } from "@kaskama/shared";
 
 export interface PublicRouteMatch {
   /** 200 for a real page, 404 for a route the client does not know. */
@@ -15,15 +15,15 @@ export interface PublicRouteMatch {
 
 const CREATORS_BODY =
   '<div class="find-page"><header><h1>Creators.</h1></header>' +
-  '<p class="feedback inline">Browse creators publishing paid photos and videos on OnlyKas.</p></div>';
+  '<p class="feedback inline">Browse creators publishing paid photos and videos on Kaskama.</p></div>';
 
 const FIND_BODY =
   '<div class="find-page"><header><h1>Find a creator.</h1></header>' +
-  '<p class="feedback inline">Search OnlyKas creators by name or wallet address.</p></div>';
+  '<p class="feedback inline">Search Kaskama creators by name or wallet address.</p></div>';
 
 const PUBLISH_BODY =
   '<div class="find-page"><header><h1>Publish your work.</h1></header>' +
-  '<p class="feedback inline">Connect your Kasware wallet to publish paid photos and videos on OnlyKas.</p></div>';
+  '<p class="feedback inline">Connect your Kasware wallet to publish paid photos and videos on Kaskama.</p></div>';
 
 const CREATOR_BODY =
   '<div class="find-page"><header><h1>Creator.</h1></header>' +
@@ -45,18 +45,18 @@ interface RouteMeta {
 const APP_ROUTE_META: Record<string, RouteMeta> = {
   "/": { title: SITE.title, description: SITE.description },
   "/creators": {
-    title: "Creators — OnlyKas",
+    title: "Creators — Kaskama",
     description:
-      "Browse creators publishing paid photos and videos on OnlyKas and unlock their work with Kaspa.",
+      "Browse creators publishing paid photos and videos on Kaskama and unlock their work with Kaspa.",
     body: CREATORS_BODY,
   },
   "/find": {
-    title: "Find a creator — OnlyKas",
-    description: "Search OnlyKas creators by name or wallet address.",
+    title: "Find a creator — Kaskama",
+    description: "Search Kaskama creators by name or wallet address.",
     body: FIND_BODY,
   },
   "/publish": {
-    title: "Publish — OnlyKas",
+    title: "Publish — Kaskama",
     description:
       "Publish paid photos and videos, set your own price, and get paid directly by fans on Kaspa.",
     body: PUBLISH_BODY,
@@ -67,8 +67,8 @@ const CREATOR_PATH = /^\/creator\/[^/]+$/;
 const POST_PATH = /^\/post\/[^/]+$/;
 
 const NOT_FOUND: Omit<PublicRouteMatch, "status" | "canonicalPath"> = {
-  title: "Page not found — OnlyKas",
-  description: "This page does not exist on OnlyKas.",
+  title: "Page not found — Kaskama",
+  description: "This page does not exist on Kaskama.",
   body: NOT_FOUND_BODY,
 };
 
@@ -92,9 +92,9 @@ export function matchPublicRoute(pathname: string): PublicRouteMatch {
   if (CREATOR_PATH.test(path)) {
     return {
       status: 200,
-      title: "Creator — OnlyKas",
+      title: "Creator — Kaskama",
       description:
-        "A creator on OnlyKas. Unlock their paid photos and videos with Kaspa.",
+        "A creator on Kaskama. Unlock their paid photos and videos with Kaspa.",
       canonicalPath: path,
       body: CREATOR_BODY,
     };
@@ -102,9 +102,9 @@ export function matchPublicRoute(pathname: string): PublicRouteMatch {
   if (POST_PATH.test(path)) {
     return {
       status: 200,
-      title: "Post — OnlyKas",
+      title: "Post — Kaskama",
       description:
-        "A paid post on OnlyKas. Unlock it with Kaspa to support the creator.",
+        "A paid post on Kaskama. Unlock it with Kaspa to support the creator.",
       canonicalPath: path,
       body: POST_BODY,
     };

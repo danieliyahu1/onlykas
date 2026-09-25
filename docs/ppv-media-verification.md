@@ -3,7 +3,7 @@
 Pay-per-view purchases embed a self-describing media commitment in the Kaspa
 transaction payload. Any platform that holds the original media bytes can
 recompute the commitment and prove that a purchase paid for exactly those
-bytes, without trusting OnlyKas.
+bytes, without trusting Kaskama.
 
 ## Wire format
 
@@ -12,7 +12,7 @@ this version 1 shape:
 
 ```json
 {
-  "protocol": "onlykas",
+  "protocol": "kaskama",
   "version": 1,
   "type": "post-purchase",
   "postId": "<post id>",
@@ -26,7 +26,7 @@ this version 1 shape:
 
 - `algorithm` names the hash function applied to the media bytes.
 - `encoding` names how the resulting bytes are written as text.
-- `digest` is the hash of the exact media bytes that OnlyKas validated and
+- `digest` is the hash of the exact media bytes that Kaskama validated and
   stored, encoded as `encoding` specifies.
 
 `blake3-256` always produces 32 bytes, so a `hex` digest is always 64
@@ -50,7 +50,7 @@ string:
 
 ```json
 {
-  "protocol": "onlykas",
+  "protocol": "kaskama",
   "version": 1,
   "type": "post-purchase",
   "postId": "<post id>",
@@ -71,5 +71,5 @@ only when the transaction also:
 - pays the platform fee to the configured platform address when the fee is
   non-zero, and pays the platform nothing when it is zero.
 
-OnlyKas verifies the payload when returning purchased media, so a client
+Kaskama verifies the payload when returning purchased media, so a client
 tampering with the stored receipt does not unlock a post.

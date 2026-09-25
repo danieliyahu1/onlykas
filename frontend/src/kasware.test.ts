@@ -1,4 +1,4 @@
-import { DEFAULT_NETWORK, networkDefinition } from "@onlykas/shared";
+import { DEFAULT_NETWORK, networkDefinition } from "@kaskama/shared";
 import { COPY } from "./copy.js";
 import { isNetworkRequired } from "./errors.js";
 import {

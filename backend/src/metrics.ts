@@ -26,7 +26,7 @@ const MEDIA_BYTES_BUCKETS = [
 ];
 
 /**
- * Owns the Prometheus registry and every OnlyKas signal recorded against it.
+ * Owns the Prometheus registry and every Kaskama signal recorded against it.
  *
  * Labels are deliberately bounded: route templates, method, status class, and
  * enumerated outcomes only. Wallet addresses, post IDs, transaction IDs,
@@ -193,7 +193,7 @@ export class Metrics {
     });
     new Gauge({
       name: "onlykas_build_info",
-      help: "Build information for the running OnlyKas process.",
+      help: "Build information for the running Kaskama process.",
       labelNames: ["version", "revision"],
       registers,
     }).set({ version: build.version, revision: build.revision }, 1);

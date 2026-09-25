@@ -73,9 +73,9 @@ const NETWORK_POLL_INTERVAL_MS = 500;
 const NETWORK_QUIET_WINDOW_MS = 1_000;
 
 /** The wallet needs a network switch and its switcher is being opened. */
-export const NETWORK_SWITCH_REQUIRED_EVENT = "onlykas:network-switch-required";
+export const NETWORK_SWITCH_REQUIRED_EVENT = "kaskama:network-switch-required";
 /** The wallet landed on the right network; the detail is its display name. */
-export const NETWORK_SWITCHED_EVENT = "onlykas:network-switched";
+export const NETWORK_SWITCHED_EVENT = "kaskama:network-switched";
 
 /**
  * True from the moment an action opens the wallet's switcher until a short
@@ -233,7 +233,7 @@ export async function authenticate(): Promise<string> {
   return address;
 }
 
-export const SESSION_EXPIRED_EVENT = "onlykas:session-expired";
+export const SESSION_EXPIRED_EVENT = "kaskama:session-expired";
 
 const SESSION_PATH = "/api/auth/session";
 

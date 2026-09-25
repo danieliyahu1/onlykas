@@ -1904,6 +1904,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "kaskama-membership-consensus-tests"
+version = "0.1.0"
+dependencies = [
+ "kaspa-consensus-core",
+ "kaspa-txscript",
+ "kaspa-txscript-errors",
+ "secp256k1",
+ "silverscript-lang",
+]
+
+[[package]]
 name = "kaspa-addresses"
 version = "2.0.1"
 source = "git+https://github.com/kaspanet/rusty-kaspa?rev=a41a333b08848f41bf737b72592e463a6011b8ac#a41a333b08848f41bf737b72592e463a6011b8ac"
@@ -2467,17 +2478,6 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
-
-[[package]]
-name = "onlykas-membership-consensus-tests"
-version = "0.1.0"
-dependencies = [
- "kaspa-consensus-core",
- "kaspa-txscript",
- "kaspa-txscript-errors",
- "secp256k1",
- "silverscript-lang",
-]
 
 [[package]]
 name = "option-ext"

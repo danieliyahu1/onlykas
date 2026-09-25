@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { PUBLIC_PAGES } from "@onlykas/shared";
+import { PUBLIC_PAGES } from "@kaskama/shared";
 import { LegalPage } from "./LegalPage.js";
 
 describe("LegalPage", () => {

@@ -3,7 +3,7 @@ import {
   isNetworkId,
   networkDefinition,
   type NetworkConfigResponse,
-} from "@onlykas/shared";
+} from "@kaskama/shared";
 import { logger } from "./logger.js";
 
 const fallback: NetworkConfigResponse = {

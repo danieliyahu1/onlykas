@@ -6,7 +6,7 @@ import type { Challenge } from "./domain/models.js";
 
 const address =
   "kaspatest:qrzjdw58hp75mvvx6aq58kjyg3xjk7pt0k8txpll9sxdary9npn8v3pmkukdl";
-const publicOrigin = "https://onlykas.test";
+const publicOrigin = "https://kaskama.test";
 const now = 1_000_000;
 
 function challenge(id: string, expiresAt: number): Challenge {

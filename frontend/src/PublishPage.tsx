@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { mediaHintError, validatePost } from "@onlykas/shared";
+import { mediaHintError, validatePost } from "@kaskama/shared";
 import { COPY } from "./copy.js";
 import { uploadMedia, type UploadResult } from "./upload.js";
 import { Icon } from "./Icons.js";

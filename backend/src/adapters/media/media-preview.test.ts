@@ -111,7 +111,7 @@ describe("media preview", () => {
   });
 
   it("renders any image into a blurred JPEG that keeps its aspect ratio", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "onlykas-preview-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "kaskama-preview-test-"));
     const source = join(dir, "source.png");
     const output = join(dir, "preview.jpg");
     try {

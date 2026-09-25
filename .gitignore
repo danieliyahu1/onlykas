@@ -15,4 +15,5 @@ wallet-testnet.json
 *.db
 *.db-shm
 *.db-wal
+backend/kaskama-*
 backend/onlykas-*

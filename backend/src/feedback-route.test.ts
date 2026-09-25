@@ -10,7 +10,7 @@ import type { ObjectStorage } from "./application/ports.js";
 import { RateLimiter } from "./adapters/http/rate-limit.js";
 
 async function testFeedbackApp() {
-  const dir = await mkdtemp(join(tmpdir(), "onlykas-feedback-route-"));
+  const dir = await mkdtemp(join(tmpdir(), "kaskama-feedback-route-"));
   const spill = new FeedbackSpill({
     filePath: join(dir, "spill.json"),
     now: () => new Date("2026-01-01T00:00:00.000Z"),
@@ -93,7 +93,7 @@ describe("POST /api/feedback", () => {
   });
 
   it("is unavailable when the feedback service is not wired", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "onlykas-feedback-missing-"));
+    const dir = await mkdtemp(join(tmpdir(), "kaskama-feedback-missing-"));
     const storage: ObjectStorage = {
       putFile: async () => undefined,
       readRange: async () => ({ bytes: new Uint8Array(), size: 0, contentType: "image/jpeg" }),
@@ -116,7 +116,7 @@ describe("POST /api/feedback", () => {
   });
 
   it("records request metrics under the feedback route template", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "onlykas-feedback-metrics-"));
+    const dir = await mkdtemp(join(tmpdir(), "kaskama-feedback-metrics-"));
     const spill = new FeedbackSpill({ filePath: join(dir, "spill.json") });
     const metrics = createMetrics({ version: "test", revision: "test" });
     const service = new FeedbackService({

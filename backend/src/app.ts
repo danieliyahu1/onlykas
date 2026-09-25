@@ -27,7 +27,7 @@ import {
   type NetworkId,
   type PostResponse,
   MAX_VIDEO_BYTES,
-} from "@onlykas/shared";
+} from "@kaskama/shared";
 import {
   CHALLENGE_TTL_MS,
   PREPARED_TTL_MS,
@@ -80,7 +80,7 @@ import { MembershipAccess } from "./application/membership-access.js";
 import { StorageError } from "./r2-storage.js";
 import { discardTempDir } from "./temp-files.js";
 
-const sessionCookie = "onlykas_session";
+const sessionCookie = "kaskama_session";
 const RESPONSE_STALL_MS = 10_000;
 
 export interface AppDependencies {
@@ -468,8 +468,8 @@ export function createApp(d: AppDependencies) {
     required,
     asyncHandler(async (req, res) => {
       const type = req.get("content-type")?.split(";", 1)[0] ?? "",
-        caption = req.get("x-onlykas-caption") ?? "",
-        price = req.get("x-onlykas-price") ?? "",
+        caption = req.get("x-kaskama-caption") ?? "",
+        price = req.get("x-kaskama-price") ?? "",
         contentLength = Number(req.get("content-length")),
         hint = Number.isSafeInteger(contentLength)
           ? mediaHintError(type, contentLength)
@@ -487,7 +487,7 @@ export function createApp(d: AppDependencies) {
         metrics.mediaPublishAttempt("invalid", "unknown");
         return res.status(400).json({ error: "INVALID_POST", errors });
       }
-      const dir = await mkdtemp(join(tmpdir(), "onlykas-publish-")),
+      const dir = await mkdtemp(join(tmpdir(), "kaskama-publish-")),
         source = join(dir, "media");
       try {
         const bytesWritten = await writeUpload(req, source, MAX_VIDEO_BYTES);

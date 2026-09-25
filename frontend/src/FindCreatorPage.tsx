@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import type { CreatorSearchResult } from "@onlykas/shared";
+import type { CreatorSearchResult } from "@kaskama/shared";
 import { isAppAddress } from "./app-config.js";
 import { api, ApiError } from "./kasware.js";
 import { Icon } from "./Icons.js";

@@ -126,7 +126,7 @@ describe("membership contract codec", () => {
 
     expect(parseMembershipPayloadDetails(payload)).toMatchObject({
       memberRedeemScript: membershipRedeemScript(state),
-      protocol: "onlykas",
+      protocol: "kaskama",
       version: 1,
       tokenType: "membership",
       metadata: {

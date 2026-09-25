@@ -11,7 +11,7 @@ const homeCopy = JSON.parse(
 function homepageFallback(): Plugin {
   const fallback = homeFallbackHtml(homeCopy);
   return {
-    name: "onlykas-homepage-fallback",
+    name: "kaskama-homepage-fallback",
     transformIndexHtml: (html) =>
       html.replace('<div id="root"></div>', `<div id="root">${fallback}</div>`),
   };

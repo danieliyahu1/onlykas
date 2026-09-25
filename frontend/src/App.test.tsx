@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { DEFAULT_NETWORK, PUBLIC_PAGES, networkDefinition } from "@onlykas/shared";
+import { DEFAULT_NETWORK, PUBLIC_PAGES, networkDefinition } from "@kaskama/shared";
 import { App } from "./App.js";
 import { COPY } from "./copy.js";
 import {

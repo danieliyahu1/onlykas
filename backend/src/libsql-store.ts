@@ -32,7 +32,7 @@ export class LibsqlStore implements Repositories, FeedbackOutbox {
     private readonly logger: Logger = defaultLogger,
     private readonly metrics: Metrics = defaultMetrics,
   ) {
-    const databaseUrl = url === "file::memory:" ? `file:onlykas-${randomUUID()}` : url;
+    const databaseUrl = url === "file::memory:" ? `file:kaskama-${randomUUID()}` : url;
     this.client = createClient({
       url: databaseUrl,
       ...(authToken ? { authToken } : {}),

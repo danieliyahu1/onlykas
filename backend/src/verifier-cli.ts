@@ -6,7 +6,7 @@ import {
   isNetworkId,
   networkDefinition,
   type NetworkId,
-} from "@onlykas/shared";
+} from "@kaskama/shared";
 import { KaspaMembershipVerifier } from "./verifier.js";
 
 function usage(): string {
@@ -16,7 +16,7 @@ function usage(): string {
     "  verify-membership utxo <transactionId> <outputIndex> [--owner <address>] [--node <url>] [--network mainnet|testnet-10]",
     "",
     "Verifies membership status directly from the Kaspa chain by reading covenant",
-    "UTXOs. The source of truth is on-chain data, not OnlyKas records.",
+    "UTXOs. The source of truth is on-chain data, not Kaskama records.",
   ].join("\n");
 }
 

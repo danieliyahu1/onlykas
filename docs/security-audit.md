@@ -1,6 +1,6 @@
 # Security audit: membership covenant, verifier, and payment trust model
 
-Scope: the Kaspa side of OnlyKas — the SilverScript membership covenant, the
+Scope: the Kaspa side of Kaskama — the SilverScript membership covenant, the
 on-chain verifier, the payment and membership gateways, the HTTP authorization
 paths that consume them, and the workflow persistence that records outcomes.
 

@@ -22,8 +22,8 @@ export function uploadMedia(
       "Content-Type",
       file.type || "application/octet-stream",
     );
-    request.setRequestHeader("X-OnlyKas-Caption", caption);
-    request.setRequestHeader("X-OnlyKas-Price", priceKas);
+    request.setRequestHeader("X-Kaskama-Caption", caption);
+    request.setRequestHeader("X-Kaskama-Price", priceKas);
     request.upload.onprogress = (event) => {
       if (event.lengthComputable)
         onProgress(Math.round((event.loaded / event.total) * 100));

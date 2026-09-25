@@ -6,7 +6,7 @@ describe("observability safeguards", () => {
       redact({
         signature: "signed-transaction",
         transaction: '{"inputs":[]}',
-        cookie: "onlykas_session=secret",
+        cookie: "kaskama_session=secret",
         nested: { url: "https://example.test/private?token=abc" },
         state: "CONFIRMED",
       }),

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isVideoMedia, type MediaType } from "@onlykas/shared";
+import { isVideoMedia, type MediaType } from "@kaskama/shared";
 import sharp from "sharp";
 import type { ObjectStorage } from "../../application/ports.js";
 import {
@@ -51,7 +51,7 @@ export function createMediaPreview(dependencies: {
     post: PreviewPost,
     key: string,
   ): Promise<Uint8Array | null> {
-    const dir = await mkdtemp(join(tmpdir(), "onlykas-preview-"));
+    const dir = await mkdtemp(join(tmpdir(), "kaskama-preview-"));
     try {
       const { bytes } = await dependencies.storage.readRange(post.mediaKey);
       const source = join(dir, "source");

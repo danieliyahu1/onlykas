@@ -14,7 +14,7 @@ import {
   MAX_VIDEO_BYTES,
   MEDIA_TYPES,
   type MediaType,
-} from "@onlykas/shared";
+} from "@kaskama/shared";
 
 const execFileAsync = promisify(execFile);
 const ffprobePath = process.env.FFPROBE_PATH ?? bundledFfprobePath();

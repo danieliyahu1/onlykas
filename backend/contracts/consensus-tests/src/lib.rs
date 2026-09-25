@@ -23,7 +23,7 @@ const DEPOSIT: u64 = 50_000_000;
     const DAA: u64 = 500_000;
     const EXPIRY: i64 = 26_420_000;
     const COMPUTE_BUDGET: u16 = 50;
-    const COVENANT_ID: Hash = Hash::from_bytes(*b"onlykas-membership-test-family-1");
+    const COVENANT_ID: Hash = Hash::from_bytes(*b"kaskama-membership-test-family-1");
 
     fn key(seed: u8) -> Keypair {
         Keypair::from_secret_key(

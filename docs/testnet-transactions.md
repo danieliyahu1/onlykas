@@ -1,6 +1,6 @@
 # Testnet Transaction Ledger
 
-OnlyKas uses Kaspa testnet-10 for development and verification. Test fixtures
+Kaskama uses Kaspa testnet-10 for development and verification. Test fixtures
 use synthetic transaction identifiers and do not represent spendable funds.
 
 Before any testnet transaction is submitted manually, record its transaction

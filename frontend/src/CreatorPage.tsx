@@ -5,7 +5,7 @@ import {
   RETRY_AFTER_REFRESH,
   type CreatorResponse,
   type PostResponse,
-} from "@onlykas/shared";
+} from "@kaskama/shared";
 import { api, signPreparedPayment } from "./kasware.js";
 import {
   finalizePriceUpdate,

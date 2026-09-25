@@ -1,4 +1,4 @@
-import type { PublicPage } from "@onlykas/shared";
+import type { PublicPage } from "@kaskama/shared";
 
 export function LegalPage({ page }: { page: PublicPage }) {
   return (

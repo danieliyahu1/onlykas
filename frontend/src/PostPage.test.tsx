@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { PostResponse } from "@onlykas/shared";
+import type { PostResponse } from "@kaskama/shared";
 import { COPY } from "./copy.js";
 import { PostPage } from "./PostPage.js";
 import { api, ApiError, signPreparedPayment, WalletNetworkError } from "./kasware.js";
@@ -37,7 +37,7 @@ function renderPost(result: PostResponse, address: string | null = null) {
 describe("PostPage", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("renders an OnlyKas video player for an unlocked video", async () => {
+  it("renders an Kaskama video player for an unlocked video", async () => {
     const videoPost = post("video-post", "A moment for the circle", true);
     vi.mocked(api).mockResolvedValueOnce({ ...videoPost, mediaType: "video/mp4" });
     renderPost(videoPost);

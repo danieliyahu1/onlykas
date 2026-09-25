@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
-import type { CreatorSearchResult } from "@onlykas/shared";
+import type { CreatorSearchResult } from "@kaskama/shared";
 import { FindCreatorPage } from "./FindCreatorPage.js";
 import { api } from "./kasware.js";
 

@@ -150,7 +150,7 @@ describe("KaspaPaymentGateway purchase verification", () => {
 
   it("accepts a legacy payload that stored a bare media digest", async () => {
     const legacyPayload = Buffer.from(JSON.stringify({
-      protocol: "onlykas",
+      protocol: "kaskama",
       version: 1,
       type: "post-purchase",
       postId: "post-1",

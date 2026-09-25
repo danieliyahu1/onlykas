@@ -20,7 +20,7 @@ import {
   DEFAULT_NETWORK,
   networkDefinition,
   type NetworkId,
-} from "@onlykas/shared";
+} from "@kaskama/shared";
 import {
   addressPublicKey,
   addressScript,

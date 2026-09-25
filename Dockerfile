@@ -10,7 +10,7 @@ COPY shared/src ./shared/src
 COPY backend/src ./backend/src
 COPY frontend/src ./frontend/src
 COPY frontend/home-fallback.ts ./frontend/
-RUN pnpm build && pnpm deploy --legacy --filter @onlykas/backend --prod /prod/backend
+RUN pnpm build && pnpm deploy --legacy --filter @kaskama/backend --prod /prod/backend
 
 FROM node:24-alpine AS runtime
 ARG GIT_REVISION=unknown

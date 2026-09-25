@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
-import { PUBLIC_PAGES } from "@onlykas/shared";
+import { PUBLIC_PAGES } from "@kaskama/shared";
 import { createApp } from "./app.js";
 import { createMetrics, type Metrics } from "./metrics.js";
 import { MemoryStore } from "./memory-store.js";
@@ -78,7 +78,7 @@ describe("API request diagnostics", () => {
     const response = await request(app)
       .get("/api/posts/post-123?token=do-not-log")
       .set("X-Request-Id", "failure-trace")
-      .set("Cookie", "onlykas_session=do-not-log");
+      .set("Cookie", "kaskama_session=do-not-log");
 
     expect(response.status).toBe(503);
     expect(events).toContainEqual({
@@ -248,12 +248,12 @@ describe("profile visibility", () => {
 
     const initial = await request(app)
       .get("/api/profile")
-      .set("Cookie", "onlykas_session=profile-session");
+      .set("Cookie", "kaskama_session=profile-session");
     expect(initial.body).toMatchObject({ address, displayName: null, isPublic: true });
 
     const updated = await request(app)
       .put("/api/profile")
-      .set("Cookie", "onlykas_session=profile-session")
+      .set("Cookie", "kaskama_session=profile-session")
       .send({ isPublic: false });
     expect(updated.status).toBe(200);
     expect(updated.body).toMatchObject({ address, isPublic: false });
@@ -302,13 +302,13 @@ describe("profile visibility", () => {
 
     const named = await request(app)
       .put("/api/profile")
-      .set("Cookie", "onlykas_session=profile-session")
+      .set("Cookie", "kaskama_session=profile-session")
       .send({ displayName: "Maya" });
     expect(named.body).toMatchObject({ address, displayName: "Maya", isPublic: true });
 
     const toggled = await request(app)
       .put("/api/profile")
-      .set("Cookie", "onlykas_session=profile-session")
+      .set("Cookie", "kaskama_session=profile-session")
       .send({ isPublic: true });
     expect(toggled.body).toMatchObject({ displayName: "Maya", isPublic: true });
     expect(await store.getProfile(address)).toMatchObject({
@@ -322,13 +322,13 @@ describe("profile visibility", () => {
 
     const madePublic = await request(app)
       .put("/api/profile")
-      .set("Cookie", "onlykas_session=profile-session")
+      .set("Cookie", "kaskama_session=profile-session")
       .send({ isPublic: true });
     expect(madePublic.body).toMatchObject({ isPublic: true, displayName: null });
 
     const renamed = await request(app)
       .put("/api/profile")
-      .set("Cookie", "onlykas_session=profile-session")
+      .set("Cookie", "kaskama_session=profile-session")
       .send({ displayName: "Maya" });
     expect(renamed.body).toMatchObject({ displayName: "Maya", isPublic: true });
     expect(await store.getProfile(address)).toMatchObject({
@@ -395,7 +395,7 @@ describe("payment confirmation", () => {
       verifyPurchase: async () => true,
     };
     const { app } = testApp(store, gateway);
-    const cookie = "onlykas_session=session-1";
+    const cookie = "kaskama_session=session-1";
 
     const prepared = await request(app)
       .post("/api/posts/paid-post/payments/prepare")
@@ -437,7 +437,7 @@ describe("payment confirmation", () => {
       verifyPurchase: async () => true,
     };
     const { app } = testApp(store, gateway);
-    const cookie = "onlykas_session=session-1";
+    const cookie = "kaskama_session=session-1";
 
     const prepared = await request(app)
       .post("/api/posts/paid-post/payments/prepare")
@@ -476,7 +476,7 @@ describe("free posts", () => {
       address: viewer,
       expiresAt: Date.now() + 60_000,
     });
-    return "onlykas_session=session-viewer";
+    return "kaskama_session=session-viewer";
   }
 
   it("serves free post metadata to everyone with canView true", async () => {
@@ -553,7 +553,7 @@ describe("subscription recognition", () => {
       address: viewer,
       expiresAt: Date.now() + 60_000,
     });
-    return "onlykas_session=member-session";
+    return "kaskama_session=member-session";
   }
 
   function membershipCheck(status: MembershipCheck["status"]): MembershipCheck {
@@ -892,7 +892,7 @@ describe("post deletion", () => {
       address,
       expiresAt: Date.now() + 60_000,
     });
-    return "onlykas_session=delete-session";
+    return "kaskama_session=delete-session";
   }
 
   it("requires a session", async () => {
@@ -1007,9 +1007,9 @@ describe("publish failure diagnostics", () => {
     const response = await request(app)
       .post("/api/posts/publish")
       .set("X-Request-Id", "publish-trace")
-      .set("Cookie", "onlykas_session=publish-session")
-      .set("X-OnlyKas-Caption", "A private post")
-      .set("X-OnlyKas-Price", "1")
+      .set("Cookie", "kaskama_session=publish-session")
+      .set("X-Kaskama-Caption", "A private post")
+      .set("X-Kaskama-Price", "1")
       .set("Content-Type", "video/mp4")
       .send(Buffer.alloc(64));
 
@@ -1071,7 +1071,7 @@ describe("membership price validation", () => {
 
       const response = await request(app)
         .post(path)
-        .set("Cookie", "onlykas_session=creator-session")
+        .set("Cookie", "kaskama_session=creator-session")
         .send({ price: "1,000" });
 
       expect(response.status).toBe(400);
@@ -1102,7 +1102,7 @@ describe("membership price validation", () => {
 
     const response = await request(app)
       .post("/api/membership/price/prepare")
-      .set("Cookie", "onlykas_session=creator-session")
+      .set("Cookie", "kaskama_session=creator-session")
       .send({ price });
 
     expect(response.status).toBe(400);
@@ -1205,7 +1205,7 @@ describe("membership state changes", () => {
 
     const response = await request(app)
       .post(path)
-      .set("Cookie", "onlykas_session=creator-session")
+      .set("Cookie", "kaskama_session=creator-session")
       .send(body);
 
     expect(response.status).toBe(409);
@@ -1226,7 +1226,7 @@ describe("membership state changes", () => {
 
     const response = await request(app)
       .post("/api/membership/offers/prepare")
-      .set("Cookie", "onlykas_session=creator-session")
+      .set("Cookie", "kaskama_session=creator-session")
       .send({ price: "10" });
 
     expect(response.status).toBe(409);
@@ -1254,7 +1254,7 @@ describe("membership state changes", () => {
 
     const response = await request(app)
       .post(`/api/membership/${encodeURIComponent(creator)}/prepare`)
-      .set("Cookie", "onlykas_session=buyer-session");
+      .set("Cookie", "kaskama_session=buyer-session");
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
@@ -1275,7 +1275,7 @@ describe("membership state changes", () => {
 
     const response = await request(app)
       .post("/api/membership/price/prepare")
-      .set("Cookie", "onlykas_session=creator-session")
+      .set("Cookie", "kaskama_session=creator-session")
       .send({ price: "10" });
 
     expect(response.status).toBe(422);
@@ -1298,7 +1298,7 @@ describe("membership state changes", () => {
 
     const response = await request(app)
       .post(path)
-      .set("Cookie", "onlykas_session=creator-session")
+      .set("Cookie", "kaskama_session=creator-session")
       .send({ signedTransaction: "aa01" });
 
     expect(response.status).toBe(409);
@@ -1318,7 +1318,7 @@ describe("membership state changes", () => {
 
     const response = await request(app)
       .post("/api/membership/price/prepared-1/finalize")
-      .set("Cookie", "onlykas_session=creator-session")
+      .set("Cookie", "kaskama_session=creator-session")
       .send({ signedTransaction: "aa01" });
 
     expect(response.status).toBe(409);
@@ -1460,16 +1460,16 @@ describe("Crawler discoverability", () => {
 const INDEX_HTML = `<!doctype html>
 <html lang="en">
   <head>
-    <title>OnlyKas — Get paid directly by your fans and keep 99%</title>
+    <title>Kaskama — Get paid directly by your fans and keep 99%</title>
     <meta
       name="description"
-      content="OnlyKas lets creators publish paid photos and videos."
+      content="Kaskama lets creators publish paid photos and videos."
     />
-    <link rel="canonical" href="https://onlykas.app/" />
-    <meta property="og:title" content="OnlyKas" />
+    <link rel="canonical" href="https://kaskama.com/" />
+    <meta property="og:title" content="Kaskama" />
     <meta property="og:description" content="Publish paid photos and videos." />
-    <meta property="og:url" content="https://onlykas.app/" />
-    <meta name="twitter:title" content="OnlyKas" />
+    <meta property="og:url" content="https://kaskama.com/" />
+    <meta name="twitter:title" content="Kaskama" />
     <meta name="twitter:description" content="Publish paid photos and videos." />
   </head>
   <body>
@@ -1478,12 +1478,12 @@ const INDEX_HTML = `<!doctype html>
 </html>`;
 
 describe("Server-rendered public pages", () => {
-  const origin = "https://onlykas.test";
+  const origin = "https://kaskama.test";
   let frontendDir: string;
   let app: ReturnType<typeof createApp>;
 
   beforeAll(async () => {
-    frontendDir = await mkdtemp(join(tmpdir(), "onlykas-frontend-"));
+    frontendDir = await mkdtemp(join(tmpdir(), "kaskama-frontend-"));
     await writeFile(join(frontendDir, "index.html"), INDEX_HTML);
     app = createApp({
       store: new MemoryStore(),
@@ -1511,11 +1511,11 @@ describe("Server-rendered public pages", () => {
     const response = await request(app).get("/creators");
 
     expect(response.status).toBe(200);
-    expect(response.text).toContain("<title>Creators — OnlyKas</title>");
+    expect(response.text).toContain("<title>Creators — Kaskama</title>");
     expect(response.text).toContain(`href="${origin}/creators"`);
     expect(response.text).toContain("Browse creators publishing");
     expect(response.text).not.toContain(
-      '<link rel="canonical" href="https://onlykas.app/"',
+      '<link rel="canonical" href="https://kaskama.com/"',
     );
   });
 
@@ -1539,7 +1539,7 @@ describe("Server-rendered public pages", () => {
     const response = await request(app).get("/for-ai-creators");
 
     expect(response.status).toBe(404);
-    expect(response.text).toContain("<title>Page not found — OnlyKas</title>");
+    expect(response.text).toContain("<title>Page not found — Kaskama</title>");
     expect(response.text).toContain('id="root"><div class="message">');
     expect(response.text).not.toContain('class="home-page"');
     expect(response.text).not.toContain('rel="canonical"');

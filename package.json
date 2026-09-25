@@ -1,5 +1,5 @@
 {
-  "name": "onlykas",
+  "name": "kaskama",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@11.17.0",
@@ -8,11 +8,11 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm --parallel --filter @onlykas/backend --filter @onlykas/frontend dev",
+    "dev": "pnpm --parallel --filter @kaskama/backend --filter @kaskama/frontend dev",
     "format": "prettier --write backend/src/app.test.ts backend/src/store-contract.test.ts backend/src/domain/**/*.ts backend/src/application/**/*.ts backend/src/adapters/http/api-copy.ts backend/src/adapters/persistence/**/*.ts backend/src/reset-db.ts frontend/src/copy.ts shared/src/index.ts shared/src/index.test.ts scripts/check-boundaries.mjs package.json .prettierrc.json",
     "format:check": "prettier --check backend/src/app.test.ts backend/src/store-contract.test.ts backend/src/domain/**/*.ts backend/src/application/**/*.ts backend/src/adapters/http/api-copy.ts backend/src/adapters/persistence/**/*.ts backend/src/reset-db.ts frontend/src/copy.ts shared/src/index.ts shared/src/index.test.ts scripts/check-boundaries.mjs package.json .prettierrc.json",
     "lint": "eslint . && node scripts/check-boundaries.mjs",
-    "start": "pnpm --filter @onlykas/backend start",
+    "start": "pnpm --filter @kaskama/backend start",
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:e2e": "playwright test",
     "test:contract": "cargo test --manifest-path backend/contracts/consensus-tests/Cargo.toml",

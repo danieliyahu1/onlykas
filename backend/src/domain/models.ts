@@ -1,4 +1,4 @@
-import type { MediaType } from "@onlykas/shared";
+import type { MediaType } from "@kaskama/shared";
 
 export interface Challenge {
   id: string;

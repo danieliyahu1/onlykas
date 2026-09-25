@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FEEDBACK_MAX_MESSAGE } from "@onlykas/shared";
+import { FEEDBACK_MAX_MESSAGE } from "@kaskama/shared";
 import {
   FeedbackError,
   FeedbackService,
@@ -56,7 +56,7 @@ describe("validateFeedback", () => {
 describe("formatFeedbackMessage", () => {
   it("is the title and the message, nothing else", () => {
     const text = formatFeedbackMessage({ message: "The unlock felt off." });
-    expect(text).toBe("New OnlyKas feedback:\n\nThe unlock felt off.");
+    expect(text).toBe("New Kaskama feedback:\n\nThe unlock felt off.");
     expect(text).not.toMatch(/Page:/);
     expect(text).not.toMatch(/Address:|kaspatest:/i);
   });

@@ -1,8 +1,8 @@
-# OnlyKas
+# Kaskama
 
-OnlyKas is a paid-media application for Kaspa. Creators authenticate with Kasware, upload private media directly to R2, and publish immutable Turso-backed posts. The chain it runs on is selected by `KASPA_NETWORK` (`mainnet` or `testnet-10`).
+Kaskama is a paid-media application for Kaspa. Creators authenticate with Kasware, upload private media directly to R2, and publish immutable Turso-backed posts. The chain it runs on is selected by `KASPA_NETWORK` (`mainnet` or `testnet-10`).
 
-Live app: https://onlykas.danieliyahu.com/
+Live app: https://kaskama.com/
 
 ## Development
 
@@ -46,7 +46,7 @@ The backend applies numbered canonical migrations from `backend/src/adapters/per
 For local development or tests, reset the database explicitly with:
 
 ```bash
-pnpm --filter @onlykas/backend db:reset
+pnpm --filter @kaskama/backend db:reset
 ```
 
 Reset drops the application tables, reapplies the canonical schema, and is destructive. Do not run it against a database whose data must be retained.
@@ -58,8 +58,8 @@ The production image builds all workspaces and runs one Express process. Express
 Development and production must use separate stateful resources. Local development uses the `onlykas` Turso database and the `onlykas-development` R2 bucket. Production uses the `onlykas-production` Turso database and the `onlykas-production` R2 bucket. Do not share database credentials or bucket-scoped R2 credentials between environments.
 
 ```bash
-docker build -t onlykas .
-docker run --env-file .env -p 3000:3000 onlykas
+docker build -t kaskama .
+docker run --env-file .env -p 3000:3000 kaskama
 ```
 
 ## Kubernetes deployment

@@ -1,18 +1,18 @@
 export const COPY = {
   authPrompt:
-    "Connect to OnlyKas. This only identifies your wallet. No KAS will be sent.",
+    "Connect to Kaskama. This only identifies your wallet. No KAS will be sent.",
   kaswareMissing:
     "Open Kasware to connect. Your wallet is used to identify you and approve payments.",
   wrongNetwork: "Your wallet is on the wrong network. Switch networks and try again.",
   networkSwitched: "You're on {network} now.",
   walletCancelled: "Wallet connection cancelled.",
   signInCancelled: "Sign-in cancelled.",
-  verificationFailed: "OnlyKas could not verify this wallet. Try again.",
+  verificationFailed: "Kaskama could not verify this wallet. Try again.",
   serverDown: "Server is down. Try again shortly.",
   unsupportedMedia: "Choose a JPEG, PNG, WebP, MP4, or WebM file.",
   imageTooLarge: "Images can be up to 25 MB.",
   videoTooLarge: "Videos can be up to 100 MB.",
-  malformedMedia: "This file cannot be played by OnlyKas.",
+  malformedMedia: "This file cannot be played by Kaskama.",
   uploadFailed: "Upload failed. Try again.",
   invalidPrice: "Enter a KAS price of zero or more, using up to 8 decimal places.",
   permanence:
@@ -35,7 +35,7 @@ export const COPY = {
   paymentTimedOut:
     "We couldn't confirm the payment. Check the transaction and try again.",
   accessVerificationFailed:
-    "OnlyKas can't verify your subscription right now. Try again.",
+    "Kaskama can't verify your subscription right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
   feedbackButton: "Feedback",
   feedbackDialogTitle: "Send feedback",

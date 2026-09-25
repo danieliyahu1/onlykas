@@ -3,13 +3,13 @@ import {
   payToScriptHashScript,
   ScriptBuilder,
 } from "@kluster/kaspa-wasm";
-import { DEFAULT_NETWORK, type NetworkId } from "@onlykas/shared";
+import { DEFAULT_NETWORK, type NetworkId } from "@kaskama/shared";
 import artifact from "./contracts/membership.json" with { type: "json" };
 
 export const MEMBERSHIP_DURATION_DAA = 25_920_000n;
 export const MEMBERSHIP_INDEX_VALUE = 50_000_000n;
 export const MEMBERSHIP_OUTPUT_VALUE = 50_000_000n;
-export const MEMBERSHIP_PROTOCOL = "onlykas";
+export const MEMBERSHIP_PROTOCOL = "kaskama";
 export const MEMBERSHIP_METADATA_VERSION = 1;
 
 export interface MembershipMetadata {

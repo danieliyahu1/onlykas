@@ -1,5 +1,5 @@
 {
-  "name": "@onlykas/frontend",
+  "name": "@kaskama/frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@onlykas/shared": "workspace:*",
+    "@kaskama/shared": "workspace:*",
     "@vitejs/plugin-react": "^5.0.2",
     "vite": "^7.1.4",
     "react": "^19.1.1",

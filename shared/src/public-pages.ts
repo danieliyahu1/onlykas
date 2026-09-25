@@ -28,23 +28,23 @@ export interface PublicPage {
 }
 
 export const SITE = {
-  name: "OnlyKas",
-  title: "OnlyKas — Get paid directly by your fans and keep 99%",
+  name: "Kaskama",
+  title: "Kaskama — Get paid directly by your fans and keep 99%",
   description:
-    "OnlyKas lets creators publish paid photos and videos, set their own price, and get paid directly by fans on Kaspa. You keep 99%.",
+    "Kaskama lets creators publish paid photos and videos, set their own price, and get paid directly by fans on Kaspa. You keep 99%.",
 } as const;
 
 export const PUBLIC_PAGES: PublicPage[] = [
   {
     path: "/content-policy",
-    title: "Content policy — OnlyKas",
+    title: "Content policy — Kaskama",
     description:
-      "What creators may publish on OnlyKas, including the rules for adult material and AI-generated content.",
+      "What creators may publish on Kaskama, including the rules for adult material and AI-generated content.",
     navLabel: "Content policy",
     updated: "September 25, 2026",
     heading: "Content policy",
     intro: [
-      "OnlyKas is for adult creators and their fans. You must be at least 18 years old to publish or unlock content. This policy explains what is allowed, what is not, and how we enforce it.",
+      "Kaskama is for adult creators and their fans. You must be at least 18 years old to publish or unlock content. This policy explains what is allowed, what is not, and how we enforce it.",
     ],
     sections: [
       {
@@ -63,7 +63,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
           "Deepfakes or synthetic likenesses of real people created without their consent.",
           "Content that depicts sexual violence, coercion, bestiality, incest, or extreme violence.",
           "Content you do not have the rights to publish, or that infringes someone else's copyright or trademarks.",
-          "Content that promotes illegal goods or services, or that is otherwise unlawful in the places OnlyKas operates.",
+          "Content that promotes illegal goods or services, or that is otherwise unlawful in the places Kaskama operates.",
         ],
       },
       {
@@ -77,21 +77,21 @@ export const PUBLIC_PAGES: PublicPage[] = [
         paragraphs: [
           "Anyone can report content that breaks these rules with the Feedback button at the bottom of the page. We review reports and may remove content, restrict publishing, or close an account.",
           "We report illegal content, including child sexual abuse material, to the relevant authorities.",
-          "OnlyKas stores media in its own cloud storage and post details in its own database, never on the blockchain. Deleting a post removes it from OnlyKas, but copies that fans already unlocked or downloaded may remain. Do not publish anything you may later need to take back.",
+          "Kaskama stores media in its own cloud storage and post details in its own database, never on the blockchain. Deleting a post removes it from Kaskama, but copies that fans already unlocked or downloaded may remain. Do not publish anything you may later need to take back.",
         ],
       },
     ],
   },
   {
     path: "/terms",
-    title: "Terms of service — OnlyKas",
+    title: "Terms of service — Kaskama",
     description:
-      "The terms for publishing and unlocking paid content on OnlyKas, including the 1% platform fee and direct Kaspa payments.",
+      "The terms for publishing and unlocking paid content on Kaskama, including the 1% platform fee and direct Kaspa payments.",
     navLabel: "Terms",
     updated: "September 25, 2026",
     heading: "Terms of service",
     intro: [
-      "These terms govern your use of OnlyKas. By connecting a wallet, publishing content, or unlocking content, you agree to them. If you do not agree, do not use OnlyKas.",
+      "These terms govern your use of Kaskama. By connecting a wallet, publishing content, or unlocking content, you agree to them. If you do not agree, do not use Kaskama.",
     ],
     sections: [
       {
@@ -103,52 +103,52 @@ export const PUBLIC_PAGES: PublicPage[] = [
       {
         heading: "Fees and payments",
         paragraphs: [
-          "OnlyKas charges a 1% platform fee on paid unlocks and memberships. Creators keep the other 99%.",
-          "Payments are made directly from fans to creators in Kaspa (KAS). OnlyKas never holds your funds and cannot reverse, refund, or block a payment.",
-          "Kaspa network fees are set by the network, not by OnlyKas, and are paid by the person sending the transaction.",
+          "Kaskama charges a 1% platform fee on paid unlocks and memberships. Creators keep the other 99%.",
+          "Payments are made directly from fans to creators in Kaspa (KAS). Kaskama never holds your funds and cannot reverse, refund, or block a payment.",
+          "Kaspa network fees are set by the network, not by Kaskama, and are paid by the person sending the transaction.",
           "Subscription and unlock prices are set by each creator. All payments are final.",
         ],
       },
       {
         heading: "Publishing",
         paragraphs: [
-          "Once a post is published, its media, caption, and price cannot be edited. You can delete a post and OnlyKas will stop serving it, but only the payment record lives on the Kaspa blockchain, not the content. Fans who already unlocked a post may keep a copy, and on-chain payments cannot be reversed.",
-          "You keep ownership of your content. You grant OnlyKas permission to store and serve it so fans can view what they have unlocked.",
+          "Once a post is published, its media, caption, and price cannot be edited. You can delete a post and Kaskama will stop serving it, but only the payment record lives on the Kaspa blockchain, not the content. Fans who already unlocked a post may keep a copy, and on-chain payments cannot be reversed.",
+          "You keep ownership of your content. You grant Kaskama permission to store and serve it so fans can view what they have unlocked.",
           "You are responsible for making sure you have the rights to everything you publish and that it follows our content policy.",
         ],
       },
       {
         heading: "Acceptable use",
         paragraphs: [
-          "Do not use OnlyKas to break the law, infringe rights, publish prohibited content, or interfere with the service or other people's use of it.",
+          "Do not use Kaskama to break the law, infringe rights, publish prohibited content, or interfere with the service or other people's use of it.",
           "We may remove listings, restrict access, or close accounts that break these terms.",
         ],
       },
       {
         heading: "Disclaimers and liability",
         paragraphs: [
-          "OnlyKas is provided as is, without warranties of any kind. We do not guarantee that the service will be uninterrupted, secure, or free of errors.",
-          "To the fullest extent allowed by law, OnlyKas is not liable for indirect, incidental, or consequential losses, or for losses resulting from blockchain transactions that cannot be reversed.",
+          "Kaskama is provided as is, without warranties of any kind. We do not guarantee that the service will be uninterrupted, secure, or free of errors.",
+          "To the fullest extent allowed by law, Kaskama is not liable for indirect, incidental, or consequential losses, or for losses resulting from blockchain transactions that cannot be reversed.",
         ],
       },
       {
         heading: "Changes",
         paragraphs: [
-          "We may update these terms. When we do, we will change the date shown on this page. Continuing to use OnlyKas after a change means you accept the new terms.",
+          "We may update these terms. When we do, we will change the date shown on this page. Continuing to use Kaskama after a change means you accept the new terms.",
         ],
       },
     ],
   },
   {
     path: "/privacy",
-    title: "Privacy policy — OnlyKas",
+    title: "Privacy policy — Kaskama",
     description:
-      "What data OnlyKas collects, how it is used, and the choices you have. No email addresses or passwords, and payments stay in your wallet.",
+      "What data Kaskama collects, how it is used, and the choices you have. No email addresses or passwords, and payments stay in your wallet.",
     navLabel: "Privacy",
     updated: "September 25, 2026",
     heading: "Privacy policy",
     intro: [
-      "OnlyKas is built around a wallet, not an email and password. This policy explains what we collect, why, and what you can do about it.",
+      "Kaskama is built around a wallet, not an email and password. This policy explains what we collect, why, and what you can do about it.",
     ],
     sections: [
       {
@@ -170,7 +170,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
       {
         heading: "Payments and public data",
         paragraphs: [
-          "Payments happen on the Kaspa blockchain. Transaction amounts and addresses are public by nature and can be seen by anyone. OnlyKas cannot make an on-chain payment private.",
+          "Payments happen on the Kaspa blockchain. Transaction amounts and addresses are public by nature and can be seen by anyone. Kaskama cannot make an on-chain payment private.",
         ],
       },
       {

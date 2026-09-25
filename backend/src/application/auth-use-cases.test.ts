@@ -29,7 +29,7 @@ describe("session use cases", () => {
     const useCases = sessionUseCases(store, async () => true);
     const issued = await useCases.issueChallenge({
       address,
-      origin: "https://onlykas.test",
+      origin: "https://kaskama.test",
       network: "kaspa_testnet_10",
       prompt: "Connect",
     });
@@ -40,7 +40,7 @@ describe("session use cases", () => {
       address,
       publicKey: "public-key",
       signature: "signature",
-      origin: "https://onlykas.test",
+      origin: "https://kaskama.test",
       network: "kaspa_testnet_10",
     });
 
@@ -51,7 +51,7 @@ describe("session use cases", () => {
         address,
         publicKey: "public-key",
         signature: "signature",
-        origin: "https://onlykas.test",
+        origin: "https://kaskama.test",
         network: "kaspa_testnet_10",
       }),
     ).toEqual({ kind: "VERIFICATION_FAILED" });

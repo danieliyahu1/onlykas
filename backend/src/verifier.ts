@@ -1,7 +1,7 @@
 import type { MembershipCheck } from "./domain/models.js";
 import type { MembershipVerifier } from "./application/ports.js";
 import { XOnlyPublicKey } from "@kluster/kaspa-wasm";
-import { DEFAULT_NETWORK, networkDefinition, type NetworkId } from "@onlykas/shared";
+import { DEFAULT_NETWORK, networkDefinition, type NetworkId } from "@kaskama/shared";
 import { logger as defaultLogger, type Logger } from "./observability.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 import {

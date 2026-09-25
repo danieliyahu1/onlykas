@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { CreatorSearchResult } from "@onlykas/shared";
+import type { CreatorSearchResult } from "@kaskama/shared";
 import * as homeCopy from "./home-copy.json";
 import { COPY } from "./copy.js";
 import { LockIcon } from "./Icons.js";
@@ -63,7 +63,7 @@ function CreatorPreview() {
     <div
       className="preview-card"
       role="img"
-      aria-label="A subscribed fan's view of a creator's profile on OnlyKas: Yonatan Sompolinsky, creator-priced access for 30 days, marked Subscribed, with the unlocked post BlockDAG explanation with AI."
+      aria-label="A subscribed fan's view of a creator's profile on Kaskama: Yonatan Sompolinsky, creator-priced access for 30 days, marked Subscribed, with the unlocked post BlockDAG explanation with AI."
     >
       <div className="creator-identity">
         <h2 className="preview-name">Yonatan Sompolinsky</h2>

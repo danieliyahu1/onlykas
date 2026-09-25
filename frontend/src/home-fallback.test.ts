@@ -5,7 +5,7 @@ describe("homeFallbackHtml", () => {
   it("carries the fee and payment facts a JavaScript-free crawler needs", () => {
     const html = homeFallbackHtml(homeCopy);
 
-    expect(html).toContain("OnlyKas takes 1%");
+    expect(html).toContain("Kaskama takes 1%");
     expect(html).toContain("Powered by Kaspa");
   });
 

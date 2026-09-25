@@ -1,5 +1,5 @@
 {
-  "name": "@onlykas/backend",
+  "name": "@kaskama/backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "@kluster/kaspa-wasm": "2.0.1",
     "@libsql/client": "^0.15.15",
     "@noble/hashes": "^2.0.0",
-    "@onlykas/shared": "workspace:*",
+    "@kaskama/shared": "workspace:*",
     "@smithy/node-http-handler": "^4.11.3",
     "cookie-parser": "^1.4.7",
     "express": "^5.1.0",

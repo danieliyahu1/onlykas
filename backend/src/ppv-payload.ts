@@ -1,4 +1,4 @@
-export const PPV_PROTOCOL = "onlykas" as const;
+export const PPV_PROTOCOL = "kaskama" as const;
 export const PPV_METADATA_VERSION = 1 as const;
 export const PPV_HASH_ALGORITHM = "blake3-256" as const;
 export const PPV_HASH_ENCODING = "hex" as const;

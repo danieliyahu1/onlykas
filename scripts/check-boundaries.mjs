@@ -4,14 +4,14 @@ import process from "node:process";
 
 const sourceExtensions = new Set([".ts", ".tsx"]);
 const workspaceForbidden = new Map([
-  ["frontend", ["@libsql/client", "@aws-sdk", "../backend", "@onlykas/backend"]],
+  ["frontend", ["@libsql/client", "@aws-sdk", "../backend", "@kaskama/backend"]],
   ["shared", ["express", "@libsql/client", "@aws-sdk", "../backend", "../frontend"]],
 ]);
 
 const backendLayerForbidden = new Map([
   [
     "backend/src/domain",
-    ["node:", "express", "@libsql/client", "@aws-sdk", "@onlykas/backend", "zod"],
+    ["node:", "express", "@libsql/client", "@aws-sdk", "@kaskama/backend", "zod"],
   ],
   [
     "backend/src/application",
@@ -22,7 +22,7 @@ const backendLayerForbidden = new Map([
       "express",
       "@libsql/client",
       "@aws-sdk",
-      "@onlykas/backend",
+      "@kaskama/backend",
     ],
   ],
 ]);

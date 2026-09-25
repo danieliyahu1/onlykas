@@ -1,6 +1,6 @@
 # On-chain membership verification
 
-OnlyKas memberships are SilverScript covenant UTXOs on Kaspa testnet-10. The
+Kaskama memberships are SilverScript covenant UTXOs on Kaspa testnet-10. The
 verifier determines membership from chain data alone. Database membership rows
 and descriptive transaction fields are not authorization sources.
 
@@ -24,7 +24,7 @@ the discovery output.
 A membership is recognized only when all of these checks pass:
 
 - the transaction has version `1`;
-- its hex payload decodes to JSON with protocol `onlykas`, version `1`, and
+- its hex payload decodes to JSON with protocol `kaskama`, version `1`, and
   token type `membership`;
 - the payload reveals `memberRedeemScript`;
 - the redeem script matches the compiled SilverScript template and decodes to
@@ -67,7 +67,7 @@ with the expiry committed in covenant state.
 | `OWNER_MISMATCH` | The covenant is recognized and unspent, but its state owner differs from `expectedOwner`. |
 | `NOT_MEMBERSHIP` | Any discovery, template, script, amount, covenant ID, lifetime, or unspent check fails. |
 
-The `onlykas` payload contains the platform address, membership output index,
+The `kaskama` payload contains the platform address, membership output index,
 and creation/expiry DAA values. The verifier cross-checks every machine-readable
 value against covenant state before exposing the metadata. `createdAt` and
 `validUntil` remain ISO display estimates; DAA values are the authoritative
@@ -92,8 +92,8 @@ Errors are `400 INVALID_ADDRESS`, `400 INVALID_REQUEST`, or
 ## CLI
 
 ```text
-pnpm --filter @onlykas/backend verify:membership address <kaspatest:address> [--owner <address>] [--node <url>]
-pnpm --filter @onlykas/backend verify:membership utxo <transactionId> <outputIndex> [--owner <address>] [--node <url>]
+pnpm --filter @kaskama/backend verify:membership address <kaspatest:address> [--owner <address>] [--node <url>]
+pnpm --filter @kaskama/backend verify:membership utxo <transactionId> <outputIndex> [--owner <address>] [--node <url>]
 ```
 
 The default node is `https://api-tn10.kaspa.org`. `backend/src/server.ts`

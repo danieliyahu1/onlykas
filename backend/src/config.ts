@@ -4,7 +4,7 @@ import {
   NETWORK_DEFINITIONS,
   networkDefinition,
   type NetworkId,
-} from "@onlykas/shared";
+} from "@kaskama/shared";
 import type { LogLevel } from "./observability.js";
 import { addressScript } from "./membership-contract.js";
 

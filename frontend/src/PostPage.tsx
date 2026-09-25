@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { type PostResponse } from "@onlykas/shared";
+import { type PostResponse } from "@kaskama/shared";
 import { api } from "./kasware.js";
 import { unlockPost } from "./purchase.js";
 import { useToast } from "./Toast.js";

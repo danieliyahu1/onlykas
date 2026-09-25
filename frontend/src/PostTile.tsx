@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import type { MediaType } from "@onlykas/shared";
+import type { MediaType } from "@kaskama/shared";
 import { MediaTypeBadge } from "./MediaTypeBadge.js";
 import { PreviewImage } from "./PreviewImage.js";
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { DEFAULT_NETWORK, networkDefinition, type NetworkId } from "@onlykas/shared";
+import { DEFAULT_NETWORK, networkDefinition, type NetworkId } from "@kaskama/shared";
 import type { Post, PreparedPayment, PaymentSubmission } from "./domain/models.js";
 import type { PaymentGateway } from "./application/ports.js";
 import { logger as defaultLogger, type Logger } from "./observability.js";

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import type { CreatorSearchResult } from "@onlykas/shared";
+import type { CreatorSearchResult } from "@kaskama/shared";
 import { api, ApiError } from "./kasware.js";
 import { Spinner } from "./Spinner.js";
 import { useAsyncResource } from "./useAsyncResource.js";
