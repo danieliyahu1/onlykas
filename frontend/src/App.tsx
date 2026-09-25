@@ -297,7 +297,6 @@ export function App() {
           </Routes>
         </main>
         <footer>
-          <span>Early access</span>
           <nav className="legal-links" aria-label="Legal">
             {PUBLIC_PAGES.map((page) => (
               <Link key={page.path} to={page.path}>
