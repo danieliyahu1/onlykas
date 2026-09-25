@@ -340,6 +340,53 @@ footer {
 .feedback-button:focus-visible {
   color: var(--acid);
 }
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 1.25rem;
+  padding: 0;
+  border: 0;
+}
+.legal-links a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.12s ease;
+}
+.legal-links a:hover,
+.legal-links a:focus-visible {
+  color: var(--acid);
+}
+
+/* Public documents */
+
+.legal-page {
+  display: grid;
+  gap: 1.1rem;
+  width: min(100%, 46rem);
+  text-align: left;
+}
+.legal-page h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  letter-spacing: -0.03em;
+}
+.legal-page h2 {
+  margin: 0;
+  font-size: clamp(1.1rem, 2.5vw, 1.35rem);
+}
+.legal-page p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.legal-page section {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+}
 
 /* Page layout */
 

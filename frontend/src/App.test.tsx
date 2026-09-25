@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { DEFAULT_NETWORK, networkDefinition } from "@onlykas/shared";
+import { DEFAULT_NETWORK, PUBLIC_PAGES, networkDefinition } from "@onlykas/shared";
 import { App } from "./App.js";
 import { COPY } from "./copy.js";
 import {
@@ -269,5 +269,19 @@ describe("session and wallet reconciliation", () => {
       expect(apiMock).toHaveBeenCalledWith("/api/auth/logout", expect.anything()),
     );
     expect(reloadMock).toHaveBeenCalled();
+  });
+});
+
+describe("public documents", () => {
+  it("links to every public document from the footer", async () => {
+    mockApi();
+
+    render(<App />);
+
+    for (const page of PUBLIC_PAGES) {
+      expect(
+        await screen.findByRole("link", { name: page.navLabel }),
+      ).toHaveAttribute("href", page.path);
+    }
   });
 });

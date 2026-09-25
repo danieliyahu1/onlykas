@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router-dom";
-import type { ProfileResponse } from "@onlykas/shared";
+import { PUBLIC_PAGES, type ProfileResponse } from "@onlykas/shared";
 import { walletNetworkName } from "./app-config.js";
 import { COPY } from "./copy.js";
 import {
@@ -20,6 +20,7 @@ import { PostPage } from "./PostPage.js";
 import { FindCreatorPage } from "./FindCreatorPage.js";
 import { PublicCreatorsPage } from "./PublicCreatorsPage.js";
 import { FeedbackButton } from "./FeedbackButton.js";
+import { LegalPage } from "./LegalPage.js";
 import { SocialLinks } from "./SocialLinks.js";
 import { GlobalSearch } from "./GlobalSearch.js";
 import { AccountMenu } from "./AccountMenu.js";
@@ -285,11 +286,25 @@ export function App() {
                 <PostPage address={address} signIn={signIn} signingIn={signingIn} />
               }
             />
+            {PUBLIC_PAGES.map((page) => (
+              <Route
+                key={page.path}
+                path={page.path}
+                element={<LegalPage page={page} />}
+              />
+            ))}
             <Route path="*" element={<MessageNotFound />} />
           </Routes>
         </main>
         <footer>
           <span>Early access</span>
+          <nav className="legal-links" aria-label="Legal">
+            {PUBLIC_PAGES.map((page) => (
+              <Link key={page.path} to={page.path}>
+                {page.navLabel}
+              </Link>
+            ))}
+          </nav>
           <div className="footer-links">
             <SocialLinks />
             <FeedbackButton />

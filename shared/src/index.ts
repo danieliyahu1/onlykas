@@ -1,3 +1,5 @@
+export * from "./public-pages.js";
+
 export type NetworkId = "mainnet" | "testnet-10";
 
 export interface NetworkDefinition {
