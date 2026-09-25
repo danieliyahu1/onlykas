@@ -187,6 +187,7 @@ function documentBody(page: PublicPage): string {
     .join("");
   return (
     `<div class="legal-page"><h1>${escapeHtml(page.heading)}</h1>` +
+    `<p class="legal-updated">Last updated: ${escapeHtml(page.updated)}</p>` +
     page.intro.map(paragraph).join("") +
     sections +
     "</div>"

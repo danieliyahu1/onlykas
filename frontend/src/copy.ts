@@ -16,7 +16,7 @@ export const COPY = {
   uploadFailed: "Upload failed. Try again.",
   invalidPrice: "Enter a KAS price of zero or more, using up to 8 decimal places.",
   permanence:
-    "Publishing is permanent. The media, details, and price cannot be changed.",
+    "You can't edit a post once it's published. You can delete it later, but fans who unlocked it may keep a copy.",
   publishingCancelled: "Publishing cancelled.",
   publishing: "Publishing...",
   published: "Published.",
@@ -37,11 +37,11 @@ export const COPY = {
   accessVerificationFailed:
     "OnlyKas can't verify your subscription right now. Try again.",
   unlockRequired: "Unlock this post to view it.",
-  feedbackButton: "How can we improve",
+  feedbackButton: "Feedback",
   feedbackDialogTitle: "Send feedback",
-  feedbackLabel: "What should we improve?",
+  feedbackLabel: "Feedback or content report",
   feedbackHint: "Anonymous",
-  feedbackPlaceholder: "Tell us your experience",
+  feedbackPlaceholder: "Tell us what happened or what we can improve",
   feedbackSend: "Send",
   feedbackThanks: "Thanks — sent.",
   feedbackRequired: "Write a few words first.",

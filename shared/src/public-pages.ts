@@ -18,6 +18,8 @@ export interface PublicPage {
   description: string;
   /** Short label for footer navigation. */
   navLabel: string;
+  /** Human-readable date the page last changed. */
+  updated: string;
   /** Page heading, rendered as the h1. */
   heading: string;
   /** Opening paragraphs, shown before the first section. */
@@ -39,6 +41,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
     description:
       "What creators may publish on OnlyKas, including the rules for adult material and AI-generated content.",
     navLabel: "Content policy",
+    updated: "September 25, 2026",
     heading: "Content policy",
     intro: [
       "OnlyKas is for adult creators and their fans. You must be at least 18 years old to publish or unlock content. This policy explains what is allowed, what is not, and how we enforce it.",
@@ -72,9 +75,9 @@ export const PUBLIC_PAGES: PublicPage[] = [
       {
         heading: "Reporting and enforcement",
         paragraphs: [
-          "Anyone can report content that breaks these rules. We review reports and may remove content, restrict publishing, or close an account.",
+          "Anyone can report content that breaks these rules with the Feedback button at the bottom of the page. We review reports and may remove content, restrict publishing, or close an account.",
           "We report illegal content, including child sexual abuse material, to the relevant authorities.",
-          "Because publishing on OnlyKas is permanent on-chain, removing a listing does not remove the underlying media from the internet. Do not publish anything you may later need to take back.",
+          "OnlyKas stores media in its own cloud storage and post details in its own database, never on the blockchain. Deleting a post removes it from OnlyKas, but copies that fans already unlocked or downloaded may remain. Do not publish anything you may later need to take back.",
         ],
       },
     ],
@@ -85,6 +88,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
     description:
       "The terms for publishing and unlocking paid content on OnlyKas, including the 1% platform fee and direct Kaspa payments.",
     navLabel: "Terms",
+    updated: "September 25, 2026",
     heading: "Terms of service",
     intro: [
       "These terms govern your use of OnlyKas. By connecting a wallet, publishing content, or unlocking content, you agree to them. If you do not agree, do not use OnlyKas.",
@@ -108,7 +112,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
       {
         heading: "Publishing",
         paragraphs: [
-          "Publishing is permanent. Once content and its price are published, they cannot be edited or withdrawn from the chain.",
+          "Once a post is published, its media, caption, and price cannot be edited. You can delete a post and OnlyKas will stop serving it, but only the payment record lives on the Kaspa blockchain, not the content. Fans who already unlocked a post may keep a copy, and on-chain payments cannot be reversed.",
           "You keep ownership of your content. You grant OnlyKas permission to store and serve it so fans can view what they have unlocked.",
           "You are responsible for making sure you have the rights to everything you publish and that it follows our content policy.",
         ],
@@ -130,7 +134,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
       {
         heading: "Changes",
         paragraphs: [
-          "We may update these terms. When we do, we will change the date below. Continuing to use OnlyKas after a change means you accept the new terms.",
+          "We may update these terms. When we do, we will change the date shown on this page. Continuing to use OnlyKas after a change means you accept the new terms.",
         ],
       },
     ],
@@ -141,6 +145,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
     description:
       "What data OnlyKas collects, how it is used, and the choices you have. No email addresses or passwords, and payments stay in your wallet.",
     navLabel: "Privacy",
+    updated: "September 25, 2026",
     heading: "Privacy policy",
     intro: [
       "OnlyKas is built around a wallet, not an email and password. This policy explains what we collect, why, and what you can do about it.",
@@ -183,8 +188,8 @@ export const PUBLIC_PAGES: PublicPage[] = [
       {
         heading: "Your choices",
         paragraphs: [
-          "You can disconnect your wallet at any time, set your creator page to private, or ask us to delete your profile details.",
-          "Content published on-chain cannot be deleted from the blockchain, even if we stop serving it.",
+          "You can disconnect your wallet at any time, set your creator page to private, delete a post and its media, or ask us to delete your profile details.",
+          "We never put your content on the blockchain, but copies that other people already unlocked or downloaded may persist even after we stop serving it.",
         ],
       },
     ],

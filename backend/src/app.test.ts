@@ -1528,6 +1528,9 @@ describe("Server-rendered public pages", () => {
       expect(response.text).toContain(`<title>${page.title}</title>`);
       expect(response.text).toContain(`href="${origin}${page.path}"`);
       expect(response.text).toContain(`<h1>${page.heading}</h1>`);
+      expect(response.text).toContain(
+        `<p class="legal-updated">Last updated: ${page.updated}</p>`,
+      );
       expect(response.text).not.toContain('id="root"><div class="home-page"');
     },
   );

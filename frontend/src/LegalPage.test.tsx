@@ -9,6 +9,7 @@ describe("LegalPage", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: page.heading }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Last updated:/)).toHaveTextContent(page.updated);
     for (const section of page.sections) {
       expect(
         screen.getByRole("heading", { level: 2, name: section.heading }),
