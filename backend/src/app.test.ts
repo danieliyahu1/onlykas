@@ -1426,3 +1426,29 @@ function post(id: string): Post {
     publishedAt: Date.now(),
   };
 }
+
+describe("Crawler discoverability", () => {
+  it("serves robots.txt that points crawlers at the sitemap", async () => {
+    const { app } = testApp();
+
+    const response = await request(app).get("/robots.txt");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/plain");
+    expect(response.text).toContain("User-agent: *");
+    expect(response.text).toContain("Sitemap: http://localhost:5173/sitemap.xml");
+    expect(response.text).not.toContain("<div id=\"root\">");
+  });
+
+  it("serves an XML sitemap listing the public pages", async () => {
+    const { app } = testApp();
+
+    const response = await request(app).get("/sitemap.xml");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("xml");
+    expect(response.text).toContain("<loc>http://localhost:5173/</loc>");
+    expect(response.text).toContain("<loc>http://localhost:5173/creators</loc>");
+    expect(response.text).not.toContain("<div id=\"root\">");
+  });
+});

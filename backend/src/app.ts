@@ -249,6 +249,34 @@ export function createApp(d: AppDependencies) {
       res.status(ready ? 200 : 503).json({ status: ready ? "ok" : "unready" });
     }),
   );
+  app.get("/robots.txt", (_, res) => {
+    res.type("text/plain").send(
+      [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /api/",
+        "",
+        `Sitemap: ${d.publicOrigin}/sitemap.xml`,
+        "",
+      ].join("\n"),
+    );
+  });
+  app.get("/sitemap.xml", (_, res) => {
+    const urls = ["/", "/creators"]
+      .map(
+        (path) =>
+          `  <url><loc>${new URL(path, d.publicOrigin).toString()}</loc></url>`,
+      )
+      .join("\n");
+    res
+      .type("application/xml")
+      .send(
+        `<?xml version="1.0" encoding="UTF-8"?>\n` +
+          `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+          `${urls}\n` +
+          `</urlset>\n`,
+      );
+  });
   app.get("/api/config", (_, res) => {
     const body: NetworkConfigResponse = {
       network: networkConfig.id,
