@@ -396,7 +396,7 @@ describe("CreatorPage subscription actions", () => {
 describe("CreatorPage profile visibility", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("lets the owner make their profile public", async () => {
+  it("lets the owner make their private profile public", async () => {
     vi.mocked(api).mockResolvedValueOnce({
       ...creator(true, false),
       posts: [post("own-post", "My moment", true)],
@@ -409,21 +409,21 @@ describe("CreatorPage profile visibility", () => {
       onVisibilityChange,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Change" }));
+    await user.click(await screen.findByRole("button", { name: "Private" }));
 
     expect(onVisibilityChange).toHaveBeenCalledWith(true);
     expect(await screen.findByText("Profile is public.")).toBeVisible();
   });
 
-  it("refuses the visibility toggle to visitors and consumers", async () => {
+  it("shows visitors the state without offering a toggle", async () => {
     vi.mocked(api).mockResolvedValueOnce(creator(false, false));
     renderCreator(consumerAddress);
 
-    expect(await screen.findByRole("heading", { name: "Creator" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Change" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Private")).toBeVisible();
+    expect(screen.queryByTitle("Change visibility")).not.toBeInTheDocument();
   });
 
-  it("hides the visibility toggle from an owner without posts", async () => {
+  it("shows the state to an owner without posts, without a toggle", async () => {
     vi.mocked(api).mockResolvedValueOnce(creator(true, false));
     renderCreator(
       creatorAddress,
@@ -431,11 +431,11 @@ describe("CreatorPage profile visibility", () => {
       vi.fn(async () => undefined),
     );
 
-    expect(await screen.findByRole("heading", { name: "Creator" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Change" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Private")).toBeVisible();
+    expect(screen.queryByTitle("Change visibility")).not.toBeInTheDocument();
   });
 
-  it("shows the current public state on the owner profile", async () => {
+  it("shows the current public state with a toggle on the owner profile", async () => {
     vi.mocked(api).mockResolvedValueOnce({
       ...creator(true, false),
       isPublic: true,
@@ -447,8 +447,8 @@ describe("CreatorPage profile visibility", () => {
       vi.fn(async () => undefined),
     );
 
-    expect(await screen.findByText("Visibility: Public")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Change" })).toBeVisible();
+    expect(await screen.findByText("Public")).toBeVisible();
+    expect(screen.getByTitle("Change visibility")).toBeVisible();
   });
 
   it("lets the owner make their public profile private again", async () => {
@@ -465,7 +465,7 @@ describe("CreatorPage profile visibility", () => {
       onVisibilityChange,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Change" }));
+    await user.click(await screen.findByRole("button", { name: "Public" }));
 
     expect(onVisibilityChange).toHaveBeenCalledWith(false);
     expect(await screen.findByText("Profile is private.")).toBeVisible();
@@ -486,12 +486,11 @@ describe("CreatorPage profile visibility", () => {
       onVisibilityChange,
     );
 
-    await user.click(await screen.findByRole("button", { name: "Change" }));
+    await user.click(await screen.findByRole("button", { name: "Private" }));
 
     expect(onVisibilityChange).toHaveBeenCalledWith(true);
     expect(await screen.findByText("Save failed")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Change" })).toBeVisible();
-    expect(screen.queryByText("Visibility: Public")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Private" })).toBeVisible();
   });
 });
 

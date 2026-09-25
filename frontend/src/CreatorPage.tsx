@@ -313,20 +313,15 @@ export function CreatorPage({
           >
             {shortenAddress(currentCreator.address)}
           </button>
-          {owner && onVisibilityChange && currentCreator.posts.length > 0 && (
-            <div className="profile-visibility">
-              <span>Visibility: {currentCreator.isPublic ? "Public" : "Private"}</span>
-              <button
-                className="text-button"
-                type="button"
-                disabled={visibilityBusy}
-                onClick={() => void toggleVisibility()}
-              >
-                {visibilityBusy && <Spinner />}
-                {visibilityBusy ? "Saving..." : "Change"}
-              </button>
-            </div>
-          )}
+          <div className="profile-visibility">
+            <VisibilityBadge
+              isPublic={currentCreator.isPublic}
+              busy={visibilityBusy}
+              {...(owner && onVisibilityChange && currentCreator.posts.length > 0
+                ? { onToggle: () => void toggleVisibility() }
+                : {})}
+            />
+          </div>
         </div>
         {showSubscription && (
           <div className={owner ? "access-strip is-owner" : "access-strip"}>
@@ -392,6 +387,39 @@ export function CreatorPage({
         </div>
       </section>
     </>
+  );
+}
+
+function VisibilityBadge({
+  isPublic,
+  onToggle,
+  busy = false,
+}: {
+  isPublic: boolean;
+  onToggle?: () => void;
+  busy?: boolean;
+}) {
+  const label = isPublic ? "Public" : "Private";
+  const className = `visibility-badge ${isPublic ? "is-public" : "is-private"}`;
+  const content = (
+    <>
+      <span className="visibility-dot" aria-hidden="true" />
+      {label}
+    </>
+  );
+  if (!onToggle) return <span className={className}>{content}</span>;
+  return (
+    <button
+      className={className}
+      type="button"
+      disabled={busy}
+      title="Change visibility"
+      onClick={onToggle}
+    >
+      {busy && <Spinner />}
+      {content}
+      <Icon name="edit" />
+    </button>
   );
 }
 

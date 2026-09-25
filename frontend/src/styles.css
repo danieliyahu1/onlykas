@@ -422,23 +422,6 @@ h2 {
 .secondary:focus-visible {
   border-color: var(--acid);
 }
-.text-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: auto;
-  padding: 0.25rem 0;
-  background: transparent;
-  color: var(--paper);
-  font-size: 0.82rem;
-  text-decoration: underline;
-  text-underline-offset: 0.25em;
-}
-
-.text-button:hover,
-.text-button:focus-visible {
-  color: var(--acid-strong);
-}
 .icon-button {
   display: inline-grid;
   place-items: center;
@@ -1127,11 +1110,39 @@ progress {
 .profile-visibility {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.75rem;
+  align-items: center;
   margin-top: 0.85rem;
+}
+.visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0.55rem;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font:
+    500 0.68rem "DM Mono",
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.visibility-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.visibility-badge.is-public {
+  border-color: var(--card-line);
+  color: var(--acid);
+}
+button.visibility-badge {
+  background: transparent;
+}
+button.visibility-badge:hover:not(:disabled),
+button.visibility-badge:focus-visible {
+  border-color: var(--paper);
   color: var(--paper);
-  font-size: 0.82rem;
 }
 .access-strip {
   display: flex;
