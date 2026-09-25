@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,6 +19,7 @@ import {
   normalizePostText,
   parseMembershipPrice,
   parsePostPrice,
+  PUBLIC_PAGES,
   RETRY_AFTER_REFRESH,
   validateDisplayName,
   type MembershipAddressVerificationResponse,
@@ -59,6 +60,7 @@ import {
   type Logger,
 } from "./observability.js";
 import { diagnoseAddress } from "./adapters/http/address-diagnostic.js";
+import { matchPublicRoute, renderDocument } from "./adapters/http/public-pages.js";
 import { defaultMetrics, type Metrics } from "./metrics.js";
 import {
   MediaValidationError,
@@ -93,6 +95,7 @@ export interface AppDependencies {
   publicOrigin: string;
   network?: NetworkId;
   production?: boolean;
+  frontendDir?: string;
   now?: () => number;
   responseStallMs?: number;
   readinessCheck?: () => boolean | Promise<boolean>;
@@ -262,7 +265,7 @@ export function createApp(d: AppDependencies) {
     );
   });
   app.get("/sitemap.xml", (_, res) => {
-    const urls = ["/", "/creators"]
+    const urls = ["/", "/creators", ...PUBLIC_PAGES.map((page) => page.path)]
       .map(
         (path) =>
           `  <url><loc>${new URL(path, d.publicOrigin).toString()}</loc></url>`,
@@ -1387,9 +1390,28 @@ export function createApp(d: AppDependencies) {
     }),
   );
   if (d.production) {
-    const frontend = join(import.meta.dirname, "../../frontend/dist");
+    const frontend = d.frontendDir ?? join(import.meta.dirname, "../../frontend/dist");
+    const indexHtmlPath = join(frontend, "index.html");
+    let indexTemplate: string | null = null;
+    const loadIndexTemplate = () => {
+      indexTemplate ??= readFileSync(indexHtmlPath, "utf8");
+      return indexTemplate;
+    };
     app.use(express.static(frontend));
-    app.get("/{*path}", (_, res) => res.sendFile(join(frontend, "index.html")));
+    app.get("/{*path}", (req, res, next) => {
+      const match = matchPublicRoute(req.path);
+      let template: string;
+      try {
+        template = loadIndexTemplate();
+      } catch (error) {
+        next(error);
+        return;
+      }
+      res
+        .status(match.status)
+        .type("html")
+        .send(renderDocument(template, match, d.publicOrigin));
+    });
   }
   app.post(
     "/api/feedback",

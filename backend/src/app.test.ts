@@ -1,4 +1,8 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import request from "supertest";
+import { PUBLIC_PAGES } from "@onlykas/shared";
 import { createApp } from "./app.js";
 import { createMetrics, type Metrics } from "./metrics.js";
 import { MemoryStore } from "./memory-store.js";
@@ -1450,5 +1454,108 @@ describe("Crawler discoverability", () => {
     expect(response.text).toContain("<loc>http://localhost:5173/</loc>");
     expect(response.text).toContain("<loc>http://localhost:5173/creators</loc>");
     expect(response.text).not.toContain("<div id=\"root\">");
+  });
+});
+
+const INDEX_HTML = `<!doctype html>
+<html lang="en">
+  <head>
+    <title>OnlyKas — Get paid directly by your fans and keep 99%</title>
+    <meta
+      name="description"
+      content="OnlyKas lets creators publish paid photos and videos."
+    />
+    <link rel="canonical" href="https://onlykas.app/" />
+    <meta property="og:title" content="OnlyKas" />
+    <meta property="og:description" content="Publish paid photos and videos." />
+    <meta property="og:url" content="https://onlykas.app/" />
+    <meta name="twitter:title" content="OnlyKas" />
+    <meta name="twitter:description" content="Publish paid photos and videos." />
+  </head>
+  <body>
+    <div id="root"><div class="home-page">home</div></div>
+  </body>
+</html>`;
+
+describe("Server-rendered public pages", () => {
+  const origin = "https://onlykas.test";
+  let frontendDir: string;
+  let app: ReturnType<typeof createApp>;
+
+  beforeAll(async () => {
+    frontendDir = await mkdtemp(join(tmpdir(), "onlykas-frontend-"));
+    await writeFile(join(frontendDir, "index.html"), INDEX_HTML);
+    app = createApp({
+      store: new MemoryStore(),
+      storage: {
+        putFile: async () => undefined,
+        readRange: async () => ({
+          bytes: new Uint8Array(),
+          size: 0,
+          contentType: "image/jpeg",
+        }),
+        delete: async () => undefined,
+      },
+      walletVerifier: { verify: async () => false },
+      publicOrigin: origin,
+      production: true,
+      frontendDir,
+    });
+  });
+
+  afterAll(async () => {
+    await rm(frontendDir, { recursive: true, force: true });
+  });
+
+  it("describes a deep link instead of echoing the homepage", async () => {
+    const response = await request(app).get("/creators");
+
+    expect(response.status).toBe(200);
+    expect(response.text).toContain("<title>Creators — OnlyKas</title>");
+    expect(response.text).toContain(`href="${origin}/creators"`);
+    expect(response.text).toContain("Browse creators publishing");
+    expect(response.text).not.toContain(
+      '<link rel="canonical" href="https://onlykas.app/"',
+    );
+  });
+
+  it.each(PUBLIC_PAGES)(
+    "serves a distinct document at $path",
+    async (page) => {
+      const response = await request(app).get(page.path);
+
+      expect(response.status).toBe(200);
+      expect(response.text).toContain(`<title>${page.title}</title>`);
+      expect(response.text).toContain(`href="${origin}${page.path}"`);
+      expect(response.text).toContain(`<h1>${page.heading}</h1>`);
+      expect(response.text).not.toContain('id="root"><div class="home-page"');
+    },
+  );
+
+  it("marks unknown routes as not found", async () => {
+    const response = await request(app).get("/for-ai-creators");
+
+    expect(response.status).toBe(404);
+    expect(response.text).toContain("<title>Page not found — OnlyKas</title>");
+    expect(response.text).toContain('id="root"><div class="message">');
+    expect(response.text).not.toContain('class="home-page"');
+    expect(response.text).not.toContain('rel="canonical"');
+    expect(response.text).toContain('name="robots" content="noindex"');
+  });
+
+  it("keeps dynamic creator and post routes reachable", async () => {
+    const creator = await request(app).get("/creator/kaspatest:abc");
+    const post = await request(app).get("/post/abc");
+
+    expect(creator.status).toBe(200);
+    expect(post.status).toBe(200);
+  });
+
+  it("lists every public document in the sitemap", async () => {
+    const response = await request(app).get("/sitemap.xml");
+
+    for (const page of PUBLIC_PAGES) {
+      expect(response.text).toContain(`<loc>${origin}${page.path}</loc>`);
+    }
   });
 });
