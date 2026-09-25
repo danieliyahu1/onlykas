@@ -2,25 +2,14 @@
 import { readFileSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { homeFallbackHtml, type HomeCopy } from "./home-fallback.js";
 
 const homeCopy = JSON.parse(
   readFileSync(new URL("./src/home-copy.json", import.meta.url), "utf8"),
-) as { headline: string; lede: string };
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
+) as HomeCopy;
 
 function homepageFallback(): Plugin {
-  const fallback =
-    '<div class="home-page"><section class="home-section home-intro">' +
-    `<h1>${escapeHtml(homeCopy.headline)}</h1>` +
-    `<p class="home-lede">${escapeHtml(homeCopy.lede)}</p>` +
-    "</section></div>";
+  const fallback = homeFallbackHtml(homeCopy);
   return {
     name: "onlykas-homepage-fallback",
     transformIndexHtml: (html) =>

@@ -21,30 +21,15 @@ export function HomePage() {
       </section>
 
       <section className="home-section home-why">
-        <h2 className="home-section-title">Where your money goes.</h2>
-        <p className="home-lede">
-          Three things creators want to know. OnlyKas answers all three.
-        </p>
+        <h2 className="home-section-title">{homeCopy.moneyHeading}</h2>
+        <p className="home-lede">{homeCopy.moneyIntro}</p>
         <ul className="home-money">
-          <li>
-            <p className="money-claim">You keep 99%.</p>
-            <p className="money-detail">
-              OnlyKas takes 1%. That is the whole fee.
-            </p>
-          </li>
-          <li>
-            <p className="money-claim">You get paid on the spot.</p>
-            <p className="money-detail">
-              The moment a fan pays, the money is yours. No request, no
-              minimum, no hold.
-            </p>
-          </li>
-          <li>
-            <p className="money-claim">No one can hold your money.</p>
-            <p className="money-detail">
-              The money goes straight from your fans to you.
-            </p>
-          </li>
+          {homeCopy.moneyPoints.map((point) => (
+            <li key={point.claim}>
+              <p className="money-claim">{point.claim}</p>
+              <p className="money-detail">{point.detail}</p>
+            </li>
+          ))}
         </ul>
         <a
           className="home-powered"
@@ -62,10 +47,8 @@ export function HomePage() {
       </section>
 
       <section className="home-section">
-        <h2 className="home-section-title">Here to support a creator?</h2>
-        <p className="home-lede">
-          Unlock their work or subscribe for 30 days. Your KAS goes straight to them.
-        </p>
+        <h2 className="home-section-title">{homeCopy.fanHeading}</h2>
+        <p className="home-lede">{homeCopy.fanLede}</p>
         <FanCreators />
         <Link className="secondary" to="/creators">
           Browse creators
