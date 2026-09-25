@@ -7,7 +7,9 @@ import "./styles.css";
 // The server owns the network identity. Resolve it before the first render so
 // address prefixes and the wallet network are correct from the start.
 void loadAppConfig().finally(() => {
-  createRoot(document.getElementById("root")!).render(
+  const root = document.getElementById("root")!;
+  root.replaceChildren();
+  createRoot(root).render(
     <StrictMode>
       <App />
     </StrictMode>,

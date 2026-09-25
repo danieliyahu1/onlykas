@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { CreatorSearchResult } from "@onlykas/shared";
+import * as homeCopy from "./home-copy.json";
 import { COPY } from "./copy.js";
 import { LockIcon } from "./Icons.js";
 import { api } from "./kasware.js";
@@ -10,10 +11,8 @@ export function HomePage() {
   return (
     <div className="home-page">
       <section className="home-section home-intro">
-        <h1>Get paid by the people who love your work.</h1>
-        <p className="home-lede">
-          Publish a photo or a video. Set your price. You keep 99%.
-        </p>
+        <h1>{homeCopy.headline}</h1>
+        <p className="home-lede">{homeCopy.lede}</p>
         <div className="home-actions">
           <Link className="primary" to="/publish">
             Start publishing
