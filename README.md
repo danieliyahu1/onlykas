@@ -64,21 +64,21 @@ docker run --env-file .env -p 3000:3000 kaskama
 
 ## Kubernetes deployment
 
-Argo CD watches `deploy/` and applies the manifests to the `onlykas` namespace. Public traffic is provided by the VM's Cloudflare Tunnel.
+Argo CD watches `deploy/` and applies the manifests to the `kaskama` namespace. Public traffic is provided by the VM's Cloudflare Tunnel.
 
 Create the GHCR pull Secret outside Git, then create the required values in OCI Vault before Argo CD syncs:
 
 ```bash
 kubectl apply -f deploy/namespace.yaml
-kubectl -n onlykas create secret docker-registry ghcr-pull \
+kubectl -n kaskama create secret docker-registry ghcr-pull \
   --docker-server=ghcr.io \
   --docker-username='<github-user>' \
   --docker-password='<github-token-with-read-packages>'
 ```
 
-Populate the vault keys referenced by `deploy/externalsecret.yaml`: `onlykas-DATABASE_URL`, `onlykas-DATABASE_AUTH_TOKEN`, `onlykas-R2_ENDPOINT`, `onlykas-R2_ACCESS_KEY_ID`, and `onlykas-R2_SECRET_ACCESS_KEY`. These values must reference only the production Turso database and production R2 bucket. The External Secrets Operator creates `onlykas-secrets` from those values.
+Populate the vault keys referenced by `deploy/externalsecret.yaml`: `kaskama_database_url`, `kaskama_database_auth_token`, `kaskama_r2_endpoint`, `kaskama_r2_access_key_id`, and `kaskama_r2_secret_access_key`. These values must reference only the production Turso database and production R2 bucket. The External Secrets Operator creates `kaskama-secrets` from those values.
 
-Production runs on mainnet, so populate the mainnet platform fee wallet as `onlykas-platform-fee-address-mainnet`. The External Secrets Operator creates `onlykas-platform-fee-address`, which the Deployment maps to `PLATFORM_FEE_ADDRESS_MAINNET`. Set `KASPA_NETWORK` in `deploy/configmap.yaml` to `mainnet` for production; local development uses `KASPA_NETWORK=testnet-10` with `PLATFORM_FEE_ADDRESS_TESTNET_10`.
+Production runs on mainnet, so populate the mainnet platform fee wallet as `kaskama_platform_fee_address_mainnet`. The External Secrets Operator creates `kaskama-platform-fee-address`, which the Deployment maps to `PLATFORM_FEE_ADDRESS_MAINNET`. Set `KASPA_NETWORK` in `deploy/configmap.yaml` to `mainnet` for production; local development uses `KASPA_NETWORK=testnet-10` with `PLATFORM_FEE_ADDRESS_TESTNET_10`.
 
 The GitHub Actions workflow verifies the repository, publishes a `linux/arm64` image tagged with the commit SHA to GHCR, and updates `deploy/deployment.yaml` automatically. Argo CD then detects the manifest commit and syncs the new image.
 
@@ -99,7 +99,7 @@ Recorded signals include:
 - Media publication outcomes, validation failures, and delivery bytes.
 - Payment and membership preparation, finalization, and verification outcomes.
 - Turso, Cloudflare R2, Kaspa REST, and Kaspa wRPC request duration and failures.
-- Node.js runtime metrics (CPU, memory, event loop lag, GC) and `onlykas_build_info`.
+- Node.js runtime metrics (CPU, memory, event loop lag, GC) and `kaskama_build_info`.
 
 Labels are bounded (route templates, methods, status codes, enumerated outcomes). Wallet addresses, post IDs, transaction IDs, storage keys, and request IDs are never used as labels.
 
