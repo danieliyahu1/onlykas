@@ -11,7 +11,7 @@ export const API_COPY = {
   membershipPriceAboveMax:
     "The monthly subscription price can be at most 1,000,000 KAS.",
   membershipStale:
-    "This subscription changed while you were confirming it. Nothing was charged — submit again.",
+    "This subscription changed while you were confirming it. Nothing was charged - submit again.",
   membershipOfferExists: "This subscription is already live.",
   membershipCancellationStale: "This subscription already changed. Submit again.",
   membershipPurchaseExists: "You already have this subscription.",

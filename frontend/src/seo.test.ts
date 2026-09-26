@@ -6,7 +6,7 @@ const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
 describe("index.html", () => {
   it("describes the product in initial metadata", () => {
     expect(html).toContain(
-      "<title>Kaskama — Get paid directly by your fans and keep 99%</title>",
+      "<title>Kaskama - Get paid directly by your fans and keep 99%</title>",
     );
     expect(html).toContain('name="description"');
     expect(html).toContain('rel="canonical"');

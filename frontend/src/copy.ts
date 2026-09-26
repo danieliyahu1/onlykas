@@ -43,7 +43,7 @@ export const COPY = {
   feedbackHint: "Anonymous",
   feedbackPlaceholder: "Tell us what happened or what we can improve",
   feedbackSend: "Send",
-  feedbackThanks: "Thanks — sent.",
+  feedbackThanks: "Thanks - sent.",
   feedbackRequired: "Write a few words first.",
   feedbackFailed: "Couldn’t send feedback. Try again.",
 } as const;

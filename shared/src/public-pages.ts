@@ -29,7 +29,7 @@ export interface PublicPage {
 
 export const SITE = {
   name: "Kaskama",
-  title: "Kaskama — Get paid directly by your fans and keep 99%",
+  title: "Kaskama - Get paid directly by your fans and keep 99%",
   description:
     "Kaskama lets creators publish paid photos and videos, set their own price, and get paid directly by fans on Kaspa. You keep 99%.",
 } as const;
@@ -37,7 +37,7 @@ export const SITE = {
 export const PUBLIC_PAGES: PublicPage[] = [
   {
     path: "/content-policy",
-    title: "Content policy — Kaskama",
+    title: "Content policy - Kaskama",
     description:
       "What creators may publish on Kaskama, including the rules for adult material and AI-generated content.",
     navLabel: "Content policy",
@@ -84,7 +84,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
   },
   {
     path: "/terms",
-    title: "Terms of service — Kaskama",
+    title: "Terms of service - Kaskama",
     description:
       "The terms for publishing and unlocking paid content on Kaskama, including the 1% platform fee and direct Kaspa payments.",
     navLabel: "Terms",
@@ -141,7 +141,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
   },
   {
     path: "/privacy",
-    title: "Privacy policy — Kaskama",
+    title: "Privacy policy - Kaskama",
     description:
       "What data Kaskama collects, how it is used, and the choices you have. No email addresses or passwords, and payments stay in your wallet.",
     navLabel: "Privacy",

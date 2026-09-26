@@ -1173,7 +1173,7 @@ describe("membership price validation", () => {
 
 describe("membership state changes", () => {
   const staleMessage =
-    "This subscription changed while you were confirming it. Nothing was charged — submit again.";
+    "This subscription changed while you were confirming it. Nothing was charged - submit again.";
   const covenantId = "a".repeat(64);
 
   function gatewayThatThrows(error: Error): MembershipGateway {
@@ -1518,7 +1518,7 @@ describe("Crawler discoverability", () => {
 const INDEX_HTML = `<!doctype html>
 <html lang="en">
   <head>
-    <title>Kaskama — Get paid directly by your fans and keep 99%</title>
+    <title>Kaskama - Get paid directly by your fans and keep 99%</title>
     <meta
       name="description"
       content="Kaskama lets creators publish paid photos and videos."
@@ -1569,7 +1569,7 @@ describe("Server-rendered public pages", () => {
     const response = await request(app).get("/creators");
 
     expect(response.status).toBe(200);
-    expect(response.text).toContain("<title>Creators — Kaskama</title>");
+    expect(response.text).toContain("<title>Creators - Kaskama</title>");
     expect(response.text).toContain(`href="${origin}/creators"`);
     expect(response.text).toContain("Browse creators publishing");
     expect(response.text).not.toContain(
@@ -1597,7 +1597,7 @@ describe("Server-rendered public pages", () => {
     const response = await request(app).get("/for-ai-creators");
 
     expect(response.status).toBe(404);
-    expect(response.text).toContain("<title>Page not found — Kaskama</title>");
+    expect(response.text).toContain("<title>Page not found - Kaskama</title>");
     expect(response.text).toContain('id="root"><div class="message">');
     expect(response.text).not.toContain('class="home-page"');
     expect(response.text).not.toContain('rel="canonical"');
