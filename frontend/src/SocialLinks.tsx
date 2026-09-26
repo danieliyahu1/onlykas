@@ -1,6 +1,6 @@
 export const SOCIAL_LINKS = {
   telegram: "https://t.me/+KHxAIuAXrng4Y2I0",
-  github: "https://github.com/danieliyahu1/onlykas",
+  github: "https://github.com/danieliyahu1/kaskama",
 } as const;
 
 export function SocialLinks() {
