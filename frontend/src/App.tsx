@@ -221,7 +221,7 @@ export function App() {
         <ScrollReset target={mainRef} />
         <nav>
           <Link to="/" className="brand">
-            ONLY<span>KAS</span>
+            KAS<span>KAMA</span>
           </Link>
           <div className="nav-group">
             <GlobalSearch />
