@@ -55,7 +55,7 @@ Reset drops the application tables, reapplies the canonical schema, and is destr
 
 The production image builds all workspaces and runs one Express process. Express serves the Vite bundle and all API and protected-media routes from one origin.
 
-Development and production must use separate stateful resources. Local development uses the `onlykas` Turso database and the `onlykas-development` R2 bucket. Production uses the `onlykas-production` Turso database and the `onlykas-production` R2 bucket. Do not share database credentials or bucket-scoped R2 credentials between environments.
+Development and production must use separate stateful resources. Local development uses the `onlykas` Turso database and the `kaskama-development` R2 bucket. Production uses the `onlykas-production` Turso database and the `kaskama-production` R2 bucket. Do not share database credentials or bucket-scoped R2 credentials between environments.
 
 ```bash
 docker build -t kaskama .

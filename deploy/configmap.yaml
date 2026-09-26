@@ -9,7 +9,7 @@ data:
   METRICS_PORT: "9090"
   PUBLIC_ORIGIN: https://kaskama.com
   R2_REGION: auto
-  R2_BUCKET: onlykas-production
+  R2_BUCKET: kaskama-production
   # Production runs on mainnet. KASPA_NETWORK selects the address prefix, the
   # wallet network, and the default node URL; the matching platform fee wallet
   # is injected from the kaskama-platform-fee-address Secret.
