@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: onlykas
-  namespace: onlykas
+  name: kaskama
+  namespace: kaskama
   labels:
-    app.kubernetes.io/name: onlykas
+    app.kubernetes.io/name: kaskama
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: onlykas
+    app.kubernetes.io/name: kaskama
   ports:
     - name: http
       port: 80

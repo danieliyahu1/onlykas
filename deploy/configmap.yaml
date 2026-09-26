@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: onlykas-config
-  namespace: onlykas
+  name: kaskama-config
+  namespace: kaskama
 data:
   NODE_ENV: production
   PORT: "3000"
@@ -12,6 +12,6 @@ data:
   R2_BUCKET: onlykas-production
   # Production runs on mainnet. KASPA_NETWORK selects the address prefix, the
   # wallet network, and the default node URL; the matching platform fee wallet
-  # is injected from the onlykas-platform-fee-address Secret.
+  # is injected from the kaskama-platform-fee-address Secret.
   KASPA_NETWORK: mainnet
   FEEDBACK_SPILL_PATH: /tmp/feedback-spill.json
