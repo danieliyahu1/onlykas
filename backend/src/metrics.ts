@@ -65,134 +65,134 @@ export class Metrics {
     const registers = [registry];
 
     this.httpInFlight = new Gauge({
-      name: "onlykas_http_requests_in_flight",
+      name: "kaskama_http_requests_in_flight",
       help: "HTTP requests currently being served.",
       registers,
     });
     this.httpRequests = new Counter({
-      name: "onlykas_http_requests_total",
+      name: "kaskama_http_requests_total",
       help: "HTTP requests completed by method, route template, and status.",
       labelNames: ["method", "route", "status"],
       registers,
     });
     this.httpDuration = new Histogram({
-      name: "onlykas_http_request_duration_seconds",
+      name: "kaskama_http_request_duration_seconds",
       help: "HTTP request duration in seconds by method and route template.",
       labelNames: ["method", "route"],
       buckets: HTTP_DURATION_BUCKETS,
       registers,
     });
     this.pageVisits = new Counter({
-      name: "onlykas_page_visits_total",
+      name: "kaskama_page_visits_total",
       help: "Total homepage visits.",
       registers,
     });
     this.mediaPublish = new Counter({
-      name: "onlykas_media_publish_total",
+      name: "kaskama_media_publish_total",
       help: "Media publication attempts by outcome and media type.",
       labelNames: ["outcome", "media_type"],
       registers,
     });
     this.mediaPublishBytes = new Histogram({
-      name: "onlykas_media_publish_bytes",
+      name: "kaskama_media_publish_bytes",
       help: "Size in bytes of successfully published media by media type.",
       labelNames: ["media_type"],
       buckets: MEDIA_BYTES_BUCKETS,
       registers,
     });
     this.mediaValidationFailures = new Counter({
-      name: "onlykas_media_validation_failures_total",
+      name: "kaskama_media_validation_failures_total",
       help: "Media validation failures by category.",
       labelNames: ["category"],
       registers,
     });
     this.mediaDelivery = new Counter({
-      name: "onlykas_media_delivery_total",
+      name: "kaskama_media_delivery_total",
       help: "Protected media delivery requests by method, outcome, and range.",
       labelNames: ["method", "outcome", "range"],
       registers,
     });
     this.mediaDeliveryBytes = new Counter({
-      name: "onlykas_media_delivery_bytes_total",
+      name: "kaskama_media_delivery_bytes_total",
       help: "Bytes served through the protected media proxy by media type.",
       labelNames: ["media_type"],
       registers,
     });
     this.paymentPrepare = new Counter({
-      name: "onlykas_payment_prepare_total",
+      name: "kaskama_payment_prepare_total",
       help: "Per-post payment preparation attempts by outcome.",
       labelNames: ["outcome"],
       registers,
     });
     this.paymentFinalize = new Counter({
-      name: "onlykas_payment_finalize_total",
+      name: "kaskama_payment_finalize_total",
       help: "Per-post payment finalization attempts by state.",
       labelNames: ["state"],
       registers,
     });
     this.paymentVerification = new Counter({
-      name: "onlykas_payment_verification_total",
+      name: "kaskama_payment_verification_total",
       help: "Purchase access verifications by outcome.",
       labelNames: ["outcome"],
       registers,
     });
     this.membershipPrepare = new Counter({
-      name: "onlykas_membership_prepare_total",
+      name: "kaskama_membership_prepare_total",
       help: "Membership preparation attempts by kind and outcome.",
       labelNames: ["kind", "outcome"],
       registers,
     });
     this.membershipFinalize = new Counter({
-      name: "onlykas_membership_finalize_total",
+      name: "kaskama_membership_finalize_total",
       help: "Membership finalization attempts by kind and state.",
       labelNames: ["kind", "state"],
       registers,
     });
     this.membershipVerification = new Counter({
-      name: "onlykas_membership_verification_total",
+      name: "kaskama_membership_verification_total",
       help: "Membership verification results by scope and status.",
       labelNames: ["scope", "status"],
       registers,
     });
     this.authChallenge = new Counter({
-      name: "onlykas_auth_challenge_total",
+      name: "kaskama_auth_challenge_total",
       help: "Wallet authentication challenges by outcome.",
       labelNames: ["outcome"],
       registers,
     });
     this.authSession = new Counter({
-      name: "onlykas_auth_session_total",
+      name: "kaskama_auth_session_total",
       help: "Wallet authentication sessions by outcome.",
       labelNames: ["outcome"],
       registers,
     });
     this.feedback = new Counter({
-      name: "onlykas_feedback_total",
+      name: "kaskama_feedback_total",
       help: "Anonymous user feedback submissions by outcome.",
       labelNames: ["outcome"],
       registers,
     });
     this.workflowReconcile = new Counter({
-      name: "onlykas_workflow_reconcile_total",
+      name: "kaskama_workflow_reconcile_total",
       help: "Background workflow reconciliation outcomes.",
       labelNames: ["result"],
       registers,
     });
     this.dependencyRequests = new Counter({
-      name: "onlykas_dependency_requests_total",
+      name: "kaskama_dependency_requests_total",
       help: "Outbound dependency requests by dependency, operation, and outcome.",
       labelNames: ["dependency", "operation", "outcome"],
       registers,
     });
     this.dependencyDuration = new Histogram({
-      name: "onlykas_dependency_request_duration_seconds",
+      name: "kaskama_dependency_request_duration_seconds",
       help: "Outbound dependency request duration in seconds.",
       labelNames: ["dependency", "operation"],
       buckets: HTTP_DURATION_BUCKETS,
       registers,
     });
     new Gauge({
-      name: "onlykas_build_info",
+      name: "kaskama_build_info",
       help: "Build information for the running Kaskama process.",
       labelNames: ["version", "revision"],
       registers,

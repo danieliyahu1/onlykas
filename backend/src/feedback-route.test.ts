@@ -142,7 +142,7 @@ describe("POST /api/feedback", () => {
     await request(app).post("/api/feedback").send({ message: "metrics please" }).expect(202);
 
     const body = await metrics.render();
-    expect(body).toContain('onlykas_feedback_total{outcome="disabled"}');
+    expect(body).toContain('kaskama_feedback_total{outcome="disabled"}');
     expect(body).toContain('route="/api/feedback"');
     await rm(dir, { recursive: true, force: true });
   });

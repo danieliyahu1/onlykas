@@ -204,7 +204,7 @@ describe("request metrics", () => {
     expect(body).not.toContain("post-123");
 
     const values = (
-      await metrics.registry.getSingleMetric("onlykas_http_requests_total")!.get()
+      await metrics.registry.getSingleMetric("kaskama_http_requests_total")!.get()
     ).values;
     expect(values).toContainEqual(
       expect.objectContaining({
@@ -223,7 +223,7 @@ describe("request metrics", () => {
     await request(app).get("/api/posts/unknown").expect(404);
 
     const values = (
-      await metrics.registry.getSingleMetric("onlykas_page_visits_total")!.get()
+      await metrics.registry.getSingleMetric("kaskama_page_visits_total")!.get()
     ).values;
     expect(values).toEqual([expect.objectContaining({ labels: {}, value: 1 })]);
   });

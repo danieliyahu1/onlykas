@@ -221,7 +221,7 @@ describe("FeedbackService", () => {
       expect(calls).toHaveLength(1);
       expect(spill.entries).toHaveLength(0);
       expect(await metrics.render()).toContain(
-        'onlykas_feedback_total{outcome="delivered"}',
+        'kaskama_feedback_total{outcome="delivered"}',
       );
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -307,7 +307,7 @@ describe("FeedbackService", () => {
       expect(service.spill.entries).toHaveLength(1);
       expect(service.spill.entries[0]!.message).toBe("offline note");
       expect(await metrics.render()).toContain(
-        'onlykas_feedback_total{outcome="disabled"}',
+        'kaskama_feedback_total{outcome="disabled"}',
       );
     } finally {
       await rm(dir, { recursive: true, force: true });

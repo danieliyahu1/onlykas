@@ -33,13 +33,13 @@ describe("metrics endpoint", () => {
     expect(response.headers.get("content-type")).toContain("text/plain");
     const body = await response.text();
 
-    expect(body).toContain("# HELP onlykas_http_requests_total");
-    expect(body).toContain("# TYPE onlykas_http_requests_total counter");
-    expect(body).toContain("onlykas_http_requests_total");
+    expect(body).toContain("# HELP kaskama_http_requests_total");
+    expect(body).toContain("# TYPE kaskama_http_requests_total counter");
+    expect(body).toContain("kaskama_http_requests_total");
     expect(body).toContain('route="/api/posts/:id"');
-    expect(body).toContain("onlykas_page_visits_total 1");
-    expect(body).toContain("onlykas_http_request_duration_seconds");
-    expect(body).toContain("onlykas_build_info");
+    expect(body).toContain("kaskama_page_visits_total 1");
+    expect(body).toContain("kaskama_http_request_duration_seconds");
+    expect(body).toContain("kaskama_build_info");
     expect(body).toContain('revision="abc123"');
     expect(body).toContain("nodejs_eventloop_lag_seconds");
   });
@@ -74,7 +74,7 @@ describe("metrics endpoint", () => {
 
     const requests = (
       await metrics.registry
-        .getSingleMetric("onlykas_dependency_requests_total")!
+        .getSingleMetric("kaskama_dependency_requests_total")!
         .get()
     ).values;
     expect(requests).toContainEqual(
@@ -92,7 +92,7 @@ describe("metrics endpoint", () => {
 
     const durations = (
       await metrics.registry
-        .getSingleMetric("onlykas_dependency_request_duration_seconds")!
+        .getSingleMetric("kaskama_dependency_request_duration_seconds")!
         .get()
     ).values;
     expect(durations.some((value) => value.labels.dependency === "turso")).toBe(

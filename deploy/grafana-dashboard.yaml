@@ -30,7 +30,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_page_visits_total{job=\"kaskama\"}[$__range])) or vector(0)",
+              "expr": "sum(increase(kaskama_page_visits_total{job=\"kaskama\"}[$__range])) or vector(0)",
               "legendFormat": "homepage opens"
             }
           ]
@@ -47,7 +47,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_auth_session_total{job=\"kaskama\",outcome=\"created\"}[$__range])) or vector(0)",
+              "expr": "sum(increase(kaskama_auth_session_total{job=\"kaskama\",outcome=\"created\"}[$__range])) or vector(0)",
               "legendFormat": "sign-ins"
             }
           ]
@@ -64,7 +64,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_http_requests_total{job=\"kaskama\",route=\"/api/creators/public\"}[$__range])) or vector(0)",
+              "expr": "sum(increase(kaskama_http_requests_total{job=\"kaskama\",route=\"/api/creators/public\"}[$__range])) or vector(0)",
               "legendFormat": "creators page opens"
             }
           ]
@@ -81,7 +81,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_http_requests_total{job=\"kaskama\",route=\"/api/creators/:address\"}[$__range])) or vector(0)",
+              "expr": "sum(increase(kaskama_http_requests_total{job=\"kaskama\",route=\"/api/creators/:address\"}[$__range])) or vector(0)",
               "legendFormat": "creator page opens"
             }
           ]
@@ -112,25 +112,25 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_page_visits_total{job=\"kaskama\"}[$__interval])) or vector(0)",
+              "expr": "sum(increase(kaskama_page_visits_total{job=\"kaskama\"}[$__interval])) or vector(0)",
               "legendFormat": "GET /"
             },
             {
               "refId": "B",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_auth_session_total{job=\"kaskama\",outcome=\"created\"}[$__interval])) or vector(0)",
+              "expr": "sum(increase(kaskama_auth_session_total{job=\"kaskama\",outcome=\"created\"}[$__interval])) or vector(0)",
               "legendFormat": "POST /api/auth/session"
             },
             {
               "refId": "C",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_http_requests_total{job=\"kaskama\",route=\"/api/creators/public\"}[$__interval])) or vector(0)",
+              "expr": "sum(increase(kaskama_http_requests_total{job=\"kaskama\",route=\"/api/creators/public\"}[$__interval])) or vector(0)",
               "legendFormat": "GET /api/creators/public"
             },
             {
               "refId": "D",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(increase(onlykas_http_requests_total{job=\"kaskama\",route=\"/api/creators/:address\"}[$__interval])) or vector(0)",
+              "expr": "sum(increase(kaskama_http_requests_total{job=\"kaskama\",route=\"/api/creators/:address\"}[$__interval])) or vector(0)",
               "legendFormat": "GET /api/creators/:address"
             }
           ]
@@ -160,7 +160,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(rate(onlykas_http_requests_total{job=\"kaskama\"}[$__rate_interval]))",
+              "expr": "sum(rate(kaskama_http_requests_total{job=\"kaskama\"}[$__rate_interval]))",
               "legendFormat": "requests"
             }
           ]
@@ -175,7 +175,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(rate(onlykas_http_requests_total{job=\"kaskama\",status=~\"5..\"}[$__rate_interval]))",
+              "expr": "sum(rate(kaskama_http_requests_total{job=\"kaskama\",status=~\"5..\"}[$__rate_interval]))",
               "legendFormat": "5xx"
             }
           ]
@@ -190,7 +190,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum(onlykas_http_requests_in_flight{job=\"kaskama\"})",
+              "expr": "sum(kaskama_http_requests_in_flight{job=\"kaskama\"})",
               "legendFormat": "in flight"
             }
           ]
@@ -205,7 +205,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum by (route) (rate(onlykas_http_requests_total{job=\"kaskama\"}[$__rate_interval]))",
+              "expr": "sum by (route) (rate(kaskama_http_requests_total{job=\"kaskama\"}[$__rate_interval]))",
               "legendFormat": "{{route}}"
             }
           ]
@@ -220,7 +220,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "histogram_quantile(0.95, sum by (le, route) (rate(onlykas_http_request_duration_seconds_bucket{job=\"kaskama\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.95, sum by (le, route) (rate(kaskama_http_request_duration_seconds_bucket{job=\"kaskama\"}[$__rate_interval])))",
               "legendFormat": "{{route}}"
             }
           ]
@@ -235,7 +235,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum by (outcome) (rate(onlykas_media_publish_total{job=\"kaskama\"}[$__rate_interval]))",
+              "expr": "sum by (outcome) (rate(kaskama_media_publish_total{job=\"kaskama\"}[$__rate_interval]))",
               "legendFormat": "{{outcome}}"
             }
           ]
@@ -250,7 +250,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum by (media_type) (rate(onlykas_media_delivery_bytes_total{job=\"kaskama\"}[$__rate_interval]))",
+              "expr": "sum by (media_type) (rate(kaskama_media_delivery_bytes_total{job=\"kaskama\"}[$__rate_interval]))",
               "legendFormat": "{{media_type}}"
             }
           ]
@@ -265,7 +265,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum by (state) (rate(onlykas_payment_finalize_total{job=\"kaskama\"}[$__rate_interval]))",
+              "expr": "sum by (state) (rate(kaskama_payment_finalize_total{job=\"kaskama\"}[$__rate_interval]))",
               "legendFormat": "{{state}}"
             }
           ]
@@ -280,7 +280,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum by (kind, state) (rate(onlykas_membership_finalize_total{job=\"kaskama\"}[$__rate_interval]))",
+              "expr": "sum by (kind, state) (rate(kaskama_membership_finalize_total{job=\"kaskama\"}[$__rate_interval]))",
               "legendFormat": "{{kind}} {{state}}"
             }
           ]
@@ -295,7 +295,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "sum by (dependency, operation) (rate(onlykas_dependency_requests_total{job=\"kaskama\",outcome=\"error\"}[$__rate_interval]))",
+              "expr": "sum by (dependency, operation) (rate(kaskama_dependency_requests_total{job=\"kaskama\",outcome=\"error\"}[$__rate_interval]))",
               "legendFormat": "{{dependency}} {{operation}}"
             }
           ]
@@ -310,7 +310,7 @@ data:
             {
               "refId": "A",
               "datasource": { "type": "prometheus", "uid": "VictoriaMetrics" },
-              "expr": "histogram_quantile(0.95, sum by (le, dependency) (rate(onlykas_dependency_request_duration_seconds_bucket{job=\"kaskama\"}[$__rate_interval])))",
+              "expr": "histogram_quantile(0.95, sum by (le, dependency) (rate(kaskama_dependency_request_duration_seconds_bucket{job=\"kaskama\"}[$__rate_interval])))",
               "legendFormat": "{{dependency}}"
             }
           ]
