@@ -18,12 +18,12 @@ export function uploadMedia(
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("POST", "/api/posts/publish");
-    request.setRequestHeader(
-      "Content-Type",
-      file.type || "application/octet-stream",
-    );
-    request.setRequestHeader("X-Kaskama-Caption", caption);
-    request.setRequestHeader("X-Kaskama-Price", priceKas);
+    // The caption is free text and may span lines or hold any Unicode
+    // character, so it travels in the multipart body rather than a header.
+    const body = new FormData();
+    body.append("caption", caption);
+    body.append("price", priceKas);
+    body.append("media", file, file.name);
     request.upload.onprogress = (event) => {
       if (event.lengthComputable)
         onProgress(Math.round((event.loaded / event.total) * 100));
@@ -60,6 +60,6 @@ export function uploadMedia(
       });
       reject(error);
     };
-    request.send(file);
+    request.send(body);
   });
 }

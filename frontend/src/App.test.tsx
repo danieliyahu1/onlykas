@@ -81,6 +81,13 @@ function browser() {
   return { user: userEvent.setup() };
 }
 
+// /api/profile is requested by an effect declared after the effect that records
+// the signed-in address, so seeing the request means wallet reconciliation is
+// armed and will react to the next wallet event.
+async function waitForWalletReconciliation() {
+  await waitFor(() => expect(apiMock).toHaveBeenCalledWith("/api/profile"));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   delete window.kasware;
@@ -146,7 +153,7 @@ describe("session and wallet reconciliation", () => {
     mockApi({ session: { address: signedInAddress } });
 
     render(<App />);
-    expect(await screen.findByText(/Hi,/i)).toBeInTheDocument();
+    await waitForWalletReconciliation();
 
     wallet.getAccounts.mockResolvedValue([otherAddress]);
     handlers.accountsChanged?.();
@@ -167,7 +174,7 @@ describe("session and wallet reconciliation", () => {
     mockApi({ session: { address: signedInAddress } });
 
     render(<App />);
-    expect(await screen.findByText(/Hi,/i)).toBeInTheDocument();
+    await waitForWalletReconciliation();
 
     wallet.getNetwork.mockResolvedValue("kaspa_mainnet");
     handlers.networkChanged?.();

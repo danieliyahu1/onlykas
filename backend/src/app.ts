@@ -1,10 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { createWriteStream, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
 import cookieParser from "cookie-parser";
 import express, { type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
@@ -12,7 +11,6 @@ import { z } from "zod";
 import {
   DEFAULT_NETWORK,
   isFreePost,
-  mediaHintError,
   membershipPriceProblem,
   networkDefinition,
   normalizeDisplayName,
@@ -69,6 +67,11 @@ import {
 } from "./adapters/media/media.js";
 import { FeedbackError, type FeedbackService } from "./adapters/feedback/feedback.js";
 import { RateLimiter } from "./adapters/http/rate-limit.js";
+import {
+  InvalidPublishUploadError,
+  readPublishMedia,
+  type PublishMedia,
+} from "./adapters/http/publish-upload.js";
 import { createPublishPostUseCase } from "./application/publication-use-cases.js";
 import { createDeletePostUseCase } from "./application/delete-post.js";
 import {
@@ -467,40 +470,42 @@ export function createApp(d: AppDependencies) {
     optional,
     required,
     asyncHandler(async (req, res) => {
-      const type = req.get("content-type")?.split(";", 1)[0] ?? "",
-        caption = req.get("x-kaskama-caption") ?? "",
-        price = req.get("x-kaskama-price") ?? "",
-        contentLength = Number(req.get("content-length")),
-        hint = Number.isSafeInteger(contentLength)
-          ? mediaHintError(type, contentLength)
-          : undefined;
-      if (hint) {
-        metrics.mediaPublishAttempt("invalid", "unknown");
-        return apiError(res, 422, "INVALID_MEDIA", hint);
-      }
-      const priceSompi = parsePostPrice(price);
-      const errors: string[] = priceSompi !== null ? [] : [COPY.invalidPrice];
-      if (!caption.trim()) errors.push("Caption must be between 1 and 280 characters.");
-      if ([...caption.trim()].length > 280)
-        errors.push("Caption must be between 1 and 280 characters.");
-      if (errors.length) {
-        metrics.mediaPublishAttempt("invalid", "unknown");
-        return res.status(400).json({ error: "INVALID_POST", errors });
-      }
       const dir = await mkdtemp(join(tmpdir(), "kaskama-publish-")),
         source = join(dir, "media");
       try {
-        const bytesWritten = await writeUpload(req, source, MAX_VIDEO_BYTES);
-        if (!bytesWritten) return apiError(res, 400, "INVALID_MEDIA");
+        let upload: PublishMedia;
+        try {
+          upload = await readPublishMedia(req, {
+            filePath: source,
+            maxBytes: MAX_VIDEO_BYTES,
+          });
+        } catch (e) {
+          if (e instanceof InvalidPublishUploadError) {
+            metrics.mediaPublishAttempt("invalid", "unknown");
+            return apiError(res, 400, "INVALID_MEDIA");
+          }
+          throw e;
+        }
+        const priceSompi = parsePostPrice(upload.price);
+        const errors: string[] = priceSompi !== null ? [] : [COPY.invalidPrice];
+        if (!upload.caption.trim())
+          errors.push("Caption must be between 1 and 280 characters.");
+        if ([...upload.caption.trim()].length > 280)
+          errors.push("Caption must be between 1 and 280 characters.");
+        if (errors.length) {
+          metrics.mediaPublishAttempt("invalid", "unknown");
+          return res.status(400).json({ error: "INVALID_POST", errors });
+        }
+        if (!upload.bytesWritten) return apiError(res, 400, "INVALID_MEDIA");
         const result = await publishPost({
           creator: req.walletSession!.address,
-          caption: normalizePostText(caption),
+          caption: normalizePostText(upload.caption),
           priceSompi: priceSompi!.toString(),
           sourcePath: source,
           now: now(),
         });
         if (result.kind === "DUPLICATE") {
-          metrics.mediaPublishAttempt("conflict", type || "unknown");
+          metrics.mediaPublishAttempt("conflict", "unknown");
           return apiError(
             res,
             409,
@@ -1665,24 +1670,4 @@ function parseRange(
   )
     return "invalid";
   return { start, end: Math.min(end, size - 1) };
-}
-
-async function writeUpload(
-  request: Request,
-  destination: string,
-  maxBytes: number,
-): Promise<number> {
-  let written = 0;
-  const bounded = new Transform({
-    transform(chunk: Buffer, _encoding, callback) {
-      written += chunk.byteLength;
-      if (written > maxBytes) {
-        callback(new MediaValidationError("VIDEO_TOO_LARGE"));
-        return;
-      }
-      callback(null, chunk);
-    },
-  });
-  await pipeline(request, bounded, createWriteStream(destination, { flags: "wx" }));
-  return written;
 }

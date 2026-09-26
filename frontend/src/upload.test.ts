@@ -10,6 +10,7 @@ class FakeRequest {
   responseHeaders: Record<string, string> = {};
   status = 0;
   responseText = "";
+  body: unknown = undefined;
   upload: { onprogress: ProgressHandler | null } = { onprogress: null };
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
@@ -27,8 +28,8 @@ class FakeRequest {
   getResponseHeader(name: string) {
     return this.responseHeaders[name] ?? null;
   }
-  send() {
-    // The test drives onload/onerror directly.
+  send(body?: unknown) {
+    this.body = body;
   }
 }
 
@@ -92,5 +93,23 @@ describe("uploadMedia", () => {
       id: "existing-post",
       duplicate: true,
     });
+  });
+
+  it("carries a multi-line, non-ASCII caption in the body without headers", async () => {
+    const caption = "Line one\nLine two 🎉 — naïve";
+    const promise = uploadMedia(file(), caption, "1", () => {});
+    const request = FakeRequest.last;
+
+    const body = request.body as FormData;
+    expect(body.get("caption")).toBe(caption);
+    expect(body.get("price")).toBe("1");
+    expect((body.get("media") as File).name).toBe("moment.png");
+    expect(request.headers).toEqual({});
+
+    request.status = 201;
+    request.responseText = JSON.stringify({ id: "new-post" });
+    request.onload?.();
+
+    await expect(promise).resolves.toEqual({ id: "new-post", duplicate: false });
   });
 });

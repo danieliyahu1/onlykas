@@ -1008,10 +1008,12 @@ describe("publish failure diagnostics", () => {
       .post("/api/posts/publish")
       .set("X-Request-Id", "publish-trace")
       .set("Cookie", "kaskama_session=publish-session")
-      .set("X-Kaskama-Caption", "A private post")
-      .set("X-Kaskama-Price", "1")
-      .set("Content-Type", "video/mp4")
-      .send(Buffer.alloc(64));
+      .field("caption", "A private post")
+      .field("price", "1")
+      .attach("media", Buffer.alloc(64), {
+        filename: "clip.mp4",
+        contentType: "video/mp4",
+      });
 
     expect(response.status).toBe(502);
     expect(response.headers["x-request-id"]).toBe("publish-trace");
@@ -1040,6 +1042,62 @@ describe("publish failure diagnostics", () => {
         errorCode: "MEDIA_STORAGE_FAILED",
       }),
     });
+  });
+
+  it("stores a multi-line, non-ASCII caption carried in the upload body", async () => {
+    const store = new MemoryStore();
+    await store.createSession({
+      id: "publish-session",
+      address: creator,
+      expiresAt: Date.now() + 60_000,
+    });
+    const caption = "First line\nSecond line 🎉 — naïve";
+    const { app } = testApp(
+      store,
+      undefined,
+      undefined,
+      undefined,
+      async () => verifiedVideo,
+    );
+
+    const response = await request(app)
+      .post("/api/posts/publish")
+      .set("Cookie", "kaskama_session=publish-session")
+      .field("caption", caption)
+      .field("price", "1")
+      .attach("media", Buffer.alloc(64), {
+        filename: "clip.mp4",
+        contentType: "video/mp4",
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.id).toEqual(expect.any(String));
+    const [created] = await store.creatorPosts(creator);
+    expect(created?.caption).toBe(caption);
+  });
+
+  it("rejects an upload with no media file", async () => {
+    const { app } = await creatorApp(
+      {
+        putFile: async () => undefined,
+        readRange: async () => ({
+          bytes: new Uint8Array(),
+          size: 0,
+          contentType: "video/mp4",
+        }),
+        delete: async () => undefined,
+      },
+      async () => verifiedVideo,
+    );
+
+    const response = await request(app)
+      .post("/api/posts/publish")
+      .set("Cookie", "kaskama_session=publish-session")
+      .field("caption", "A private post")
+      .field("price", "1");
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ error: "INVALID_MEDIA" });
   });
 });
 

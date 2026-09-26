@@ -108,6 +108,10 @@ describe("post validation", () => {
     ]);
     expect(validatePost("x", "-1")).toEqual([MEDIA_COPY.invalidPrice]);
   });
+
+  it("accepts a multi-line, non-ASCII caption", () => {
+    expect(validatePost("First line\nSecond line 🎉 — naïve", "1")).toEqual([]);
+  });
 });
 
 describe("Kaspa testnet address validation", () => {
